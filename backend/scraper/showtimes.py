@@ -66,7 +66,7 @@ def parse_and_store(cinema_id: int, theater_id: str, show_date: str):
         )
 
         for result in data.get("results", []):
-            movie = result.get("movie", {})
+            movie = result.get("movie") or {}
             movie_title = movie.get("title", "")
             movie_id = str(movie.get("internalId", ""))
             poster_url = (movie.get("poster") or {}).get("url")
