@@ -64,7 +64,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/cinemap
-ExecStart=/opt/cinemap/.venv/bin/uvicorn backend.api.main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/cinemap/.venv/bin/uvicorn backend.api.main:app --host 127.0.0.1 --port 11173
 Restart=always
 User=www-data
 Group=www-data
@@ -91,10 +91,15 @@ Crée `/etc/nginx/sites-available/cinemap` :
 ```nginx
 server {
     listen 80;
+    listen [::]:80;
     server_name ton-domaine.com;
 
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
     location / {
-        proxy_pass         http://127.0.0.1:8000;
+        proxy_pass         http://127.0.0.1:11173;
         proxy_set_header   Host $host;
         proxy_set_header   X-Real-IP $remote_addr;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -103,13 +108,15 @@ server {
 ```
 
 ```bash
+sudo mkdir -p /var/www/html
 sudo ln -s /etc/nginx/sites-available/cinemap /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl reload nginx
 
 # HTTPS (remplace ton-domaine.com)
 sudo certbot --nginx -d ton-domaine.com
 ```
+
+> **Note IPv6** : le `listen [::]:80` est nécessaire si ton domaine a un enregistrement AAAA — Let's Encrypt peut valider via IPv6 et obtiendrait un 404 sinon.
 
 ---
 
@@ -124,6 +131,7 @@ Les cinémas français sortent les films le **mercredi**. Le scraper tourne une 
 
 - `0 6 * * 3` = tous les mercredis à 6h00
 - `--days 7` = couvre mercredi → mardi suivant
+- Les séances de plus de 2 jours sont **supprimées automatiquement** à chaque run (purge intégrée, pas de cron séparé nécessaire)
 - Les logs vont dans `/var/log/cinemap-scraper.log`
 
 Si tu veux aussi rafraîchir le jour même (mercredi en soirée par ex.) :
@@ -177,10 +185,10 @@ ton-user ALL=(ALL) NOPASSWD: /bin/systemctl restart cinemap
 
 ```bash
 # L'API répond
-curl http://localhost:8000/api/today
+curl http://localhost:11173/api/today
 
 # Les cinémas sont chargés
-curl http://localhost:8000/api/cinemas | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d), 'cinémas')"
+curl http://localhost:11173/api/cinemas | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d), 'cinémas')"
 
 # Les logs du service
 sudo journalctl -u cinemap -f

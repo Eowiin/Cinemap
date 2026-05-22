@@ -109,8 +109,18 @@ def parse_and_store(cinema_id: int, theater_id: str, show_date: str):
     return count
 
 
+def purge_old(keep_days: int = 2):
+    cutoff = (date.today() - timedelta(days=keep_days)).isoformat()
+    with get_connection() as conn:
+        deleted = conn.execute(
+            "DELETE FROM showtimes WHERE date < ?", (cutoff,)
+        ).rowcount
+    log.info("Purge : %d séances supprimées (antérieures au %s)", deleted, cutoff)
+
+
 def run(target_date: str | None = None, days: int = 1):
     init_db()
+    purge_old()
 
     if target_date is None:
         target_date = date.today().isoformat()
@@ -134,7 +144,7 @@ def run(target_date: str | None = None, days: int = 1):
                 "  [%s] %s — %d séances le %s",
                 cinema["allocine_id"], cinema["name"], count, d,
             )
-            time.sleep(0.4)
+            time.sleep(1.5)
 
         total += 1
 
