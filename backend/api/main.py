@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date
 from typing import Optional
 
@@ -20,18 +21,67 @@ app.add_middleware(
 
 FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 
+REGIONS: dict[str, list[str]] = {
+    "Île-de-France":            ["Essonne","Hauts-de-Seine","Paris","Seine-et-Marne","Seine-Saint-Denis","Val-de-Marne","Val-d'Oise","Yvelines"],
+    "Auvergne-Rhône-Alpes":     ["Ain","Allier","Ardèche","Cantal","Drôme","Haute-Loire","Haute-Savoie","Isère","Loire","Puy-de-Dôme","Rhône","Savoie"],
+    "Bourgogne-Franche-Comté":  ["Côte-d'Or","Doubs","Jura","Nièvre","Haute-Saône","Saône-et-Loire","Territoire de Belfort","Yonne"],
+    "Bretagne":                 ["Côtes-d'Armor","Finistère","Ille-et-Vilaine","Morbihan"],
+    "Centre-Val de Loire":      ["Cher","Eure-et-Loir","Indre","Indre-et-Loire","Loir-et-Cher","Loiret"],
+    "Corse":                    ["Corse-du-Sud","Haute-Corse"],
+    "Grand Est":                ["Ardennes","Aube","Bas-Rhin","Haut-Rhin","Haute-Marne","Marne","Meurthe-et-Moselle","Meuse","Moselle","Vosges"],
+    "Hauts-de-France":          ["Aisne","Nord","Oise","Pas-de-Calais","Somme"],
+    "Normandie":                ["Calvados","Eure","Manche","Orne","Seine-Maritime"],
+    "Nouvelle-Aquitaine":       ["Charente","Charente-Maritime","Corrèze","Creuse","Deux-Sèvres","Dordogne","Gironde","Landes","Lot-et-Garonne","Pyrénées-Atlantiques","Vienne","Haute-Vienne"],
+    "Occitanie":                ["Ariège","Aude","Aveyron","Gard","Gers","Haute-Garonne","Hautes-Pyrénées","Hérault","Lot","Lozère","Pyrénées-Orientales","Tarn","Tarn-et-Garonne"],
+    "Pays de la Loire":         ["Loire-Atlantique","Maine-et-Loire","Mayenne","Sarthe","Vendée"],
+    "Provence-Alpes-Côte d'Azur": ["Alpes-de-Haute-Provence","Alpes-Maritimes","Bouches-du-Rhône","Hautes-Alpes","Var","Vaucluse"],
+    "Outre-mer":                ["Guadeloupe","Guyane","La Réunion","Martinique","Mayotte"],
+}
+
 
 @app.get("/api/cinemas")
-def get_cinemas(dept: Optional[str] = None, art_et_essai: Optional[bool] = None):
-    query = "SELECT * FROM cinemas WHERE lat IS NOT NULL AND lng IS NOT NULL"
-    params: list = []
+def get_cinemas(
+    dept: Optional[str] = None,
+    region: Optional[str] = None,
+    art_et_essai: Optional[bool] = None,
+    vo: Optional[bool] = None,
+    show_date: Optional[str] = None,
+):
+    alias = "c" if vo else ""
+    dot = "c." if vo else ""
+
+    if vo:
+        if show_date is None:
+            show_date = date.today().isoformat()
+        query = """
+            SELECT DISTINCT c.* FROM cinemas c
+            JOIN showtimes s ON s.cinema_id = c.id
+            WHERE c.lat IS NOT NULL AND c.lng IS NOT NULL
+            AND s.version = 'VO' AND s.date = ?
+        """
+        params: list = [show_date]
+    else:
+        query = "SELECT * FROM cinemas WHERE lat IS NOT NULL AND lng IS NOT NULL"
+        params = []
+
     if dept:
-        query += " AND department = ?"
+        query += f" AND {dot}department = ?"
         params.append(dept)
+    elif region:
+        # Normalisation NFC pour éviter les écarts Unicode (ex: Île-de-France)
+        nfc = lambda s: unicodedata.normalize("NFC", s)
+        region_key = next((k for k in REGIONS if nfc(k) == nfc(region)), None)
+        if region_key:
+            depts = REGIONS[region_key]
+            placeholders = ",".join("?" * len(depts))
+            query += f" AND {dot}department IN ({placeholders})"
+            params.extend(depts)
+
     if art_et_essai is not None:
-        query += " AND is_art_et_essai = ?"
+        query += f" AND {dot}is_art_et_essai = ?"
         params.append(int(art_et_essai))
-    query += " ORDER BY name"
+
+    query += f" ORDER BY {dot}name"
 
     with get_connection() as conn:
         rows = conn.execute(query, params).fetchall()

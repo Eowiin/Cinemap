@@ -25,14 +25,14 @@ const canvasRenderer = L.canvas({ padding: 0.5 });
 const map = L.map('map', {
   zoomControl:         false,
   renderer:            canvasRenderer,
-  zoomSnap:            0.25,
+  zoomSnap:            1,
   zoomDelta:           1,
-  wheelPxPerZoomLevel: 80,
+  wheelPxPerZoomLevel: 40,
   inertia:             true,
   inertiaDeceleration: 3000,
   inertiaMaxSpeed:     2000,
   easeLinearity:       0.2,
-}).setView([48.856, 2.347], 11);
+}).setView([46.5, 2.3], 6);
 
 tileLayer = L.tileLayer(TILES[theme], {
   attribution: '© <a href="https://osm.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
@@ -51,6 +51,7 @@ let activeId       = null;
 let panelDate      = todayStr();
 let highlightedIds = null;
 let aaeOn          = false;
+let voOn           = false;
 let searchTimer    = null;
 
 // ── Date ──
@@ -86,12 +87,64 @@ document.getElementById('aae-btn').addEventListener('click', () => {
   loadCinemas();
 });
 
+// ── VO ──
+document.getElementById('vo-btn').addEventListener('click', () => {
+  voOn = !voOn;
+  document.getElementById('vo-btn').classList.toggle('on', voOn);
+  loadCinemas();
+  if (activeId) loadShowtimes(activeId, panelDate);
+});
+
+// ── Custom selects ──
+let selectedRegion = '';
+let selectedDept   = '';
+
+function csOpen(btnId, listId) {
+  const btn  = document.getElementById(btnId);
+  const list = document.getElementById(listId);
+  const isOpen = list.classList.contains('open');
+  csCloseAll();
+  if (!isOpen) { btn.classList.add('open'); list.classList.add('open'); }
+}
+function csCloseAll() {
+  document.querySelectorAll('.cs-btn').forEach(b => b.classList.remove('open'));
+  document.querySelectorAll('.cs-list').forEach(l => l.classList.remove('open'));
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.cs-wrap')) csCloseAll();
+});
+
+document.getElementById('region-btn').addEventListener('click', () => csOpen('region-btn', 'region-list'));
+document.getElementById('dept-btn').addEventListener('click',   () => csOpen('dept-btn',   'dept-list'));
+
+function csSetRegion(value, label) {
+  selectedRegion = value;
+  selectedDept   = '';
+  document.getElementById('region-val').textContent = label || 'Toute la France';
+  document.getElementById('region-list').querySelectorAll('.cs-opt')
+    .forEach(o => o.classList.toggle('selected', o.dataset.value === value));
+  csCloseAll();
+  onRegionChange();
+}
+
+function csSetDept(value, label) {
+  selectedDept = value;
+  document.getElementById('dept-val').textContent = label || 'Tous les départements';
+  document.getElementById('dept-list').querySelectorAll('.cs-opt')
+    .forEach(o => o.classList.toggle('selected', o.dataset.value === value));
+  csCloseAll();
+  loadCinemas();
+}
+
 // ── Cinemas ──
 async function loadCinemas() {
-  const dept = document.getElementById('dept-filter').value;
+  const region = selectedRegion;
+  const dept   = selectedDept;
   const p = new URLSearchParams();
-  if (dept)  p.set('dept', dept);
+  if (dept)        p.set('dept', dept);
+  else if (region) p.set('region', region);
   if (aaeOn) p.set('art_et_essai', 'true');
+  if (voOn)  { p.set('vo', 'true'); p.set('show_date', panelDate); }
   const qs = p.toString() ? '?' + p : '';
   try {
     allCinemas = await fetch('/api/cinemas' + qs).then(r => r.json());
@@ -192,7 +245,16 @@ async function loadShowtimes(id, date) {
     body.innerHTML = '<div class="empty-msg"><span class="icon">🎞️</span>Aucune séance pour cette date.</div>';
     return;
   }
-  body.innerHTML = data.movies.map(m => {
+  const movies = voOn
+    ? data.movies
+        .map(m => ({ ...m, showtimes: m.showtimes.filter(s => s.version === 'VO') }))
+        .filter(m => m.showtimes.length > 0)
+    : data.movies;
+  if (!movies.length) {
+    body.innerHTML = '<div class="empty-msg"><span class="icon">🎞️</span>Aucune séance VO pour cette date.</div>';
+    return;
+  }
+  body.innerHTML = movies.map(m => {
     const img = m.poster_url
       ? `<img class="poster" src="${m.poster_url}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'poster-ph\\'>🎬</div>'">`
       : `<div class="poster-ph">🎬</div>`;
@@ -213,7 +275,6 @@ document.getElementById('next-day').addEventListener('click', () => {
   setDate(d.toISOString().slice(0, 10));
 });
 document.getElementById('close-panel').addEventListener('click', closePanel);
-document.getElementById('dept-filter').addEventListener('change', loadCinemas);
 
 // ── Search ──
 const searchInput = document.getElementById('search-input');
@@ -279,13 +340,73 @@ async function doSearch(q) {
 }
 function closeDD() { searchDD.classList.remove('show'); searchDD.innerHTML = ''; }
 
-// ── Départements ──
-async function loadDepts() {
-  try {
-    const depts = await fetch('/api/departments').then(r => r.json());
-    const sel = document.getElementById('dept-filter');
-    depts.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o); });
-  } catch(e) { console.error('loadDepts:', e); }
+// ── Régions / Départements ──
+const REGIONS = [
+  { name: 'Île-de-France',            depts: ['Essonne','Hauts-de-Seine','Paris','Seine-et-Marne','Seine-Saint-Denis','Val-de-Marne','Val-d\'Oise','Yvelines'] },
+  { name: 'Auvergne-Rhône-Alpes',     depts: ['Ain','Allier','Ardèche','Cantal','Drôme','Haute-Loire','Haute-Savoie','Isère','Loire','Puy-de-Dôme','Rhône','Savoie'] },
+  { name: 'Bourgogne-Franche-Comté',  depts: ['Côte-d\'Or','Doubs','Jura','Nièvre','Haute-Saône','Saône-et-Loire','Territoire de Belfort','Yonne'] },
+  { name: 'Bretagne',                 depts: ['Côtes-d\'Armor','Finistère','Ille-et-Vilaine','Morbihan'] },
+  { name: 'Centre-Val de Loire',      depts: ['Cher','Eure-et-Loir','Indre','Indre-et-Loire','Loir-et-Cher','Loiret'] },
+  { name: 'Corse',                    depts: ['Corse-du-Sud','Haute-Corse'] },
+  { name: 'Grand Est',                depts: ['Ardennes','Aube','Bas-Rhin','Haut-Rhin','Haute-Marne','Marne','Meurthe-et-Moselle','Meuse','Moselle','Vosges'] },
+  { name: 'Hauts-de-France',          depts: ['Aisne','Nord','Oise','Pas-de-Calais','Somme'] },
+  { name: 'Normandie',                depts: ['Calvados','Eure','Manche','Orne','Seine-Maritime'] },
+  { name: 'Nouvelle-Aquitaine',       depts: ['Charente','Charente-Maritime','Corrèze','Creuse','Deux-Sèvres','Dordogne','Gironde','Landes','Lot-et-Garonne','Pyrénées-Atlantiques','Vienne','Haute-Vienne'] },
+  { name: 'Occitanie',                depts: ['Ariège','Aude','Aveyron','Gard','Gers','Haute-Garonne','Hautes-Pyrénées','Hérault','Lot','Lozère','Pyrénées-Orientales','Tarn','Tarn-et-Garonne'] },
+  { name: 'Pays de la Loire',         depts: ['Loire-Atlantique','Maine-et-Loire','Mayenne','Sarthe','Vendée'] },
+  { name: 'Provence-Alpes-Côte d\'Azur', depts: ['Alpes-de-Haute-Provence','Alpes-Maritimes','Bouches-du-Rhône','Hautes-Alpes','Var','Vaucluse'] },
+  { name: 'Outre-mer',                depts: ['Guadeloupe','Guyane','La Réunion','Martinique','Mayotte'] },
+];
+
+function buildRegionSelect() {
+  const list = document.getElementById('region-list');
+  const reset = document.createElement('div');
+  reset.className = 'cs-opt selected';
+  reset.dataset.value = '';
+  reset.textContent = 'Toute la France';
+  reset.addEventListener('click', () => csSetRegion('', 'Toute la France'));
+  list.appendChild(reset);
+
+  REGIONS.forEach(r => {
+    const o = document.createElement('div');
+    o.className = 'cs-opt';
+    o.dataset.value = r.name;
+    o.textContent = r.name;
+    o.addEventListener('click', () => csSetRegion(r.name, r.name));
+    list.appendChild(o);
+  });
+}
+
+function onRegionChange() {
+  const deptWrap = document.getElementById('dept-wrap');
+  const deptList = document.getElementById('dept-list');
+
+  deptList.innerHTML = '';
+  const reset = document.createElement('div');
+  reset.className = 'cs-opt selected';
+  reset.dataset.value = '';
+  reset.textContent = 'Tous les départements';
+  reset.addEventListener('click', () => csSetDept('', 'Tous les départements'));
+  deptList.appendChild(reset);
+
+  if (selectedRegion) {
+    const r = REGIONS.find(r => r.name === selectedRegion);
+    if (r) {
+      r.depts.forEach(dept => {
+        const o = document.createElement('div');
+        o.className = 'cs-opt';
+        o.dataset.value = dept;
+        o.textContent = dept;
+        o.addEventListener('click', () => csSetDept(dept, dept));
+        deptList.appendChild(o);
+      });
+    }
+    deptWrap.style.display = '';
+  } else {
+    deptWrap.style.display = 'none';
+  }
+
+  loadCinemas();
 }
 
 // ── Utils ──
@@ -352,7 +473,7 @@ function showPanelBody() {
 }
 
 // ── Boot ──
-loadDepts();
+buildRegionSelect();
 loadCinemas();
 setTheme(theme);
 document.getElementById('panel').classList.add('open');

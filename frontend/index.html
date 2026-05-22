@@ -22,10 +22,19 @@
   </div>
 
   <div class="filters">
-    <div class="select-wrap">
-      <select id="dept-filter">
-        <option value="">Toute l'IDF</option>
-      </select>
+    <div class="cs-wrap" id="region-wrap">
+      <button class="cs-btn" id="region-btn" type="button">
+        <span class="cs-val" id="region-val">Toute la France</span>
+        <span class="cs-arrow">▾</span>
+      </button>
+      <div class="cs-list" id="region-list"></div>
+    </div>
+    <div class="cs-wrap" id="dept-wrap" style="display:none">
+      <button class="cs-btn" id="dept-btn" type="button">
+        <span class="cs-val" id="dept-val">Tous les départements</span>
+        <span class="cs-arrow">▾</span>
+      </button>
+      <div class="cs-list" id="dept-list"></div>
     </div>
 
     <div class="date-picker">
@@ -37,6 +46,11 @@
     <button class="aae-btn" id="aae-btn" type="button"
             title="Cinémas labellisés Art &amp; Essai par le CNC">
       <span class="aae-dot"></span>Art &amp; Essai
+    </button>
+
+    <button class="vo-btn" id="vo-btn" type="button"
+            title="Cinémas diffusant des séances en version originale">
+      <span class="vo-dot"></span>VO
     </button>
 
     <span class="badge"><strong id="cinema-count">—</strong> cinémas</span>
