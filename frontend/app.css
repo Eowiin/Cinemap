@@ -356,3 +356,92 @@ body {
   flex-shrink: 0;
 }
 #filter-bar .fb-reset:hover { border-color: var(--text); color: var(--text); }
+
+/* ══ Phones  ≤ 767px — bottom sheet panel, multi-row header ══ */
+@media (max-width: 767px) {
+  #header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    gap: 5px;
+  }
+
+  .sep { display: none; }
+
+  /* Row 2: search bar full-width */
+  .search-wrap {
+    order: 10;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  /* Row 3: filters wrap naturally across lines — no overflow container, so
+     position:absolute dropdowns (region/dept) aren't clipped */
+  .filters {
+    order: 20;
+    margin-left: 0;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+  }
+
+  /* Compact filter buttons to fit more on each row */
+  .cs-btn  { padding: 5px 8px; font-size: .78rem; }
+  .aae-btn { padding: 4px 8px; font-size: .76rem; }
+  .vo-btn  { padding: 4px 8px; font-size: .76rem; }
+  .dp-input { width: 92px; }
+
+  /* Panel becomes a bottom sheet */
+  #panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    width: 100%;
+    max-height: 65vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    transform: translateY(100%);
+    box-shadow: 0 -4px 24px var(--shadow);
+  }
+
+  #panel.open { transform: translateY(0); }
+
+  #filter-bar { max-width: calc(100% - 24px); }
+}
+
+/* ══ Small phones  ≤ 374px — tighter spacing, drop badge ══ */
+@media (max-width: 374px) {
+  #header { padding: 5px 8px; gap: 4px; }
+  .logo { font-size: .9rem; }
+  .filters { gap: 4px; }
+  .dp-input { width: 80px; }
+  /* Badge overflows the row on 320px screens */
+  .badge { display: none; }
+}
+
+/* ══ Tablets  768px – 1023px — narrower side panel ══ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  #panel { width: 270px; }
+}
+
+/* ══ Narrow range 768px – 965px — header wraps so filters get their own row ══ */
+@media (min-width: 768px) and (max-width: 965px) {
+  #header {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Row 1: logo + sep + search (search expands to fill remaining space) */
+  .search-wrap {
+    flex: 1;
+    max-width: none;
+  }
+
+  /* Row 2: all filters full-width — badge and theme-btn are always visible */
+  .filters {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
