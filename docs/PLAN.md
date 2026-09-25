@@ -1,0 +1,113 @@
+# Plan de la réécriture
+
+Document de suivi. **À mettre à jour à chaque étape terminée** (cocher, noter les décisions).
+
+Branche de travail : `rewrite` → mergée dans `main` à la toute fin (le push sur `main` déclenche le déploiement).
+
+## Objectif
+
+Site public (d'abord pour moi et mes potes) qui répond à :
+
+- **Qu'est-ce qui passe en ce moment ?** Accueil « à l'affiche », près de moi (Paris par défaut), pour trouver des idées.
+- **Où voir tel film ?** Recherche d'un film → cinémas qui le passent, sur la carte et en liste.
+- **C'est quoi ce film ?** Fiche film : synopsis, casting, réalisateur, genres, durée, bande-annonce.
+- **À quelle heure ?** Séances d'un film par cinéma (VF/VO/VOST, formats, lien de réservation), triées par distance ou par heure.
+
+Périmètre : toute la France, **Paris / Île-de-France en priorité** (qualité des données vérifiée d'abord là). Utilisable en site web et en **PWA** installable.
+
+Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS existant (https://cinemap.eowinstudio.com).
+
+## Décisions
+
+| Sujet | Décision | Pourquoi |
+|---|---|---|
+| Backend | **Rust** : axum, tokio, sqlx (SQLite), reqwest, scraper, serde, clap, tracing | Le propriétaire apprend Rust ; le backend est **écrit par lui**, Claude guide et relit seulement |
+| Frontend | **Svelte + Vite + MapLibre GL** (tuiles OpenFreeMap), PWA via `vite-plugin-pwa` | Léger, réactif, carte vectorielle fluide sur mobile. **Écrit par Claude** |
+| Référentiel cinémas | **AlloCiné** (liste par département) + géocodage **API Adresse** + enrichissement **CNC** | Plus aucun rapprochement de noms pour les séances (cause n°1 des bugs de l'ancien site). OSM abandonné |
+| Infos films | AlloCiné (déjà dans la réponse des séances) + **TMDB** en complément (bande-annonce, image de fond, note) | TMDB gratuit pour usage non commercial, en français. OMDb écarté (anglais seulement, 1 000 req/jour) |
+| Rafraîchissement | Scrap de toute la France chaque nuit, J → J+2 (J+6 le mercredi), concurrent avec limite de débit (~3 req/s) | ~30-40 min au lieu de ~6 h. Stratégie hors IDF à revoir si besoin (pas prioritaire) |
+| Base | SQLite en mode WAL | Un seul serveur, lecture majoritaire |
+| Déploiement | **Binaire + systemd + nginx**, pas de Docker. Scrapers via un timer systemd. Build dans GitHub Actions, envoi par SSH | Un binaire Rust n'a pas de dépendances à embarquer, le VPS n'a besoin ni de Rust ni de Node |
+| Outillage | Rust : `cargo fmt`, `clippy`, `cargo test`. Front : prettier, eslint, vitest. CI GitHub Actions | Minimum raisonnable |
+
+## Pourquoi l'ancien site ne marchait pas (diagnostic 2026-09-25)
+
+- 717 cinémas partageaient 270 identifiants AlloCiné (rapprochement par noms trop permissif) : tous les UGC de Paris affichaient les séances d'un seul UGC, idem pour les MK2 et les Pathé.
+- L'API séances est paginée (15 films par page) et seule la première page était lue : il manquait plus de la moitié des films des gros cinémas.
+- Environ 310 cinémas en double issus d'un ancien import (Paris : 166 entrées pour environ 85 vrais cinémas).
+- Côté front : date calculée en UTC, filtre VO non recalculé au changement de date, plantages quand un cinéma est hors du filtre actif, réponses asynchrones arrivant dans le désordre.
+
+## Documents de référence
+
+- [`API.md`](API.md) : contrat backend ↔ frontend et schéma SQLite. **Toute modification d'API passe d'abord par ce fichier.**
+- [`SOURCES.md`](SOURCES.md) : sources de données vérifiées (URLs, formats, pièges).
+- [`data/departements.csv`](data/departements.csv) : codes INSEE ↔ noms ↔ codes AlloCiné des départements.
+
+## Répartition du travail
+
+- **Backend (Rust)** : le propriétaire l'écrit **lui-même**. Claude explique, oriente (crates, concepts, pièges) et fait la revue de code, **sans écrire l'implémentation** sauf demande explicite.
+- **Frontend** : Claude l'implémente.
+- **Doc / CI / déploiement** : Claude, validé par le propriétaire.
+
+## Étapes
+
+### 0. Cadrage ✅
+- [x] Analyse de l'ancien code et diagnostic du site en prod
+- [x] Choix de la stack et des sources
+- [x] Branche `rewrite`, suppression de l'ancien code
+- [x] `docs/SOURCES.md`, `docs/API.md`, `docs/PLAN.md`
+- [ ] Relecture et validation de `docs/API.md` par le propriétaire
+- [ ] Commit initial de la branche
+
+### 1. Référentiel des cinémas (backend, propriétaire)
+- [ ] `cargo new backend`, un binaire avec des sous-commandes `clap` (`import-cinemas`, `scrape`, `serve`), async `tokio`, `anyhow`, `tracing`
+- [ ] Migrations `sqlx` (schéma de `API.md`), `PRAGMA journal_mode=WAL`
+- [ ] Scraper les pages AlloCiné par département (pagination, dédoublonnage par ID : la page IDF 83093 recoupe les autres départements IDF)
+- [ ] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
+- [ ] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
+- [ ] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
+- [ ] Vérification manuelle sur Paris (~85 cinémas attendus, pas de doublons)
+
+### 2. Scraper des séances (backend, propriétaire)
+- [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
+- [ ] Pagination `p-{n}`
+- [ ] Mapping `version` (VF / VO / VOST) et `formats`, vérifié empiriquement sur plusieurs cinémas
+- [ ] Upsert des films, remplacement des séances par (cinéma, date) dans une transaction
+- [ ] Concurrence + limite de débit globale (`governor` ou sémaphore), retry avec backoff, coupe-circuit sur 403/429
+- [ ] Purge des séances passées, table `scrape_runs`
+
+### 3. API (backend, propriétaire)
+- [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), CORS en dev
+- [ ] Recherche insensible aux accents (colonnes `*_search` normalisées)
+- [ ] Distance : bounding box en SQL, puis haversine en Rust
+- [ ] Tests d'intégration sur une base de test
+
+### 4. Enrichissement TMDB (backend, propriétaire)
+- [ ] Clé TMDB (compte gratuit), stockée dans `.env`
+- [ ] Croisement par titre original + année, puis bande-annonce, image de fond, note
+- [ ] Attribution TMDB affichée dans le front
+
+### 5. Frontend PWA (Claude, en parallèle dès l'étape 0 validée)
+- [ ] Vite + Svelte (+ TypeScript), prettier / eslint / vitest
+- [ ] Types TS générés à la main depuis `API.md`, données factices (fixtures JSON) tant que l'API n'existe pas
+- [ ] Carte MapLibre + OpenFreeMap, regroupement des marqueurs, thème clair/sombre
+- [ ] Accueil « à l'affiche » (avec géolocalisation, Paris par défaut)
+- [ ] Recherche film / cinéma
+- [ ] Fiche film et ses séances par cinéma (filtres VO / heure / date)
+- [ ] Fiche cinéma et ses séances
+- [ ] État dans l'URL (liens partageables), date calculée à Paris
+- [ ] PWA : manifeste, icônes, service worker (cache de la dernière réponse)
+- [ ] Responsive mobile d'abord
+
+### 6. Déploiement
+- [ ] Réécrire `docs/DEPLOY.md` : binaire + systemd + nginx (front statique, `/api` vers axum)
+- [ ] Timer systemd pour les scrapers
+- [ ] GitHub Actions : CI (fmt, clippy, tests, build front) + déploiement (binaire + `dist/` par SSH, restart, health check)
+- [ ] Migration de la prod : nouvelle base, suppression de l'ancien service Python
+- [ ] Merge `rewrite` → `main`
+
+## Idées pour plus tard
+- Favoris (cinémas, films) stockés localement
+- Filtre « après 20h », formats IMAX / 4DX / Dolby
+- Notifications PWA (« tel film sort mercredi »)
+- Stratégie de rafraîchissement hors IDF plus fine
