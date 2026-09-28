@@ -56,8 +56,8 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 - [x] Choix de la stack et des sources
 - [x] Branche `rewrite`, suppression de l'ancien code
 - [x] `docs/SOURCES.md`, `docs/API.md`, `docs/PLAN.md`
-- [ ] Relecture et validation de `docs/API.md` par le propriétaire
-- [ ] Commit initial de la branche
+- [x] Relecture et validation de `docs/API.md` par le propriétaire (validé le 2026-09-28)
+- [x] Commit initial de la branche (`11ac7b6`)
 
 ### 1. Référentiel des cinémas (backend, propriétaire)
 - [ ] `cargo new backend`, un binaire avec des sous-commandes `clap` (`import-cinemas`, `scrape`, `serve`), async `tokio`, `anyhow`, `tracing`
@@ -71,7 +71,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 ### 2. Scraper des séances (backend, propriétaire)
 - [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
 - [ ] Pagination `p-{n}`
-- [ ] Mapping `version` (VF / VO / VOST) et `formats`, vérifié empiriquement sur plusieurs cinémas
+- [ ] Mapping `version` (VF / VO / VOST, film français en VO = VF via la langue du film) et `formats` (liste fermée, cf. `API.md`), vérifié empiriquement sur plusieurs cinémas
 - [ ] Upsert des films, remplacement des séances par (cinéma, date) dans une transaction
 - [ ] Concurrence + limite de débit globale (`governor` ou sémaphore), retry avec backoff, coupe-circuit sur 403/429
 - [ ] Purge des séances passées, table `scrape_runs`

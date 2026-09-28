@@ -5,17 +5,27 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
 ## Conventions
 
 - Préfixe `/api`, `GET` uniquement, JSON en UTF-8.
-- **Dates** : `YYYY-MM-DD`, jour calendaire à Paris. Par défaut = aujourd'hui à Paris (pas en UTC).
+- **Dates** : `YYYY-MM-DD`, **jour ciné** à Paris. Par défaut = aujourd'hui à Paris (pas en UTC).
+  - Le jour ciné est le jour demandé à AlloCiné (`d-{date}`) : une séance à 00h15 renvoyée pour le 25 appartient au 25 (son `starts_at` est le 26 à 00:15). Elle apparaît en fin de programme du 25, jamais dans celui du 26.
+  - Une `date` hors de `dates_available` n'est pas une erreur : réponse 200 avec des listes vides.
 - **Horaires** : `starts_at` = `YYYY-MM-DDTHH:MM:SS`, heure locale Paris, sans fuseau (tel que fourni par AlloCiné).
+- **`after`** (`HH:MM`) : garde les séances dont `starts_at >= "{date}T{after}:00"`. On compare le `starts_at` **complet**, pour que les séances après minuit restent incluses (`after=22:00` garde celle de 00h15).
 - **IDs** : cinéma = ID AlloCiné (`"C0159"`, string) ; film = ID AlloCiné (`1000032855`, entier).
-- **Position** : paramètres `lat` et `lng` (floats). `distance_km` n'est présent que si `lat`/`lng` sont fournis.
+- **Position** : paramètres `lat` et `lng` (floats). `distance_km` vaut `null` si `lat`/`lng` ne sont pas fournis.
 - Champs inconnus = `null` (jamais absents). Listes vides = `[]`.
+- **Booléens en query** : `true` / `false`. Un paramètre mal formé (date, heure, booléen, nombre, `version` inconnue) → 400 `bad_request`.
+- **Cinémas non géocodés** (`lat`/`lng` NULL en base) : exclus de **tous** les endpoints, `/api/cinemas/{id}` compris (404).
+- **Cache** : réponses avec `Cache-Control: public, max-age=300` (utile au service worker de la PWA).
 - **Erreurs** : code HTTP approprié + corps
   ```json
   { "error": { "code": "not_found", "message": "Cinéma introuvable" } }
   ```
   Codes : `bad_request` (400), `not_found` (404), `internal` (500).
 - `version` d'une séance : `"VF"` | `"VO"` | `"VOST"`.
+  - `VF` = diffusé en français, **y compris un film français en version originale**. Le mapping s'appuie sur la langue du film (`movie.languages` d'AlloCiné), à vérifier empiriquement à l'étape 2.
+  - `VO` = version originale non française, sans sous-titres ; `VOST` = version originale non française, sous-titrée.
+  - Paramètre de query `version` : `VF` ou `VO`. `version=VO` renvoie `VO` + `VOST` (« pas doublé en français »).
+- `formats` d'une séance : sous-ensemble de `"3D"`, `"IMAX"`, `"4DX"`, `"ScreenX"`, `"Dolby Cinema"`, `"Dolby Atmos"`. Toute autre valeur AlloCiné est ignorée (et loggée par le scraper).
 
 ## Types partagés
 
@@ -27,7 +37,7 @@ type CinemaSummary = {
   lat: number;
   lng: number;
   art_et_essai: boolean;
-  distance_km?: number;    // si lat/lng fournis
+  distance_km: number | null;  // null si lat/lng non fournis
 };
 
 type Cinema = CinemaSummary & {
@@ -42,7 +52,7 @@ type Cinema = CinemaSummary & {
 type MovieSummary = {
   id: number;
   title: string;
-  poster_url: string | null;
+  poster_url: string | null;   // URL AlloCiné brute (le front choisit la taille)
   genres: string[];            // ["Comédie", "Drame"]
   runtime_min: number | null;
   release_date: string | null; // "2026-09-30"
@@ -62,13 +72,15 @@ type Movie = MovieSummary & {
   backdrop_url: string | null;
   trailer_url: string | null;  // URL YouTube
   rating: number | null;       // /10
+  // AlloCiné
+  user_rating: number | null;  // note spectateurs AlloCiné, /5 (stats.userRating)
 };
 
 type Showtime = {
   id: string;
   starts_at: string;           // "2026-09-25T20:00:00"
   version: "VF" | "VO" | "VOST";
-  formats: string[];           // ["IMAX"], ["3D"], ["4DX"], []
+  formats: string[];           // voir Conventions, ex. ["IMAX"], ["3D"], []
   booking_url: string | null;
 };
 ```
@@ -77,10 +89,11 @@ type Showtime = {
 
 ### `GET /api/meta`
 
-État des données, pour afficher « mis à jour il y a X » et borner le sélecteur de date.
+État des données, pour afficher « mis à jour il y a X » et borner le sélecteur de date. Sert aussi de health check au déploiement.
 
 ```json
 {
+  "today": "2026-09-25",
   "last_scrape_at": "2026-09-25T04:12:00Z",
   "dates_available": ["2026-09-25", "2026-09-26", "2026-09-27"],
   "cinema_count": 2051,
@@ -108,6 +121,7 @@ Query : `date?`, `version?` (`VO` = VO + VOST), `after?` (`HH:MM`, séances qui 
 {
   "cinema": Cinema,
   "date": "2026-09-25",
+  "dates": ["2026-09-25", "2026-09-27"],   // jours ayant au moins une séance dans ce cinéma (filtres version/after ignorés)
   "movies": [
     { "movie": MovieSummary, "showtimes": [Showtime, …] }
   ]
@@ -146,25 +160,26 @@ Réponse : `Movie`. 404 si inconnu.
 
 Où et quand voir un film.
 
-Query : `date?`, `lat?`, `lng?`, `radius_km?` (pas de rayon par défaut), `version?`, `after?`.
+Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours une position, Paris par défaut), `radius_km?` (défaut 15, max 100), `version?`, `after?`.
 
 ```json
 {
   "movie": MovieSummary,
   "date": "2026-09-25",
+  "dates": ["2026-09-25", "2026-09-26"],   // jours ayant au moins une séance de ce film dans le rayon (filtres version/after ignorés)
   "cinemas": [
     { "cinema": CinemaSummary, "showtimes": [Showtime, …] }
   ]
 }
 ```
 
-Tri : par `distance_km` si position fournie, sinon par nom de cinéma.
+Tri par `distance_km`.
 
 ### `GET /api/search`
 
 Query : `q` (≥ 2 caractères, sinon 400).
 
-Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas.
+Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès).
 
 ```json
 {
@@ -183,6 +198,7 @@ CREATE TABLE cinemas (
     address         TEXT,
     postal_code     TEXT,
     city            TEXT,
+    city_search     TEXT,                 -- ville normalisée, pour la recherche
     insee_code      TEXT,
     department      TEXT,
     lat             REAL,
@@ -213,7 +229,8 @@ CREATE TABLE movies (
     tmdb_id         INTEGER,
     backdrop_url    TEXT,
     trailer_url     TEXT,
-    rating          REAL,
+    rating          REAL,                 -- TMDB, /10
+    user_rating     REAL,                 -- AlloCiné spectateurs, /5
     tmdb_synced_at  TEXT,
     updated_at      TEXT NOT NULL
 );
@@ -222,7 +239,7 @@ CREATE TABLE showtimes (
     id          TEXT PRIMARY KEY,          -- ID séance AlloCiné
     cinema_id   TEXT    NOT NULL REFERENCES cinemas(id) ON DELETE CASCADE,
     movie_id    INTEGER NOT NULL REFERENCES movies(id),
-    date        TEXT    NOT NULL,
+    date        TEXT    NOT NULL,          -- jour ciné (jour demandé à AlloCiné), peut différer de la date de starts_at
     starts_at   TEXT    NOT NULL,
     version     TEXT    NOT NULL,          -- VF | VO | VOST
     formats     TEXT    NOT NULL DEFAULT '[]',  -- JSON
