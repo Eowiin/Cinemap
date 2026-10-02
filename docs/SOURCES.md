@@ -11,7 +11,7 @@ GET https://www.allocine.fr/salle/cinema/departement-{allocine_code}/
 GET https://www.allocine.fr/salle/cinema/departement-{allocine_code}/?page=2
 ```
 
-- Les codes département AlloCiné sont dans [`data/departements.csv`](data/departements.csv) (colonnes `code_insee,nom,allocine_code`). Mayotte n'a pas de code connu.
+- Les codes département AlloCiné sont dans [`data/departements.csv`](data/departements.csv) (colonnes `code_insee,nom,allocine_code`). Mayotte n'a pas de code connu. AlloCiné référence pourtant au moins une salle à Mayotte (`W9762`, Salle de Chirongui, vu le 2026-09-30) : à rattacher plus tard, par exemple en ajoutant son ID à la main.
 - **Paris n'a pas de page propre** : on utilise `83093`, la page agrégée Île-de-France. Elle recoupe les pages des autres départements IDF → **dédoublonner par ID AlloCiné**.
 - Le nombre de pages se lit dans les liens `?page=N` de la pagination.
 

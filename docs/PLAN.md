@@ -41,6 +41,8 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 
 - [`API.md`](API.md) : contrat backend ↔ frontend et schéma SQLite. **Toute modification d'API passe d'abord par ce fichier.**
 - [`SOURCES.md`](SOURCES.md) : sources de données vérifiées (URLs, formats, pièges).
+- [`SOBRIETE.md`](SOBRIETE.md) : réflexes pour ne pas gaspiller les ressources (mesurer d'abord, où ça compte dans le projet).
+- [`EMBARQUE.md`](EMBARQUE.md) : notes perso pour passer au Rust embarqué plus tard.
 - [`data/departements.csv`](data/departements.csv) : codes INSEE ↔ noms ↔ codes AlloCiné des départements.
 
 ## Répartition du travail
@@ -61,8 +63,11 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 
 ### 1. Référentiel des cinémas (backend, propriétaire)
 - [ ] `cargo new backend`, un binaire avec des sous-commandes `clap` (`import-cinemas`, `scrape`, `serve`), async `tokio`, `anyhow`, `tracing`
-- [ ] Migrations `sqlx` (schéma de `API.md`), `PRAGMA journal_mode=WAL`
+  - 2026-09-29 : crate créé, sous-commandes clap OK, compile (`import_cinemas` propage ses erreurs avec `?`). Départements : code INSEE gardé en texte (2A/2B, « 01 »), CSV embarqué avec `include_str!`, lu avec le crate `csv` + serde (struct `Department`). Logs via `tracing` (`EnvFilter` : `RUST_LOG` prioritaire, sinon `info`). Reste : Mayotte à nouveau acceptée avec un code vide (→ `Option<String>`), erreur `csv` à afficher, `info!` récapitulatif, `serve()` sans `unwrap`, imports inutilisés, découpage en modules. Suivi détaillé : [`SUIVI.md`](SUIVI.md)
+- [x] Migrations `sqlx` (schéma de `API.md`), `PRAGMA journal_mode=WAL`
+  - 2026-09-29 : migrations écrites, WAL + `foreign_keys` + `busy_timeout` dans les options de connexion, pool de 4 connexions (un seul écrivain SQLite, lectures parallèles en WAL). `down` des index corrigé (le préfixe de `DROP INDEX` est une base, pas une table ; pas de `IF EXISTS` pour ne pas masquer les erreurs)
 - [ ] Scraper les pages AlloCiné par département (pagination, dédoublonnage par ID : la page IDF 83093 recoupe les autres départements IDF)
+  - 2026-10-02 : parsing hors ligne terminé et testé sur une fixture (`parse_department_page`, `page_count`). Reste : réseau, pagination, dédoublonnage (SUIVI §D)
 - [ ] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
 - [ ] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
 - [ ] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
