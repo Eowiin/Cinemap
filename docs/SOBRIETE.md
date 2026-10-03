@@ -16,6 +16,10 @@ Avant de changer du code « pour la perf », se demander **où est le vrai coût
 
 Exemple vécu (2026-09-30) : `Vec` de 101 départements ou itérateur ? Aucune différence mesurable, parce que derrière il y a une centaine de requêtes HTTP. Le vrai coût est le réseau.
 
+Mesure réelle (2026-10-03, `import-cinemas` en `--release`, interrompu au 34e département) : **788 s réels (dont ~2 min de veille du Mac) pour 0,84 s de CPU**, mémoire max 22 Mo. Le programme passe plus de 99,9 % de son temps à attendre (pauses + réseau) : optimiser le CPU ici ne servirait à rien.
+
+Autre exemple (2026-10-02) : chaque page AlloCiné (~350 Ko) est parsée deux fois (`page_count` puis `parse_department_page`). Quelques millisecondes, contre 3 s de pause volontaire entre deux requêtes : pas la peine de compliquer le code pour ça.
+
 ### Outils de mesure
 
 - **Toujours en `--release`** : le mode debug est 10 à 100 fois plus lent, ses chiffres ne veulent rien dire.
@@ -33,6 +37,8 @@ Exemple vécu (2026-09-30) : `Vec` de 101 départements ou itérateur ? Aucune d
 - **Pré-allouer** quand on connaît la taille : `Vec::with_capacity(n)`, `String::with_capacity(n)`.
 - **Pas d'allocation dans une boucle chaude** si on peut l'éviter : réutiliser un buffer (`buf.clear()` plutôt qu'un nouveau `String` à chaque tour).
 - **Construire les objets coûteux une seule fois** : `Selector::parse` (scraper), regex, `reqwest::Client` : une fois, hors de la boucle.
+- **Choisir le type selon le stockage réel** : `f32` au lieu de `f64` n'économise rien si la valeur finit dans une colonne SQLite `REAL` (toujours 8 octets) ; on perd juste de la précision.
+- **Transactions courtes** : ne jamais garder une transaction SQLite ouverte pendant un appel réseau (le verrou d'écriture bloque tous les autres écrivains pendant ce temps).
 - **`Cow<str>`** quand une fonction renvoie « parfois le texte d'origine, parfois une version modifiée » (ex. normalisation des accents).
 
 ## Où ça compte vraiment dans Cinemap

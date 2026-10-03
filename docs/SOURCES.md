@@ -26,6 +26,7 @@ L'ID (`C0159`, `W7520`, `B0045`…) est l'identifiant utilisé partout ensuite �
 
 - Unitaire : `GET https://api-adresse.data.gouv.fr/search/?q=7+Place+de+la+Rotonde+75001+Paris&limit=1`
 - En masse (recommandé, une seule requête pour ~2 000 adresses) : `POST https://api-adresse.data.gouv.fr/search/csv/` en multipart avec un CSV (`data=@fichier.csv`, `columns=adresse`). Réponse = le CSV enrichi de `latitude`, `longitude`, `result_score`, `result_citycode` (code INSEE), `result_postcode`, `result_city`.
+- Vérifié le 2026-10-02 : l'ancien domaine répond encore, mais le service officiel est la Géoplateforme IGN : `https://data.geopf.fr/geocodage/search` et `…/geocodage/search/csv` (mêmes paramètres, même CSV : `latitude`, `longitude`, `result_score`, `result_postcode`, `result_city`, `result_citycode`, `result_status`…).
 - Garder `result_score` : sous ~0.5, le résultat est douteux → le logger.
 - `result_citycode` donne le code INSEE commune → sert à croiser avec le CNC et à déduire le département.
 

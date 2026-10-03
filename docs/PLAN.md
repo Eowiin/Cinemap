@@ -62,12 +62,13 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 - [x] Commit initial de la branche (`11ac7b6`)
 
 ### 1. Référentiel des cinémas (backend, propriétaire)
-- [ ] `cargo new backend`, un binaire avec des sous-commandes `clap` (`import-cinemas`, `scrape`, `serve`), async `tokio`, `anyhow`, `tracing`
+- [x] `cargo new backend`, un binaire avec des sous-commandes `clap` (`import-cinemas`, `scrape`, `serve`), async `tokio`, `anyhow`, `tracing`
   - 2026-09-29 : crate créé, sous-commandes clap OK, compile (`import_cinemas` propage ses erreurs avec `?`). Départements : code INSEE gardé en texte (2A/2B, « 01 »), CSV embarqué avec `include_str!`, lu avec le crate `csv` + serde (struct `Department`). Logs via `tracing` (`EnvFilter` : `RUST_LOG` prioritaire, sinon `info`). Reste : Mayotte à nouveau acceptée avec un code vide (→ `Option<String>`), erreur `csv` à afficher, `info!` récapitulatif, `serve()` sans `unwrap`, imports inutilisés, découpage en modules. Suivi détaillé : [`SUIVI.md`](SUIVI.md)
 - [x] Migrations `sqlx` (schéma de `API.md`), `PRAGMA journal_mode=WAL`
   - 2026-09-29 : migrations écrites, WAL + `foreign_keys` + `busy_timeout` dans les options de connexion, pool de 4 connexions (un seul écrivain SQLite, lectures parallèles en WAL). `down` des index corrigé (le préfixe de `DROP INDEX` est une base, pas une table ; pas de `IF EXISTS` pour ne pas masquer les erreurs)
-- [ ] Scraper les pages AlloCiné par département (pagination, dédoublonnage par ID : la page IDF 83093 recoupe les autres départements IDF)
+- [x] Scraper les pages AlloCiné par département (pagination, dédoublonnage par ID : la page IDF 83093 recoupe les autres départements IDF)
   - 2026-10-02 : parsing hors ligne terminé et testé sur une fixture (`parse_department_page`, `page_count`). Reste : réseau, pagination, dédoublonnage (SUIVI §D)
+  - 2026-10-02 : réseau (un seul `Client`, `error_for_status`, contexte d'erreur), pagination, pause de 3 s, dédoublonnage par ID cinéma : OK. Suite : écriture en base, géocodage, CNC, rapport (SUIVI §E-H)
 - [ ] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
 - [ ] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
 - [ ] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
