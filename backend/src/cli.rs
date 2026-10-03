@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 pub enum SubCommands {
     ImportCinemas,
     Scrape,
-    Serve
+    Serve,
 }
 
 #[derive(Parser)]

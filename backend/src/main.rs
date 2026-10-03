@@ -1,13 +1,10 @@
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::{Router, routing::get};
+use backend::cinemas::import_cinemas;
+use backend::cli::{Cli, SubCommands};
+use backend::db;
+use clap::Parser;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-use clap::Parser;
-use backend::db;
-use backend::cli::{Cli, SubCommands};
-use backend::cinemas::import_cinemas;
 
 fn scrape() {
     info!("Scrape");
@@ -31,15 +28,18 @@ async fn main() -> anyhow::Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let args= Cli::parse();
+    let args = Cli::parse();
     let pool = db::establish_connection().await?;
 
     db::run_migrations(&pool).await?;
 
     match args.command {
-        SubCommands::ImportCinemas => import_cinemas().await,
-        SubCommands::Scrape => Ok(scrape()),
-        SubCommands::Serve => serve().await
+        SubCommands::ImportCinemas => import_cinemas(&pool).await,
+        SubCommands::Scrape => {
+            scrape();
+            Ok(())
+        },
+        SubCommands::Serve => serve().await,
     }
 }
 
