@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         SubCommands::Scrape => {
             scrape();
             Ok(())
-        },
+        }
         SubCommands::Serve => serve().await,
     }
 }

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use reqwest::{
     Client, Error,
     header::{HeaderMap, HeaderValue, USER_AGENT},
@@ -17,5 +19,10 @@ fn build_headers() -> HeaderMap {
 }
 
 pub fn build_client() -> Result<Client, Error> {
-    Client::builder().default_headers(build_headers()).build()
+    Client::builder()
+        .default_headers(build_headers())
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .retry(reqwest::retry::never())
+        .build()
 }

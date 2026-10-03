@@ -5,6 +5,7 @@ mod geocode;
 use std::collections::HashMap;
 
 use allocine::get_cinemas_from_department;
+use anyhow::Context;
 use departments::get_departments;
 use sqlx::SqlitePool;
 use tracing::info;
@@ -18,7 +19,22 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
     let mut duplicates = 0;
 
     for department in departments {
-        let cinemas = get_cinemas_from_department(&department, &client).await?;
+        let cinemas = get_cinemas_from_department(&department, &client)
+            .await
+            .with_context(|| {
+                format!(
+                    "Import du département {} ({})",
+                    department.code_insee, department.nom
+                )
+            })?;
+
+        upsert_cinemas(pool, &cinemas).await?;
+        info!(
+            department = %department.code_insee,
+            name = %department.nom,
+            cinemas = cinemas.len(),
+            "Département enregistré"
+        );
 
         for cinema in cinemas {
             if cinemas_map.insert(cinema.id.clone(), cinema).is_some() {
@@ -26,7 +42,6 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
             }
         }
     }
-    upsert_cinemas(pool, &cinemas_map).await?;
     geocode::geocode_cinemas(pool, &client, &cinemas_map).await?;
 
     info!(
@@ -37,13 +52,10 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn upsert_cinemas(
-    pool: &SqlitePool,
-    cinemas: &HashMap<String, Cinema>,
-) -> anyhow::Result<()> {
+async fn upsert_cinemas(pool: &SqlitePool, cinemas: &[Cinema]) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
 
-    for cinema in cinemas.values() {
+    for cinema in cinemas {
         let name_search = normalize(&cinema.name);
 
         sqlx::query!(
@@ -90,4 +102,54 @@ async fn upsert_cinemas(
     }
     tx.commit().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn committed_department_survives_next_department_failure() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let cinema = || Cinema {
+            id: "C0159".to_owned(),
+            name: "UGC Ciné Cité Les Halles".to_owned(),
+            address: Some("7 Place de la Rotonde 75001 Paris".to_owned()),
+        };
+        upsert_cinemas(&pool, &[cinema()]).await.unwrap();
+        upsert_cinemas(&pool, &[cinema()]).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM cinemas")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            1
+        );
+
+        // Simule un échec SQL pendant le département suivant, après une
+        // première écriture : toute cette transaction doit être annulée.
+        sqlx::query("CREATE TRIGGER fail_import BEFORE INSERT ON cinemas WHEN NEW.id = 'FAIL' BEGIN SELECT RAISE(ABORT, 'simulated failure'); END")
+            .execute(&pool).await.unwrap();
+        let next = [
+            Cinema {
+                id: "NEXT".to_owned(),
+                ..cinema()
+            },
+            Cinema {
+                id: "FAIL".to_owned(),
+                ..cinema()
+            },
+        ];
+        assert!(upsert_cinemas(&pool, &next).await.is_err());
+        let ids = sqlx::query_scalar::<_, String>("SELECT id FROM cinemas")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(ids, vec!["C0159"]);
+    }
 }
