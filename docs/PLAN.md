@@ -66,13 +66,15 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
   - 2026-09-29 : crate créé, sous-commandes clap OK, compile (`import_cinemas` propage ses erreurs avec `?`). Départements : code INSEE gardé en texte (2A/2B, « 01 »), CSV embarqué avec `include_str!`, lu avec le crate `csv` + serde (struct `Department`). Logs via `tracing` (`EnvFilter` : `RUST_LOG` prioritaire, sinon `info`). Reste : Mayotte à nouveau acceptée avec un code vide (→ `Option<String>`), erreur `csv` à afficher, `info!` récapitulatif, `serve()` sans `unwrap`, imports inutilisés, découpage en modules. Suivi détaillé : [`SUIVI.md`](SUIVI.md)
 - [x] Migrations `sqlx` (schéma de `API.md`), `PRAGMA journal_mode=WAL`
   - 2026-09-29 : migrations écrites, WAL + `foreign_keys` + `busy_timeout` dans les options de connexion, pool de 4 connexions (un seul écrivain SQLite, lectures parallèles en WAL). `down` des index corrigé (le préfixe de `DROP INDEX` est une base, pas une table ; pas de `IF EXISTS` pour ne pas masquer les erreurs)
-- [x] Scraper les pages AlloCiné par département (pagination, dédoublonnage par ID : la page IDF 83093 recoupe les autres départements IDF)
+- [x] Scraper les pages AlloCiné par département et la page ville de Paris (pagination, dédoublonnage par ID)
   - 2026-10-02 : parsing hors ligne terminé et testé sur une fixture (`parse_department_page`, `page_count`). Reste : réseau, pagination, dédoublonnage (SUIVI §D)
   - 2026-10-02 : réseau (un seul `Client`, `error_for_status`, contexte d'erreur), pagination, pause de 3 s, dédoublonnage par ID cinéma : OK. Suite : écriture en base, géocodage, CNC, rapport (SUIVI §E-H)
-- [ ] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
+  - 2026-10-03 : source Paris `ville-115755` configurée via `allocine_path`. Deux réimports comparés : 3 121 IDs uniques dans les deux cas, 0 doublon sans 83093 contre 265 avec ; agrégat retiré. Paris : 105 géocodés dans le 75.
+- [x] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
+  - 2026-10-03 : premier import complet : 3 024 cinémas, 3 004 géocodés, 146 scores < 0.5. Paris incomplet (10 cinémas) → page `ville-115755` (SUIVI)
 - [ ] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
 - [ ] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
-- [ ] Vérification manuelle sur Paris (~85 cinémas attendus, pas de doublons)
+- [x] Vérification manuelle sur Paris : 107 entrées de la source ville, 105 géocodées dans le 75, aucun ID en double (2026-10-03 ; deux anomalies détaillées dans SUIVI).
 
 ### 2. Scraper des séances (backend, propriétaire)
 - [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)

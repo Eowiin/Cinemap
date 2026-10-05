@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-03. **Prochaine étape : rendre l'import robuste aux coupures réseau (E-F bis), puis G.**
+Dernière mise à jour : 2026-10-05. **Prochaine étape : F-bis (géocodages dans le mauvais département), puis G (CNC).**
 
 ## Déjà fait ✅
 
@@ -189,6 +189,41 @@ Petites remarques : l'upsert remet `insee_code` à `NULL` si l'adresse change, m
 
 2026-10-03 (soir) : ✅ `fetch_with_retries` (délais injectés 5/15/45 s, `is_retryable` : 5xx + erreurs de transport, pas 4xx), `connect_timeout` 10 s / `timeout` 30 s, retry interne de reqwest désactivé (`retry::never()`, évite de réessayer deux fois), upsert après chaque département avec contexte « Import du département … », tests : serveur HTTP factice (nouvel essai sur 5xx, pas sur 404) et base en mémoire (un département validé survit à l'échec du suivant). 17 tests verts, clippy et fmt propres. Remarque : `is_decode()` dans `is_retryable` (un corps mal encodé ne se répare pas en réessayant) et `is_request()` est large ; à garder en tête si on voit des essais inutiles dans les logs.
 
+### Premier import complet réussi (2026-10-03)
+
+Résultat : **3 024 cinémas**, 3 017 avec adresse, **3 004 géocodés** (13 adresses non trouvées, 7 sans adresse), 146 scores < 0.5 (~5 %, surtout des adresses vagues : « ZAC … », « Centre commercial … », « Salle des fêtes … »), 100 départements. C0159 → `75101`, département `75`, (48.8619, 2.3466) ✅.
+
+**Mais Paris : 10 cinémas seulement** (attendu ~85-100). Cause : la page 83093 ne contient que les grands multiplexes parisiens. Paris a une page ville `ville-115755` (107 entrées, 20 par page), voir `SOURCES.md` §1.
+
+- [x] Pour Paris, scraper `https://www.allocine.fr/salle/cinema/ville-115755/` : colonne `allocine_path` dans le CSV (`departement-83169`, `ville-115755`), sans branchement sur le département dans le code.
+- [x] Retirer `83093` : deux imports complets successifs (sans puis avec l’agrégat) trouvent chacun **3 121 IDs uniques**. Sans agrégat : **0 doublon** ; avec : **265 doublons**, aucun ID supplémentaire. Les snapshots adresse/géocodage après les deux passages sont identiques. Configuration finale : Paris ville + départements, sans agrégat.
+- [x] Ajouter un `/` avant `?page=` (sinon chaque requête fait un `301` en plus : deux allers-retours au lieu d'un).
+- [x] Fixture `ville-115755-p1.html` + test : 20 cinémas, `page_count` ≥ 6 (même parseur, vérifie qu'il marche tel quel).
+- Vérification complète (2026-10-03) : **3 121 cinémas, 3 100 géocodés, 148 scores < 0,5, 105 dans le 75**, aucun ID en double. `C0159` reste `75101` / `75` / `(48.861942, 2.346567)`. 22 tests passent, Clippy et formatage propres. Durées observées : 404,66 s sans agrégat, 462,62 s avec (les variations réseau empêchent d’attribuer tout l’écart à l’agrégat). Les deux variantes ont été compilées depuis le même code, avec une ligne supplémentaire temporaire dans le CSV pour `departement-83093` ; cette ligne a été retirée de la configuration finale.
+- Configuration appliquée : `allocine_path` dans le CSV, chemin utilisé tel quel par le scraper (aucun branchement sur le code 75). Fixture réelle téléchargée ; test : 20 cinémas et au moins 6 pages.
+- [x] Réimport sans agrégat : **105 cinémas géocodés dans le 75**, 107 entrées dans la source ville. 97 nouveaux cinémas ; les 3 004 anciens géocodages sont inchangés (comparaison des snapshots avant/après). 110 adresses envoyées : les 97 nouvelles + les 13 anciennes introuvables, retentées par le filtre actuel.
+- Deux entrées parisiennes hors du compteur : `W7508` (MK2 Grand Palais), adresse introuvable ; `C0127` (mk2 Bibliothèque x Centre Pompidou), adresse longue envoyée à l’API mais résultat à Marseille (`13213`, score ~0,301), signalé par le warning de score faible. Pas de correction manuelle appliquée dans ce lot.
+- À surveiller : d'autres grandes villes pourraient avoir le même problème (département incomplet). Le croisement CNC (G) le révélera : un département avec beaucoup de cinémas CNC non croisés = page AlloCiné incomplète.
+
+### Relecture du lot Paris (2026-10-03, fait avec Codex)
+
+✅ Validé : `allocine_path` dans le CSV (aucun `if` sur le 75), `listing_url` testée, 83093 retiré sur mesure (0 vs 265 doublons, mêmes 3 121 IDs), fixture Paris réelle, `is_retryable` qui remonte la chaîne `Error::source()` jusqu'à l'`io::Error` (répond aux remarques `is_decode`/`is_request`), test « l'upsert sans changement d'adresse garde le géocodage ». Vérifié de mon côté : 22 tests, clippy, fmt, base = 3 121 / 3 100 géocodés / 105 dans le 75.
+
+**F-bis : C0127 n'est pas un cas isolé.** Requête sur la base : 90 cinémas dont le `postal_code` géocodé n'apparaît pas dans l'adresse AlloCiné, dont **~49 placés dans un autre département** (C0127 Paris → Marseille, W9161 Essonne → Vaucluse, P8517 Marne → Indre…), tous avec un score < 0.5. Sur la carte, ces cinémas seraient à des centaines de km. La politique actuelle « score faible = `warn!` mais on garde » est donc trop permissive.
+
+- **Critère = cohérence du code postal, pas le score** (analyse du 2026-10-03) : sur 148 scores < 0.5, 121 sont dans la bonne commune (adresse juste vague) ; à l'inverse 27 scores ≥ 0.5 sont dans un autre département (ex. W0730 « 6 Rue de Montceau-les-Mines 62440 Harnes » → Montceau-les-Mines, 0.83 : le nom de la rue pris pour la ville). Le score mesure la ressemblance du texte, pas la justesse du lieu → n'enregistrer que les résultats cohérents avec le code postal de l'adresse ; le score reste une info (précision), pas un filtre. Attention : un contrôle par département a des faux positifs (Corse : `20100` vs `2A`), le filtre par code postal non.
+- [ ] Extraire le code postal de l'adresse AlloCiné (le **dernier** groupe de 5 chiffres ; rappel : `rsplit(' ').nth(1)` échouait sur « 75015 Paris 15e arrondissement »). Fonction pure + tests dans `text.rs`.
+- [ ] L'envoyer à l'API comme filtre : colonne `postcode` dans le CSV + champ multipart `postcode=postcode`. Vérifié le 2026-10-03 : avec ce filtre, C0127 ne renvoie **plus Marseille** mais aucun résultat (mieux vaut pas de point qu'un point faux).
+- [ ] Repli pour les adresses non trouvées : deuxième lot avec seulement « code postal + ville » → position au centre de la commune (`result_type = municipality`). Question : faut-il le signaler (score, ou colonne) pour que le front sache que la position est approximative ? Si ça touche `API.md`, en discuter d'abord.
+- [ ] Nettoyer l'adresse avant envoi : 11 adresses contiennent un saut de ligne (texte d'accès type « accès en face de… »). Garder la première ligne ? Voir `str::lines`.
+- [ ] Re-géocoder l'existant : le filtre actuel (`lat IS NULL`) ne reprendra jamais C0127. Élargir à `geocode_score < 0.5` (ou ajouter une sous-commande `geocode` qui ne refait que cette étape, sans les ~7 min de scraping).
+- Vérifier (plus tard, demande un appel à l'API mais pas de scraping si sous-commande dédiée) : la requête de contrôle ci-dessous doit tomber proche de 0.
+  ```sql
+  select count(*) from cinemas
+  where postal_code is not null and instr(address, postal_code) = 0
+    and address not like '% ' || department || '%';
+  ```
+
 ## G. Enrichissement CNC (XLSX)
 
 Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `NomEtab`, `Ecrans`, `fauteuils`, `DEPCOM`, `AE`).
@@ -210,20 +245,29 @@ Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `N
 
 ```text
 On reprend la réécriture de Cinemap (branche rewrite). Lis d'abord : docs/PLAN.md,
-docs/SUIVI.md (feuille de route détaillée de l'étape 1, à jour), docs/API.md (contrat
-figé : toute modif passe d'abord par ce fichier), docs/SOURCES.md,
-docs/SOBRIETE.md (réflexes ressources, à enrichir pendant les relectures). Puis regarde backend/.
+docs/SUIVI.md (feuille de route détaillée de l'étape 1, à jour : la ligne
+« Prochaine étape » en haut et les cases non cochées), docs/API.md (contrat figé :
+toute modif passe d'abord par ce fichier), docs/SOURCES.md, docs/SOBRIETE.md
+(réflexes ressources, à enrichir pendant les relectures). Puis regarde backend/
+et `git status` (du travail peut ne pas être commité).
 
-Rôles : le backend Rust, c'est MOI qui l'écris pour apprendre. Tu me guides et relis mon
-code, sans écrire l'implémentation sauf si je te le demande explicitement. Le frontend
+Rôles : le backend Rust, c'est MOI qui l'écris pour apprendre (il m'arrive de
+déléguer un lot à Codex : relis-le comme mon code et pose-moi 2-3 questions sur
+les passages Rust non triviaux). Tu me guides et relis, sans écrire
+l'implémentation sauf si je te le demande explicitement. Le frontend
 (Svelte + Vite + TS + MapLibre/OpenFreeMap, PWA), c'est toi (étape 5).
 
-Méthode : des INDICES, pas des solutions (questions, où regarder : fichier, ligne, doc,
-méthode, macro), par lots de plusieurs étapes. Donne la réponse seulement si je la demande ou si je
-bloque encore après 2 indices. Avant chaque indice, relis le code et lance-le (cargo build /
-cargo run) pour vérifier ce qui est déjà réglé.
+Méthode : des INDICES, pas des solutions (questions, où regarder : fichier, ligne,
+doc, méthode, macro), par LOTS de plusieurs étapes numérotées avec une
+vérification à la fin. Donne la réponse seulement si je la demande ou si je bloque
+encore après 2 indices. Avant chaque relecture, lance cargo build / clippy / fmt
+--check / test et interroge la base (sqlite3 backend/database.db) pour vérifier
+avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
+sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
-Où j'en suis : voir la section de SUIVI.md dont les cases ne sont pas cochées.
-Mets à jour les cases et notes de docs/PLAN.md et docs/SUIVI.md au fur et à mesure.
-Réponds en français. Ne commite pas sans me demander.
+Où j'en suis : F-bis (géocodage : filtre par code postal, critère de cohérence
+plutôt que le score, repli commune, re-géocodage de l'existant), puis G
+(enrichissement CNC). Mets à jour les cases et notes de docs/PLAN.md et
+docs/SUIVI.md au fur et à mesure. Réponds en français.
+Tu peux commiter et pousser quand je le demande (pas avant).
 ```

@@ -7,12 +7,14 @@ Tout ce qu'on sait des sources, vérifié le 2026-09-25. À relire avant d'écri
 Page HTML par département, paginée :
 
 ```
-GET https://www.allocine.fr/salle/cinema/departement-{allocine_code}/
-GET https://www.allocine.fr/salle/cinema/departement-{allocine_code}/?page=2
+GET https://www.allocine.fr/salle/cinema/{allocine_path}/
+GET https://www.allocine.fr/salle/cinema/{allocine_path}/?page=2
 ```
 
-- Les codes département AlloCiné sont dans [`data/departements.csv`](data/departements.csv) (colonnes `code_insee,nom,allocine_code`). Mayotte n'a pas de code connu. AlloCiné référence pourtant au moins une salle à Mayotte (`W9762`, Salle de Chirongui, vu le 2026-09-30) : à rattacher plus tard, par exemple en ajoutant son ID à la main.
-- **Paris n'a pas de page propre** : on utilise `83093`, la page agrégée Île-de-France. Elle recoupe les pages des autres départements IDF → **dédoublonner par ID AlloCiné**.
+- Les chemins des pages AlloCiné sont dans [`data/departements.csv`](data/departements.csv) (colonnes `code_insee,nom,allocine_path`) : `departement-…` pour les départements, `ville-115755` pour Paris. Mayotte n'a pas de code connu. AlloCiné référence pourtant au moins une salle à Mayotte (`W9762`, Salle de Chirongui, vu le 2026-09-30) : à rattacher plus tard, par exemple en ajoutant son ID à la main.
+- ~~Paris n'a pas de page propre : on utilise `83093`~~ **Corrigé le 2026-10-03** : la page `departement-83093` est bien une page agrégée Île-de-France (15 pages × 50), mais elle ne contient qu'**une dizaine de cinémas parisiens** (page 1 seulement, les grands multiplexes) ; le premier import complet n'a trouvé que 10 cinémas dans le 75. Paris a une page **ville** : `https://www.allocine.fr/salle/cinema/ville-115755/` (« Cinéma à Paris (75000) »), **20 cinémas par page**, 6 pages (5 × 20 + 7 = 107 le 2026-10-03), même structure HTML (`data-theater`, `<address>`), pagination `?page=N`. → Pour Paris, utiliser `ville-115755` à la place de 83093.
+- Comparaison réelle le 2026-10-03 après correction : **3 121 IDs uniques** avec ou sans `83093`, **265 doublons avec contre 0 sans**. L’agrégat n’apporte aucun cinéma supplémentaire ; il est retiré du CSV. Paris ville fournit 107 entrées, dont 105 géocodées dans le 75 (deux anomalies détaillées dans `SUIVI.md`).
+- Les pages répondent `301` sans `/` final (`departement-83093?page=2` → `departement-83093/?page=2`) ; reqwest suit la redirection, mais autant écrire directement l'URL avec `/`.
 - Le nombre de pages se lit dans les liens `?page=N` de la pagination.
 
 Dans le HTML, chaque cinéma a :
