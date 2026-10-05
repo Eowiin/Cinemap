@@ -28,7 +28,7 @@ pub async fn get_cinemas_from_department(
     let mut page = 1;
     let mut max_page = 1;
 
-    debug!("Retrieving cinemas from {}", &department.nom);
+    debug!("Récupération des cinémas : {}", &department.nom);
     while page <= max_page {
         let url = listing_url(path, page);
         let html = fetch(client, &url).await?;
@@ -374,7 +374,7 @@ mod tests {
         let cinema = cinemas
             .iter()
             .find(|c| c.id == "C0159")
-            .expect("Cinema C0159 not found");
+            .expect("Cinéma C0159 introuvable");
 
         assert_eq!(cinema.name, "UGC Ciné Cité Les Halles");
         assert_eq!(

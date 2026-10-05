@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-05. **Prochaine étape : F-bis (géocodages dans le mauvais département), puis G (CNC).**
+Dernière mise à jour : 2026-10-05. **Prochaine étape : G (CNC), suite : téléchargement, croisement, écriture en base.** F-bis est fait (commit `242284e`), le parseur CNC aussi (pas encore commité).
 
 ## Déjà fait ✅
 
@@ -212,25 +212,31 @@ Résultat : **3 024 cinémas**, 3 017 avec adresse, **3 004 géocodés** (13 adr
 **F-bis : C0127 n'est pas un cas isolé.** Requête sur la base : 90 cinémas dont le `postal_code` géocodé n'apparaît pas dans l'adresse AlloCiné, dont **~49 placés dans un autre département** (C0127 Paris → Marseille, W9161 Essonne → Vaucluse, P8517 Marne → Indre…), tous avec un score < 0.5. Sur la carte, ces cinémas seraient à des centaines de km. La politique actuelle « score faible = `warn!` mais on garde » est donc trop permissive.
 
 - **Critère = cohérence du code postal, pas le score** (analyse du 2026-10-03) : sur 148 scores < 0.5, 121 sont dans la bonne commune (adresse juste vague) ; à l'inverse 27 scores ≥ 0.5 sont dans un autre département (ex. W0730 « 6 Rue de Montceau-les-Mines 62440 Harnes » → Montceau-les-Mines, 0.83 : le nom de la rue pris pour la ville). Le score mesure la ressemblance du texte, pas la justesse du lieu → n'enregistrer que les résultats cohérents avec le code postal de l'adresse ; le score reste une info (précision), pas un filtre. Attention : un contrôle par département a des faux positifs (Corse : `20100` vs `2A`), le filtre par code postal non.
-- [ ] Extraire le code postal de l'adresse AlloCiné (le **dernier** groupe de 5 chiffres ; rappel : `rsplit(' ').nth(1)` échouait sur « 75015 Paris 15e arrondissement »). Fonction pure + tests dans `text.rs`.
-- [ ] L'envoyer à l'API comme filtre : colonne `postcode` dans le CSV + champ multipart `postcode=postcode`. Vérifié le 2026-10-03 : avec ce filtre, C0127 ne renvoie **plus Marseille** mais aucun résultat (mieux vaut pas de point qu'un point faux).
-- [ ] Repli pour les adresses non trouvées : deuxième lot avec seulement « code postal + ville » → position au centre de la commune (`result_type = municipality`). Question : faut-il le signaler (score, ou colonne) pour que le front sache que la position est approximative ? Si ça touche `API.md`, en discuter d'abord.
+- [x] Extraire le code postal de l'adresse AlloCiné (le **dernier** groupe de 5 chiffres ; rappel : `rsplit(' ').nth(1)` échouait sur « 75015 Paris 15e arrondissement »). Fonction pure + tests dans `text.rs`.
+- [x] L'envoyer à l'API comme filtre : colonne `postcode` dans le CSV + champ multipart `postcode=postcode`. Vérifié le 2026-10-03 : avec ce filtre, C0127 ne renvoie **plus Marseille** mais aucun résultat (mieux vaut pas de point qu'un point faux).
+- [x] Repli pour les adresses non trouvées : deuxième lot avec seulement « code postal + ville » → position au centre de la commune (`result_type = municipality`). Question : faut-il le signaler (score, ou colonne) pour que le front sache que la position est approximative ? Si ça touche `API.md`, en discuter d'abord.
 - [ ] Nettoyer l'adresse avant envoi : 11 adresses contiennent un saut de ligne (texte d'accès type « accès en face de… »). Garder la première ligne ? Voir `str::lines`.
-- [ ] Re-géocoder l'existant : le filtre actuel (`lat IS NULL`) ne reprendra jamais C0127. Élargir à `geocode_score < 0.5` (ou ajouter une sous-commande `geocode` qui ne refait que cette étape, sans les ~7 min de scraping).
+- [x] Re-géocoder l'existant : le filtre actuel (`lat IS NULL`) ne reprendra jamais C0127. Élargir à `geocode_score < 0.5` (ou ajouter une sous-commande `geocode` qui ne refait que cette étape, sans les ~7 min de scraping).
 - Vérifier (plus tard, demande un appel à l'API mais pas de scraping si sous-commande dédiée) : la requête de contrôle ci-dessous doit tomber proche de 0.
   ```sql
   select count(*) from cinemas
   where postal_code is not null and instr(address, postal_code) = 0
     and address not like '% ' || department || '%';
   ```
+- 2026-10-05 : ✅ F-bis commité (`242284e`) : filtre code postal, second lot de repli (adresse sans filtre pour les CEDEX, puis code postal + ville limité à `municipality`) accepté seulement si le département et le lieu concordent, colonne `geocode_type` (migration + `API.md`), sous-commande `geocode --all` sans scraping. Base : requête de contrôle ci-dessus = **0** (au lieu de ~90) ; 13 cinémas sans position ; types : 1 500 `housenumber`, 1 419 `street`, 82 `locality`, 107 `municipality`.
+- [ ] Reste ouvert (mineur) : 11 adresses contiennent toujours un saut de ligne en base ; aucune n'est fausse au contrôle, mais le texte d'accès part dans la requête et s'affichera tel quel côté front.
 
 ## G. Enrichissement CNC (XLSX)
+
+2026-10-05 : lecture hors ligne de la fixture CNC opérationnelle (`cinemas/cnc.rs`) : feuille 2025, **2 060 établissements**, tests sur le Balzac et UGC Opéra. `fauteuils` peut être vide → `Option<f64>` en entrée, `Option<i64>` en sortie. Les 42 tests passent (les tests HTTP locaux nécessitent une exécution hors sandbox), build OK. Restent avant validation du parseur : validation des nombres pour `cnc_id`/`screens`, traitement explicite des valeurs `AE` inconnues, erreur au lieu du `unwrap` sur une feuille vide, nettoyage des logs, Clippy (4 warnings) et formatage. Téléchargement en production, rapprochement et écriture CNC encore à faire.
+
+2026-10-05 (relecture) : ✅ parseur validé. `latest_year_sheet` passe par `filter_map` (année, nom) puis `max_by_key` : il renvoie le nom d'origine, et une erreur s'il n'y a pas de feuille d'année. Valeur `AE` inconnue → erreur avec la valeur ; `Vec::with_capacity(range.height())` ; tous les `DEPCOM` font 5 caractères (aucun zéro initial perdu, vérifié par un test). Messages d'erreur passés en français. Build, Clippy, fmt OK, 42 tests verts.
 
 Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `NomEtab`, `Ecrans`, `fauteuils`, `DEPCOM`, `AE`).
 
 - [ ] Télécharger le XLSX en mémoire (`.bytes()`), l'ouvrir avec `calamine` sans fichier : `open_workbook_from_rs` + `std::io::Cursor`. Fixture : garde le XLSX dans `tests/fixtures/` (quelques centaines de Ko) pour tester hors ligne.
-- [ ] Choisir la feuille : `sheet_names()`, garder celle dont le nom est la plus grande année (`parse::<u16>()`).
-- [ ] Lignes : sauter les 4 premières, lire par **nom d'en-tête** plutôt que par index (les colonnes bougent d'une année à l'autre). Regarde si `calamine` sait désérialiser avec serde (`RangeDeserializerBuilder`). Attention aux types : un nombre Excel peut arriver en `f64`, `DEPCOM` peut perdre son zéro initial (« 1053 » au lieu de « 01053 »).
+- [x] Choisir la feuille : `sheet_names()`, garder celle dont le nom est la plus grande année (`parse::<u16>()`).
+- [x] Lignes : sauter les 4 premières, lire par **nom d'en-tête** plutôt que par index (les colonnes bougent d'une année à l'autre). Regarde si `calamine` sait désérialiser avec serde (`RangeDeserializerBuilder`). Attention aux types : un nombre Excel peut arriver en `f64`, `DEPCOM` peut perdre son zéro initial (« 1053 » au lieu de « 01053 »).
 - [ ] Croisement : regrouper le CNC par `DEPCOM` (`HashMap<String, Vec<…>>`), puis pour chaque cinéma, candidats de la même commune, comparés sur `normalize(nom)` avec une similarité (crate `strsim`, par ex. `jaro_winkler` ou `normalized_levenshtein`). Seuil à choisir en regardant les cas réels (log `debug!` des paires et scores). Un seul candidat dans la commune : l'accepter même avec un score moyen ?
 - [ ] Mettre à jour `cnc_id`, `screens`, `seats`, `art_et_essai` (une transaction).
 - Vérifier : taux de croisement (on vise > 85 %) et lire une dizaine de non-croisés pour ajuster.
@@ -265,9 +271,8 @@ encore après 2 indices. Avant chaque relecture, lance cargo build / clippy / fm
 avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
 sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
-Où j'en suis : F-bis (géocodage : filtre par code postal, critère de cohérence
-plutôt que le score, repli commune, re-géocodage de l'existant), puis G
-(enrichissement CNC). Mets à jour les cases et notes de docs/PLAN.md et
+Où j'en suis : G (enrichissement CNC) : parseur XLSX fait et testé ; restent
+téléchargement, croisement par commune + similarité de nom, écriture en base. Mets à jour les cases et notes de docs/PLAN.md et
 docs/SUIVI.md au fur et à mesure. Réponds en français.
 Tu peux commiter et pousser quand je le demande (pas avant).
 ```

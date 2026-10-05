@@ -18,7 +18,7 @@ pub fn get_departments() -> impl Iterator<Item = Department> {
             Ok(x) => {
                 if x.allocine_path.is_none() {
                     warn!(
-                        "Error: no allocine_path for department {} ({})",
+                        "Chemin AlloCiné manquant pour le département {} ({}), ignoré",
                         x.nom, x.code_insee
                     );
                     return None;
@@ -26,7 +26,7 @@ pub fn get_departments() -> impl Iterator<Item = Department> {
                 Some(x)
             }
             Err(e) => {
-                warn!("Error: {e}");
+                warn!("Ligne du CSV des départements invalide : {e}");
                 None
             }
         })

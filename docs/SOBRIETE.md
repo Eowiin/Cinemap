@@ -20,6 +20,17 @@ Mesure réelle (2026-10-03, `import-cinemas` en `--release`, interrompu au 34e d
 
 Autre exemple (2026-10-02) : chaque page AlloCiné (~350 Ko) est parsée deux fois (`page_count` puis `parse_department_page`). Quelques millisecondes, contre 3 s de pause volontaire entre deux requêtes : pas la peine de compliquer le code pour ça.
 
+### Taille d'un `Vec` : l'en-tête et le tas (2026-10-05, lecture CNC)
+
+- Un `Vec<T>` compte deux tailles différentes. **L'en-tête** (pointeur, capacité, longueur) fait toujours **24 octets** en 64 bits. **La zone sur le tas** vaut `capacité × size_of::<T>()`.
+- `CncCinema` : 8 (`i64`) + 24 + 24 (deux `String`) + 8 (`i64`) + 16 (`Option<i64>`) + 1 (`bool`) = 81, arrondi à **88 octets** pour l'alignement sur 8 (vérifier avec `std::mem::size_of`). Pour 2 060 lignes, cela fait environ 181 Ko, **plus** une allocation par `String` (le texte vit ailleurs sur le tas).
+- Sans `with_capacity`, le `Vec` double sa capacité quand il est plein (4, 8, …, 4 096) : une douzaine de réallocations avec une copie à chaque fois, et environ 360 Ko réservés pour 181 Ko utiles.
+- Pistes d'économie, de la plus rentable à la moins rentable :
+  1. **Supprimer la structure intermédiaire** : remplir directement la `HashMap` par commune au lieu de passer par un `Vec`.
+  2. **Moins d'allocations par élément** : un code INSEE de taille fixe (`[u8; 5]`) ; stocker directement le nom normalisé au lieu du nom brut plus sa version normalisée.
+  3. **Des types plus petits** (`u16`, `u32`) : environ 64 octets au lieu de 88. Le gain est faible.
+- Mais le vrai poste est probablement la `Range` de calamine : **toute la feuille** en mémoire, un `calamine::Data` par cellule et pour toutes les colonnes, sans compter le XLSX et son XML décompressé. Regarder le pic mesuré par `/usr/bin/time -l` (`enrich-cnc`) avant de toucher à quoi que ce soit. Ces données ne vivent que quelques secondes une fois par nuit : si le pic reste de quelques Mo, la piste 1 suffit.
+
 ### Outils de mesure
 
 - **Toujours en `--release`** : le mode debug est 10 à 100 fois plus lent, ses chiffres ne veulent rien dire.

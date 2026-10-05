@@ -1,4 +1,5 @@
 pub mod allocine;
+pub mod cnc;
 pub mod departments;
 pub mod geocode;
 

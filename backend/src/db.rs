@@ -10,7 +10,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
 
 pub async fn establish_connection() -> anyhow::Result<SqlitePool> {
     let database_url =
-        env::var("DATABASE_URL").context("DATABASE_URL environment variable not found")?;
+        env::var("DATABASE_URL").context("Variable d'environnement DATABASE_URL introuvable")?;
     let options = SqliteConnectOptions::from_str(&database_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
