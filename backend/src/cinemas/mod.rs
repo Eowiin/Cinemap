@@ -122,7 +122,16 @@ mod tests {
             address: Some("7 Place de la Rotonde 75001 Paris".to_owned()),
         };
         upsert_cinemas(&pool, &[cinema()]).await.unwrap();
+        sqlx::query("UPDATE cinemas SET lat = 48.8619, lng = 2.3466, geocode_score = 0.9, insee_code = '75101', department = '75'")
+            .execute(&pool).await.unwrap();
         upsert_cinemas(&pool, &[cinema()]).await.unwrap();
+        let geocoding = sqlx::query_as::<_, (f64, f64, f64, String, String)>(
+            "SELECT lat, lng, geocode_score, insee_code, department FROM cinemas WHERE id = 'C0159'"
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            geocoding,
+            (48.8619, 2.3466, 0.9, "75101".to_owned(), "75".to_owned())
+        );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM cinemas")
                 .fetch_one(&pool)

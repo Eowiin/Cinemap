@@ -20,17 +20,17 @@ pub async fn get_cinemas_from_department(
     department: &Department,
     client: &Client,
 ) -> anyhow::Result<Vec<Cinema>> {
-    let base_url = format!(
-        "https://www.allocine.fr/salle/cinema/departement-{}",
-        department.allocine_code.as_ref().unwrap()
-    );
+    let path = department
+        .allocine_path
+        .as_deref()
+        .context("Chemin AlloCiné manquant pour cette source")?;
     let mut cinemas: Vec<Cinema> = Vec::new();
     let mut page = 1;
     let mut max_page = 1;
 
     debug!("Retrieving cinemas from {}", &department.nom);
     while page <= max_page {
-        let url = format!("{base_url}?page={page}");
+        let url = listing_url(path, page);
         let html = fetch(client, &url).await?;
 
         max_page = max_page.max(page_count(&html));
@@ -42,6 +42,10 @@ pub async fn get_cinemas_from_department(
         }
     }
     Ok(cinemas)
+}
+
+fn listing_url(path: &str, page: u32) -> String {
+    format!("https://www.allocine.fr/salle/cinema/{path}/?page={page}")
 }
 
 pub fn parse_department_page(html: &str) -> Vec<Cinema> {
@@ -142,13 +146,28 @@ fn is_retryable(error: &reqwest::Error) -> bool {
         return status.is_server_error();
     }
 
-    // Les erreurs de transport peuvent survenir avant les en-têtes ou
-    // pendant la lecture du corps. Aucun parsing JSON n'est effectué ici.
-    error.is_timeout()
-        || error.is_connect()
-        || error.is_request()
-        || error.is_body()
-        || error.is_decode()
+    if error.is_timeout() || error.is_connect() {
+        return true;
+    }
+
+    // Une coupure peut être enveloppée dans une erreur de requête ou de
+    // décodage. Seule sa cause d'E/S justifie alors un nouvel essai.
+    let mut cause = std::error::Error::source(error);
+    while let Some(source) = cause {
+        if let Some(io_error) = source.downcast_ref::<std::io::Error>() {
+            use std::io::ErrorKind;
+            return matches!(
+                io_error.kind(),
+                ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::BrokenPipe
+                    | ErrorKind::UnexpectedEof
+                    | ErrorKind::TimedOut
+            );
+        }
+        cause = source.source();
+    }
+    false
 }
 
 async fn fetch_once(client: &Client, url: &str) -> Result<String, reqwest::Error> {
@@ -280,6 +299,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn malformed_response_is_not_retried() {
+        let malformed = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\ninvalid-size\r\nbody\r\n".to_owned();
+        let (url, count, server) = mock_server(vec![malformed, response(200)]).await;
+        let error = fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
+            .await
+            .unwrap_err();
+        assert!(!is_retryable(
+            error.downcast_ref::<reqwest::Error>().unwrap()
+        ));
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn timeout_and_connection_failure_are_retryable() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/", listener.local_addr().unwrap());
@@ -301,6 +334,32 @@ mod tests {
     }
 
     const PAGE: &str = include_str!("../../tests/fixtures/departement-83093-p1.html");
+    const PARIS_PAGE: &str = include_str!("../../tests/fixtures/ville-115755-p1.html");
+
+    #[test]
+    fn parses_paris_city_page_with_the_same_parser() {
+        let cinemas = parse_department_page(PARIS_PAGE);
+        assert_eq!(cinemas.len(), 20);
+        assert!(
+            cinemas
+                .iter()
+                .all(|cinema| !cinema.id.is_empty() && !cinema.name.is_empty())
+        );
+        assert!(cinemas.iter().any(|cinema| cinema.id == "C0159"));
+        assert!(page_count(PARIS_PAGE) >= 6);
+    }
+
+    #[test]
+    fn listing_urls_use_configured_paths_and_trailing_slash() {
+        assert_eq!(
+            listing_url("ville-115755", 2),
+            "https://www.allocine.fr/salle/cinema/ville-115755/?page=2"
+        );
+        assert_eq!(
+            listing_url("departement-83169", 1),
+            "https://www.allocine.fr/salle/cinema/departement-83169/?page=1"
+        );
+    }
 
     #[test]
     fn test_parse_department_page() {

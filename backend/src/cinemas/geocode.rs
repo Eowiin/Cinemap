@@ -123,6 +123,8 @@ async fn build_cinemas_csv(pool: &SqlitePool) -> anyhow::Result<Option<Form>> {
         return Ok(None);
     }
 
+    info!(cinemas = data.len(), "Adresses à géocoder");
+
     wtr.write_record(["id", "adresse"])?;
     for cinema in data {
         wtr.write_record([cinema.id, cinema.address])?;
