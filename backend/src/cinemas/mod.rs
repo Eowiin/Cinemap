@@ -1,6 +1,6 @@
 pub mod allocine;
 pub mod departments;
-mod geocode;
+pub mod geocode;
 
 use std::collections::HashMap;
 
@@ -42,7 +42,7 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
             }
         }
     }
-    geocode::geocode_cinemas(pool, &client, &cinemas_map).await?;
+    geocode::geocode_cinemas(pool, &client, false).await?;
 
     info!(
         "{} cinémas, {} doublons ignorés",
@@ -89,6 +89,31 @@ async fn upsert_cinemas(pool: &SqlitePool, cinemas: &[Cinema]) -> anyhow::Result
                     THEN NULL ELSE cinemas.insee_code
                 END,
 
+                geocode_type = CASE
+                    WHEN cinemas.address IS NOT excluded.address
+                    THEN NULL ELSE cinemas.geocode_type
+                END,
+
+                department = CASE
+                    WHEN cinemas.address IS NOT excluded.address
+                    THEN NULL ELSE cinemas.department
+                END,
+
+                postal_code = CASE
+                    WHEN cinemas.address IS NOT excluded.address
+                    THEN NULL ELSE cinemas.postal_code
+                END,
+
+                city = CASE
+                    WHEN cinemas.address IS NOT excluded.address
+                    THEN NULL ELSE cinemas.city
+                END,
+
+                city_search = CASE
+                    WHEN cinemas.address IS NOT excluded.address
+                    THEN NULL ELSE cinemas.city_search
+                END,
+
                 address = excluded.address,
                 updated_at = excluded.updated_at
             "#,
@@ -107,6 +132,37 @@ async fn upsert_cinemas(pool: &SqlitePool, cinemas: &[Cinema]) -> anyhow::Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn changed_address_invalidates_all_geographic_fields() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let mut cinema = Cinema {
+            id: "C0159".into(),
+            name: "Cinéma".into(),
+            address: Some("7 Place de la Rotonde 75001 Paris".into()),
+        };
+        upsert_cinemas(&pool, std::slice::from_ref(&cinema))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE cinemas SET lat = 48.86, lng = 2.34, geocode_score = 0.9, geocode_type = 'housenumber', insee_code = '75101', department = '75', postal_code = '75001', city = 'Paris', city_search = 'paris'")
+            .execute(&pool).await.unwrap();
+        upsert_cinemas(&pool, std::slice::from_ref(&cinema))
+            .await
+            .unwrap();
+        let preserved: bool = sqlx::query_scalar("SELECT lat = 48.86 AND geocode_type = 'housenumber' AND postal_code = '75001' AND city = 'Paris' FROM cinemas")
+            .fetch_one(&pool).await.unwrap();
+        assert!(preserved);
+        cinema.address = Some("Rue A 31300 Toulouse".into());
+        upsert_cinemas(&pool, &[cinema]).await.unwrap();
+        let cleared: bool = sqlx::query_scalar("SELECT lat IS NULL AND lng IS NULL AND geocode_score IS NULL AND geocode_type IS NULL AND insee_code IS NULL AND department IS NULL AND postal_code IS NULL AND city IS NULL AND city_search IS NULL FROM cinemas")
+            .fetch_one(&pool).await.unwrap();
+        assert!(cleared);
+    }
 
     #[tokio::test]
     async fn committed_department_survives_next_department_failure() {

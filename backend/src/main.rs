@@ -35,6 +35,10 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command {
         SubCommands::ImportCinemas => import_cinemas(&pool).await,
+        SubCommands::Geocode { all } => {
+            let client = backend::client::build_client()?;
+            backend::cinemas::geocode::geocode_cinemas(&pool, &client, all).await
+        }
         SubCommands::Scrape => {
             scrape();
             Ok(())

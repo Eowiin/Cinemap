@@ -204,6 +204,7 @@ CREATE TABLE cinemas (
     lat             REAL,
     lng             REAL,
     geocode_score   REAL,
+    geocode_type    TEXT,                 -- housenumber | street | locality | municipality
     cnc_id          INTEGER,
     screens         INTEGER,
     seats           INTEGER,
@@ -262,3 +263,48 @@ CREATE TABLE scrape_runs (
 Au démarrage : `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`.
 
 Distance : SQLite n'a pas de fonctions géo → filtre grossier par bounding box en SQL, puis calcul haversine et tri en Rust.
+
+### Géocodage des cinémas
+
+`cargo run --release -- geocode` traite les cinémas dont une coordonnée manque ;
+`cargo run --release -- geocode --all` recalcule toutes les positions sans scraping.
+Exécuter ces commandes depuis `backend/`. Le géocodage utilise au plus deux appels
+CSV successifs à l’IGN : adresse nettoyée avec filtre postal, puis un second lot
+pour les résultats refusés. Ce lot contient, par cinéma, l’adresse complète sans
+filtre postal (notamment pour les CEDEX) et une recherche CP + ville limitée au
+type `municipality`. Ces variantes sont regroupées dans le même appel HTTP.
+Une cellule de filtre postal vide est acceptée par l’IGN, mais le programme ne
+valide pas automatiquement un résultat sans code postal source.
+
+Le code postal stocké provient de l’adresse AlloCiné, y compris après un repli.
+La ville, le code INSEE et le département proviennent du résultat accepté.
+Le score est informatif. `geocode_type` conserve le type réel du résultat :
+`housenumber`, `street`, `locality` ou `municipality`. Une position de lieu-dit
+n’est pas présentée comme le centre de la commune. Ce champ reste interne à la
+base pour l’instant ; les réponses publiques ne changent pas.
+
+Le repli exige un département compatible ET un lieu reconnaissable. Le nom
+normalisé est comparé à `result_city`, `result_oldcity`, et, pour `locality`, à
+une composante entière de `result_name` séparée par une virgule ou des parenthèses.
+Un nom de rue ne sert jamais d’alias de commune. À code postal identique, un nom
+abrégé ou un quartier est aussi accepté si l’un des noms de commune est le préfixe
+complet de l’autre, sur une frontière de mots (Les Adrets / Les Adrets-de-l’Estérel,
+Cannes La Bocca / Cannes). Ce contrôle reste une heuristique, pas un référentiel
+exhaustif des communes. Un simple département commun ne suffit pas.
+
+`result_context` est utilisé uniquement pour vérifier la cohérence du département
+avec le code INSEE, jamais pour identifier la commune. Pour Paris, Lyon et Marseille,
+le code INSEE de l’arrondissement est exigé. Décision F-ter : Riboux (13780, Var)
+et Saint-Pierre-Laval (42620, Allier) restent non résolus, car leur département ne
+correspond pas au préfixe postal ; aucune exception silencieuse n’est ajoutée.
+
+Sans code postal exploitable, la position reste non validée. La forme espacée
+`31 300 Toulouse` est normalisée seulement dans un suffixe CP + ville ; les
+variantes ambiguës restent à examiner. L’adresse originale n’est pas réécrite :
+un contrôle SQL recherchant littéralement `31300` dans celle-ci doit tenir compte
+de cet espace.
+
+Un échec de validation efface les anciennes données géographiques, sauf le code
+postal extrait de l’adresse. Une erreur réseau, CSV ou SQL laisse le lot intact.
+Toutes les écritures ont lieu dans une seule transaction après les appels HTTP.
+Un changement d’adresse pendant les appels annule l’enregistrement du lot.
