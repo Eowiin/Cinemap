@@ -78,6 +78,8 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
   - 2026-10-06 : rapport `info!` en fin d'`import-cinemas` (une requête SQL, testée). Import complet : 3 134 cinémas, 13 sans position, 1 739 croisés CNC, 0 absent.
 - [x] Vérification manuelle sur Paris : 107 entrées de la source ville, 105 géocodées dans le 75, aucun ID en double (2026-10-03 ; deux anomalies détaillées dans SUIVI).
 
+- [x] Cycle de vie : cinéma masqué de l'API après 14 jours sans être vu, supprimé après 60 jours en fin d'import réussi (`API.md`, 2026-10-06). **Étape 1 terminée le 2026-10-06.**
+
 ### 2. Scraper des séances (backend, propriétaire)
 - [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
 - [ ] Pagination `p-{n}`

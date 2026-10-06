@@ -15,6 +15,7 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
 - Champs inconnus = `null` (jamais absents). Listes vides = `[]`.
 - **Booléens en query** : `true` / `false`. Un paramètre mal formé (date, heure, booléen, nombre, `version` inconnue) → 400 `bad_request`.
 - **Cinémas non géocodés** (`lat`/`lng` NULL en base) : exclus de **tous** les endpoints, `/api/cinemas/{id}` compris (404).
+- **Cinémas plus listés par AlloCiné** : un cinéma dont `updated_at` (dernière fois qu'`import-cinemas` l'a vu) date de **plus de 14 jours** est exclu de **tous** les endpoints, comme un cinéma non géocodé (404 sur `/api/cinemas/{id}`, ses séances n'apparaissent plus). Il réapparaît dès qu'un import le revoit. Voir « Cycle de vie des cinémas » plus bas.
 - **Cache** : réponses avec `Cache-Control: public, max-age=300` (utile au service worker de la PWA).
 - **Erreurs** : code HTTP approprié + corps
   ```json
@@ -209,7 +210,7 @@ CREATE TABLE cinemas (
     screens         INTEGER,
     seats           INTEGER,
     art_et_essai    INTEGER NOT NULL DEFAULT 0,
-    updated_at      TEXT NOT NULL
+    updated_at      TEXT NOT NULL         -- dernière fois vu par import-cinemas (UTC, datetime('now'))
 );
 
 CREATE TABLE movies (
@@ -263,6 +264,23 @@ CREATE TABLE scrape_runs (
 Au démarrage : `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`.
 
 Distance : SQLite n'a pas de fonctions géo → filtre grossier par bounding box en SQL, puis calcul haversine et tri en Rust.
+
+### Cycle de vie des cinémas
+
+Un cinéma n'est jamais supprimé parce qu'un seul import ne l'a pas vu : une page
+AlloCiné incomplète ou un import interrompu effaceraient sinon de vrais cinémas,
+avec leurs séances (`ON DELETE CASCADE`).
+
+- `import-cinemas` met `updated_at` à jour pour chaque cinéma listé ; le géocodage et
+  l'enrichissement CNC ne le modifient pas.
+- **Masqué** : `updated_at` plus vieux que 14 jours → exclu de l'API (filtre dans
+  les requêtes de `serve`, pas de colonne dédiée).
+- **Supprimé** : `updated_at` plus vieux que 60 jours, à la fin d'un import
+  **complet et réussi** (un import qui échoue s'arrête avant). Les séances suivent
+  par cascade.
+- Les durées supposent un `import-cinemas` au moins hebdomadaire.
+- Le rapport de fin d'import donne le nombre de cinémas absents de cet import et
+  le nombre de cinémas supprimés.
 
 ### Géocodage des cinémas
 

@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-05. **Prochaine étape : décider du sort des cinémas qui ne sont plus listés, puis étape 2 (séances).**
+Dernière mise à jour : 2026-10-05. **Étape 1 terminée. Prochaine étape : étape 2 (séances), lot 1 hors ligne (voir la fin de ce fichier).**
 
 ## Déjà fait ✅
 
@@ -256,9 +256,22 @@ Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `N
 - [x] En fin d'`import-cinemas`, un `info!` (ou quelques lignes) : nombre de cinémas, non géocodés, score faible, non croisés CNC, doublons ignorés. Le plus simple : des `SELECT count(*) … WHERE …` sur la base.
 - 2026-10-06 (écrit par Claude) : `import_report` (une requête, `count(col)` + `sum(condition)`, testée sur une base en mémoire) puis un `info!` « Import des cinémas terminé » : cinémas, sans position, position commune, score faible, croisés / non croisés CNC, **absents de cet import** (`updated_at` antérieur au début de l'import : cinémas plus listés par AlloCiné, fermés ?), doublons ignorés. Le comptage des doublons garde seulement les IDs (`HashSet<String>`) au lieu des cinémas entiers. Chiffres actuels de la base : 3 121 cinémas, 13 sans position, 107 position commune, 155 score < 0,5, 1 729 croisés CNC.
 - [x] **Import complet du 2026-10-06** (09:15 → 09:22, lancé par toi) : **3 134 cinémas** (+13 : exactement les 7 de Lyon et les 6 de Marseille), 13 sans position, 107 position commune, 155 scores < 0,5, **1 739 croisés CNC** (+10, aucun `cnc_id` en double), 0 absent de cet import. Lyon : 17 cinémas, Marseille : 16 (27 croisés CNC sur 33). Requête de contrôle F-bis toujours à 0. Mesure `/usr/bin/time -l` non relevée.
-- [ ] Décision à prendre : que faire des cinémas « absents de cet import » (suppression, ou colonne `active`) ? Touche `API.md` si on les masque côté front.
+- [x] Cinémas plus listés (décidé le 2026-10-06, règle dans `API.md` « Cycle de vie des cinémas ») : pas de suppression sur une seule absence. Masqués de l'API après **14 jours** sans être vus (`updated_at`, sans nouvelle colonne), **supprimés après 60 jours** à la fin d'un import réussi (`purge_unseen_cinemas`, testée à la seconde près ; séances supprimées par cascade). Le rapport affiche `supprimes`. Base actuelle : 0 cinéma concerné.
+- [ ] Étape 3 (API) : appliquer le filtre des 14 jours dans **toutes** les requêtes de `serve` (comme `lat IS NOT NULL`).
 - [ ] Vérif manuelle Paris : `select count(*) from cinemas where department = '75'` (~85), aucun ID en double → cocher la dernière ligne de l'étape 1 dans `PLAN.md`.
 - [ ] Mesure (SOBRIETE.md) : `/usr/bin/time -l cargo run --release -- import-cinemas` → durée totale (dominée par les pauses) et mémoire max. Note les chiffres.
+
+## Étape 2 : séances, lot 1 (hors ligne, fixture d'abord)
+
+Même méthode qu'en C pour les cinémas : on comprend le JSON sur des fichiers avant de toucher au réseau. Voir `SOURCES.md` §4 et le schéma `movies` / `showtimes` de `API.md`.
+
+- [ ] **Fixtures** : télécharge à la main 3 réponses pour aujourd'hui avec `curl`, en envoyant les trois en-têtes de `SOURCES.md` §4 : un gros multiplexe (`C0159`, pages 1 **et** 2), un cinéma Art et Essai parisien, un petit cinéma de province. Range-les dans `tests/fixtures/showtimes-<id>-p<n>.json`. Ouvre-les avec `jq` pour voir la vraie forme.
+- [ ] **Module** `src/showtimes/` (même découpage que `cinemas/`). Structs `#[derive(Deserialize)]` avec **seulement** les champs utiles (serde ignore les autres). `#[serde(rename_all = "camelCase")]` évite un `rename` par champ. Un champ parfois `null` → `Option<T>`.
+- [ ] Les **clés variables** de `showtimes` (`original`, `original_st`, `dubbed`…) : quel type serde accepte un objet JSON dont on ne connaît pas les clés à l'avance ? (Indice : une collection de `std::collections`.)
+- [ ] `runtime` (`"1h 52min"`, `"0h 00min"` = inconnu) → fonction pure `-> Option<u32>` (minutes) dans `text.rs` ou le module, avec tests.
+- [ ] Test : la fixture `C0159` p1 donne `itemsPerPage` films, `totalPages` ≥ 2 ; un film connu a son `internalId`, son titre et au moins une séance avec `startsAt` et un lien de réservation.
+- [ ] **Exploration du mapping** (sans le figer) : un test ou un `debug!` qui liste, sur toutes les fixtures, les combinaisons distinctes (clé du groupe, `diffusionVersion`, `tags`, `languages` du film). Note le tableau dans `SOURCES.md` §4 : c'est lui qui décidera VF / VO / VOST.
+- Vérifier : `cargo test`, et le tableau des combinaisons dans `SOURCES.md`.
 
 ## Prompt pour reprendre dans une nouvelle conversation
 
@@ -284,8 +297,8 @@ encore après 2 indices. Avant chaque relecture, lance cargo build / clippy / fm
 avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
 sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
-Où j'en suis : G (CNC) et H (rapport) écrits ; pages ville Lyon/Marseille ajoutées.
-Reste : import complet à relancer, vérifier ses chiffres, clore l'étape 1. Mets à jour les cases et notes de docs/PLAN.md et
+Où j'en suis : étape 1 terminée (3 134 cinémas, CNC, rapport, cycle de vie).
+Étape 2 (séances), lot 1 hors ligne : fixtures JSON, structs serde, mapping à explorer. Mets à jour les cases et notes de docs/PLAN.md et
 docs/SUIVI.md au fur et à mesure. Réponds en français.
 Tu peux commiter et pousser quand je le demande (pas avant).
 ```

@@ -59,7 +59,27 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
         );
     }
 
-    log_import_report(pool, &started_at, duplicates).await
+    // Placé après tous les départements : un import qui échoue s'arrête avant et ne purge rien.
+    let purged = purge_unseen_cinemas(pool, &started_at).await?;
+    log_import_report(pool, &started_at, duplicates, purged).await
+}
+
+/// Au-delà, un cinéma absent des imports est supprimé avec ses séances (cascade).
+/// Voir `API.md`, « Cycle de vie des cinémas » (masqué dans l'API dès 14 jours).
+const PURGE_AFTER_DAYS: u32 = 60;
+
+/// Supprime les cinémas qu'aucun import n'a vus depuis `PURGE_AFTER_DAYS` jours
+/// avant `started_at`, et renvoie leur nombre.
+async fn purge_unseen_cinemas(pool: &SqlitePool, started_at: &str) -> anyhow::Result<u64> {
+    let modifier = format!("-{PURGE_AFTER_DAYS} days");
+    let deleted = sqlx::query!(
+        "DELETE FROM cinemas WHERE updated_at < datetime(?, ?)",
+        started_at,
+        modifier
+    )
+    .execute(pool)
+    .await?;
+    Ok(deleted.rows_affected())
 }
 
 /// Chiffres de fin d'import, tirés de la base.
@@ -97,6 +117,7 @@ async fn log_import_report(
     pool: &SqlitePool,
     started_at: &str,
     duplicates: usize,
+    purged: u64,
 ) -> anyhow::Result<()> {
     let report = import_report(pool, started_at).await?;
     info!(
@@ -107,6 +128,7 @@ async fn log_import_report(
         croises_cnc = report.with_cnc,
         non_croises_cnc = report.total - report.with_cnc,
         absents_de_cet_import = report.not_seen,
+        supprimes = purged,
         doublons_ignores = duplicates,
         "Import des cinémas terminé"
     );
@@ -193,6 +215,38 @@ async fn upsert_cinemas(pool: &SqlitePool, cinemas: &[Cinema]) -> anyhow::Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn purge_only_removes_cinemas_unseen_for_sixty_days() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO cinemas (id, name, name_search, updated_at) VALUES
+             ('TODAY', 'a', 'a', '2026-10-06 10:00:00'),
+             ('MISSED', 'b', 'b', '2026-09-01 10:00:00'),
+             ('LIMIT', 'c', 'c', '2026-08-07 09:00:00'),
+             ('GONE', 'd', 'd', '2026-08-07 08:59:59')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let purged = purge_unseen_cinemas(&pool, "2026-10-06 09:00:00")
+            .await
+            .unwrap();
+
+        // Exactement 60 jours avant le début de l'import : encore gardé.
+        let kept: Vec<String> = sqlx::query_scalar("SELECT id FROM cinemas ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(purged, 1);
+        assert_eq!(kept, ["LIMIT", "MISSED", "TODAY"]);
+    }
 
     #[tokio::test]
     async fn import_report_counts_each_category() {
