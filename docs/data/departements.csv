@@ -12,6 +12,7 @@ code_insee,nom,allocine_path
 11,Aude,departement-83138
 12,Aveyron,departement-83151
 13,Bouches-du-Rhône,departement-83188
+13,Marseille,ville-87914
 14,Calvados,departement-83160
 15,Cantal,departement-83112
 16,Charente,departement-83181
@@ -69,6 +70,7 @@ code_insee,nom,allocine_path
 67,Bas-Rhin,departement-83104
 68,Haut-Rhin,departement-83105
 69,Rhône,departement-83196
+69,Lyon,ville-113315
 70,Haute-Saône,departement-83136
 71,Saône-et-Loire,departement-83117
 72,Sarthe,departement-83176

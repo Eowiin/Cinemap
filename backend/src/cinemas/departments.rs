@@ -38,12 +38,26 @@ mod tests {
 
     #[test]
     fn test_get_departments() {
-        let departments = get_departments().count();
+        let sources: Vec<Department> = get_departments().collect();
+        let mut codes: Vec<&str> = sources.iter().map(|d| d.code_insee.as_str()).collect();
+        codes.sort_unstable();
+        codes.dedup();
 
-        assert_eq!(
-            departments, 100,
-            "Testing departments retrieval from department.csv"
-        );
+        // 100 départements (sans Mayotte), plus les pages ville de Lyon et Marseille.
+        assert_eq!(sources.len(), 102);
+        assert_eq!(codes.len(), 100);
+    }
+
+    #[test]
+    fn lyon_and_marseille_add_their_city_listing() {
+        let paths = |code: &str| -> Vec<String> {
+            get_departments()
+                .filter(|department| department.code_insee == code)
+                .filter_map(|department| department.allocine_path)
+                .collect()
+        };
+        assert_eq!(paths("69"), ["departement-83196", "ville-113315"]);
+        assert_eq!(paths("13"), ["departement-83188", "ville-87914"]);
     }
 
     #[test]

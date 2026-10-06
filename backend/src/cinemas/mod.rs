@@ -3,20 +3,25 @@ pub mod cnc;
 pub mod departments;
 pub mod geocode;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use allocine::get_cinemas_from_department;
 use anyhow::Context;
 use departments::get_departments;
 use sqlx::SqlitePool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{cinemas::allocine::Cinema, client::build_client, text::normalize};
 
 pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
     let departments = get_departments();
     let client = build_client()?;
-    let mut cinemas_map: HashMap<String, Cinema> = HashMap::new();
+    // Même format que `updated_at` : sert au rapport pour repérer les cinémas absents de cet import.
+    let started_at = sqlx::query_scalar!(r#"SELECT datetime('now') AS "now!: String""#)
+        .fetch_one(pool)
+        .await?;
+    // Seuls les IDs servent à compter les doublons : inutile de garder les cinémas entiers.
+    let mut seen_ids: HashSet<String> = HashSet::new();
     let mut duplicates = 0;
 
     for department in departments {
@@ -38,18 +43,72 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
         );
 
         for cinema in cinemas {
-            if cinemas_map.insert(cinema.id.clone(), cinema).is_some() {
+            if !seen_ids.insert(cinema.id) {
                 duplicates += 1;
             }
         }
     }
     geocode::geocode_cinemas(pool, &client, false).await?;
-    cnc::enrich_cinemas(pool, &client).await?;
+    // Les cinémas sont déjà enregistrés : un CNC indisponible ne doit pas faire échouer
+    // l'import. Les données CNC précédentes restent en place (remise à zéro seulement
+    // après un téléchargement réussi).
+    if let Err(error) = cnc::enrich_cinemas(pool, &client).await {
+        warn!(
+            error = format!("{error:#}"),
+            "Enrichissement CNC impossible, ignoré"
+        );
+    }
 
+    log_import_report(pool, &started_at, duplicates).await
+}
+
+/// Chiffres de fin d'import, tirés de la base.
+#[derive(Debug, PartialEq)]
+struct ImportReport {
+    total: i64,
+    without_position: i64,
+    approximate: i64,
+    low_score: i64,
+    with_cnc: i64,
+    /// Cinémas en base mais plus listés par AlloCiné depuis `started_at` (fermés ?).
+    not_seen: i64,
+}
+
+/// Une seule requête : `count(col)` ne compte que les valeurs non `NULL`, et
+/// `sum(condition)` compte les lignes où la condition vaut 1.
+async fn import_report(pool: &SqlitePool, started_at: &str) -> anyhow::Result<ImportReport> {
+    Ok(sqlx::query_as!(
+        ImportReport,
+        r#"SELECT
+            count(*) AS "total!: i64",
+            count(*) - count(lat) AS "without_position!: i64",
+            coalesce(sum(geocode_type = 'municipality'), 0) AS "approximate!: i64",
+            coalesce(sum(geocode_score < 0.5), 0) AS "low_score!: i64",
+            count(cnc_id) AS "with_cnc!: i64",
+            coalesce(sum(updated_at < ?), 0) AS "not_seen!: i64"
+           FROM cinemas"#,
+        started_at
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
+async fn log_import_report(
+    pool: &SqlitePool,
+    started_at: &str,
+    duplicates: usize,
+) -> anyhow::Result<()> {
+    let report = import_report(pool, started_at).await?;
     info!(
-        "{} cinémas, {} doublons ignorés",
-        cinemas_map.len(),
-        duplicates
+        cinemas = report.total,
+        sans_position = report.without_position,
+        position_commune = report.approximate,
+        score_faible = report.low_score,
+        croises_cnc = report.with_cnc,
+        non_croises_cnc = report.total - report.with_cnc,
+        absents_de_cet_import = report.not_seen,
+        doublons_ignores = duplicates,
+        "Import des cinémas terminé"
     );
     Ok(())
 }
@@ -134,6 +193,40 @@ async fn upsert_cinemas(pool: &SqlitePool, cinemas: &[Cinema]) -> anyhow::Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn import_report_counts_each_category() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO cinemas (id, name, name_search, updated_at, lat, lng, geocode_type, geocode_score, cnc_id) VALUES
+             ('A', 'a', 'a', '2026-10-06 10:00:00', 48.8, 2.3, 'housenumber', 0.9, 1),
+             ('B', 'b', 'b', '2026-10-06 10:00:00', 48.8, 2.3, 'municipality', 0.4, NULL),
+             ('C', 'c', 'c', '2026-10-06 10:00:00', NULL, NULL, NULL, NULL, NULL),
+             ('OLD', 'old', 'old', '2026-09-01 10:00:00', 48.8, 2.3, 'street', 0.8, 2)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let report = import_report(&pool, "2026-10-06 09:00:00").await.unwrap();
+
+        assert_eq!(
+            report,
+            ImportReport {
+                total: 4,
+                without_position: 1,
+                approximate: 1,
+                low_score: 1,
+                with_cnc: 2,
+                not_seen: 1,
+            }
+        );
+    }
 
     #[tokio::test]
     async fn changed_address_invalidates_all_geographic_fields() {

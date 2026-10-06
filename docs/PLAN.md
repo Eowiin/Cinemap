@@ -72,9 +72,10 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
   - 2026-10-03 : source Paris `ville-115755` configurée via `allocine_path`. Deux réimports comparés : 3 121 IDs uniques dans les deux cas, 0 doublon sans 83093 contre 265 avec ; agrégat retiré. Paris : 105 géocodés dans le 75.
 - [x] Géocodage en masse par CSV avec l'API Adresse, en loggant les scores faibles
   - 2026-10-03 : premier import complet : 3 024 cinémas, 3 004 géocodés, 146 scores < 0.5. Paris incomplet (10 cinémas) → page `ville-115755` (SUIVI)
-- [ ] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
-  - 2026-10-05 : `enrich-cnc` écrit (à relire) : 1 712 / 1 945 salles fixes croisées (88 %), 1 729 au total, aucun `cnc_id` en double. Lyon et Marseille : pages département AlloCiné incomplètes, pages ville à ajouter (SUIVI §G)
-- [ ] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
+- [x] Enrichissement CNC (XLSX via `calamine`) par code INSEE + similarité de nom
+  - 2026-10-05 : `enrich-cnc` écrit (à relire) : 1 712 / 1 945 salles fixes croisées (88 %), 1 729 au total, aucun `cnc_id` en double. Lyon et Marseille : pages département AlloCiné incomplètes (7 et 6 cinémas manquants), pages ville ajoutées au CSV le 2026-10-06 (SUIVI §G)
+- [x] Rapport : nombre de cinémas, non géocodés, non croisés avec le CNC
+  - 2026-10-06 : rapport `info!` en fin d'`import-cinemas` (une requête SQL, testée). Import complet : 3 134 cinémas, 13 sans position, 1 739 croisés CNC, 0 absent.
 - [x] Vérification manuelle sur Paris : 107 entrées de la source ville, 105 géocodées dans le 75, aucun ID en double (2026-10-03 ; deux anomalies détaillées dans SUIVI).
 
 ### 2. Scraper des séances (backend, propriétaire)

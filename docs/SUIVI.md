@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-05. **Prochaine étape : relire le croisement CNC (G), pages ville Lyon/Marseille, puis H (rapport).**
+Dernière mise à jour : 2026-10-05. **Prochaine étape : décider du sort des cinémas qui ne sont plus listés, puis étape 2 (séances).**
 
 ## Déjà fait ✅
 
@@ -246,12 +246,17 @@ Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `N
   - 128 non-croisés CNC n'ont **aucun** cinéma AlloCiné dans leur commune. À Lyon, AlloCiné n'a que 10 cinémas : manquent `CINEDUCHERE`, `Lumière Fourmi`, `CINEMA BELLECOMBE`, `CINEMA OPERA`, `LE CINEMA`, `SAINT DENIS`. À Marseille, `ALHAMBRA` et `GYPTIS` sont absents de la base. **Même symptôme que Paris** : la page département AlloCiné est incomplète pour ces deux villes → ajouter leurs pages ville (`allocine_path`), comme `ville-115755`.
   - Égalités corrigées : « UGC Ciné Cité Lyon Part-Dieu » prenait `UGC CINE CITE` (inclusion complète, score 1,0) au lieu de `UGC CINE CITE PART-DIEU`. À score égal, le `jaro_winkler` brut départage (test dédié). 8 tests en plus, 50 au total.
   - Mesure (`--release`, `/usr/bin/time -l`) : 0,85 s réel, 0,08 s CPU, **28 Mo** de mémoire max (contre 22 Mo pour le scraping AlloCiné).
-  - [ ] Ta relecture du code (`client.rs`, `cnc.rs`), puis décider : pages ville Lyon/Marseille ; faut-il qu'un CNC indisponible fasse échouer tout l'import (aujourd'hui oui, `?`) ou seulement un `warn!` ?
+  - [x] Relu et commité (`5ac8d3a`). Réponses aux questions (2026-10-06) : 2 (`E0505`, `matches` emprunte `cnc`) et 3 (`FnMut`, un élément à la fois) justes. 1 à préciser : les clés empruntent `CncCinema.insee_code` (le slice `cnc`), pas `LocatedCinema` ; pour Lyon/Marseille, `commune_code` renvoie un littéral `&'static str`, qui peut être raccourci à la durée de vie de l'entrée. Le nom normalisé, lui, n'existe nulle part avant l'appel : il faut une `String` qui en est propriétaire.
+  - [x] CNC indisponible pendant `import-cinemas` → `warn!` au lieu d'un échec (les cinémas sont déjà enregistrés, les anciennes données CNC restent : la remise à zéro n'a lieu qu'après un téléchargement réussi). `enrich-cnc` seul échoue toujours franchement.
+  - [x] **Lyon et Marseille vérifiés le 2026-10-06** : la page ville liste des cinémas absents de la page département. Lyon `ville-113315` : 17 cinémas, dont **7 absents** de `departement-83196` (CinéDuchère, Lumière La Fourmi, Bellecombe, Le Cinéma Opéra, Le Cinéma, Ciné Saint-Denis, Aquarium Ciné-Café). Marseille `ville-87914` : 16, dont **6 absents** de `departement-83188` (Alhambra, Gyptis, Château de la Buzine, La Cinémathèque, Mucem, Villa Méditerranée). Les 8 autres pages ville liées depuis ces deux départements (Aix, Arles, Vaulx-en-Velin…) n'apportent **aucun** cinéma. Hypothèse : seules les trois villes à arrondissements (Paris, Lyon, Marseille) sont concernées. → Deux lignes ajoutées au CSV (`69,Lyon,ville-113315`, `13,Marseille,ville-87914`), **sans changer le code** (doublons gérés par `ON CONFLICT(id)`). Fixture `ville-113315-p1.html` + test ; test du CSV : 102 sources, 100 codes distincts.
 
 
 ## H. Rapport et vérification
 
-- [ ] En fin d'`import-cinemas`, un `info!` (ou quelques lignes) : nombre de cinémas, non géocodés, score faible, non croisés CNC, doublons ignorés. Le plus simple : des `SELECT count(*) … WHERE …` sur la base.
+- [x] En fin d'`import-cinemas`, un `info!` (ou quelques lignes) : nombre de cinémas, non géocodés, score faible, non croisés CNC, doublons ignorés. Le plus simple : des `SELECT count(*) … WHERE …` sur la base.
+- 2026-10-06 (écrit par Claude) : `import_report` (une requête, `count(col)` + `sum(condition)`, testée sur une base en mémoire) puis un `info!` « Import des cinémas terminé » : cinémas, sans position, position commune, score faible, croisés / non croisés CNC, **absents de cet import** (`updated_at` antérieur au début de l'import : cinémas plus listés par AlloCiné, fermés ?), doublons ignorés. Le comptage des doublons garde seulement les IDs (`HashSet<String>`) au lieu des cinémas entiers. Chiffres actuels de la base : 3 121 cinémas, 13 sans position, 107 position commune, 155 score < 0,5, 1 729 croisés CNC.
+- [x] **Import complet du 2026-10-06** (09:15 → 09:22, lancé par toi) : **3 134 cinémas** (+13 : exactement les 7 de Lyon et les 6 de Marseille), 13 sans position, 107 position commune, 155 scores < 0,5, **1 739 croisés CNC** (+10, aucun `cnc_id` en double), 0 absent de cet import. Lyon : 17 cinémas, Marseille : 16 (27 croisés CNC sur 33). Requête de contrôle F-bis toujours à 0. Mesure `/usr/bin/time -l` non relevée.
+- [ ] Décision à prendre : que faire des cinémas « absents de cet import » (suppression, ou colonne `active`) ? Touche `API.md` si on les masque côté front.
 - [ ] Vérif manuelle Paris : `select count(*) from cinemas where department = '75'` (~85), aucun ID en double → cocher la dernière ligne de l'étape 1 dans `PLAN.md`.
 - [ ] Mesure (SOBRIETE.md) : `/usr/bin/time -l cargo run --release -- import-cinemas` → durée totale (dominée par les pauses) et mémoire max. Note les chiffres.
 
@@ -279,8 +284,8 @@ encore après 2 indices. Avant chaque relecture, lance cargo build / clippy / fm
 avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
 sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
-Où j'en suis : G (CNC) écrit et mesuré (1 712 / 1 945 salles fixes croisées), à relire ;
-pages ville Lyon/Marseille à ajouter ; puis H (rapport de fin d'import). Mets à jour les cases et notes de docs/PLAN.md et
+Où j'en suis : G (CNC) et H (rapport) écrits ; pages ville Lyon/Marseille ajoutées.
+Reste : import complet à relancer, vérifier ses chiffres, clore l'étape 1. Mets à jour les cases et notes de docs/PLAN.md et
 docs/SUIVI.md au fur et à mesure. Réponds en français.
 Tu peux commiter et pousser quand je le demande (pas avant).
 ```

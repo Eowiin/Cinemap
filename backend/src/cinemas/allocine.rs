@@ -287,6 +287,7 @@ mod tests {
 
     const PAGE: &str = include_str!("../../tests/fixtures/departement-83093-p1.html");
     const PARIS_PAGE: &str = include_str!("../../tests/fixtures/ville-115755-p1.html");
+    const LYON_PAGE: &str = include_str!("../../tests/fixtures/ville-113315-p1.html");
 
     #[test]
     fn parses_paris_city_page_with_the_same_parser() {
@@ -299,6 +300,20 @@ mod tests {
         );
         assert!(cinemas.iter().any(|cinema| cinema.id == "C0159"));
         assert!(page_count(PARIS_PAGE) >= 6);
+    }
+
+    #[test]
+    fn lyon_city_page_lists_cinemas_missing_from_the_department_page() {
+        let cinemas = parse_department_page(LYON_PAGE);
+        // 17 cinémas sur une seule page (vu le 2026-10-06), dont 7 absents de la page du Rhône.
+        assert_eq!(cinemas.len(), 17);
+        assert_eq!(page_count(LYON_PAGE), 1);
+        for missing in ["P0618", "W6903", "P0031"] {
+            assert!(
+                cinemas.iter().any(|cinema| cinema.id == missing),
+                "{missing}"
+            );
+        }
     }
 
     #[test]
