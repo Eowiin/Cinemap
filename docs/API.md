@@ -326,3 +326,87 @@ Un échec de validation efface les anciennes données géographiques, sauf le co
 postal extrait de l’adresse. Une erreur réseau, CSV ou SQL laisse le lot intact.
 Toutes les écritures ont lieu dans une seule transaction après les appels HTTP.
 Un changement d’adresse pendant les appels annule l’enregistrement du lot.
+
+## Proposition : cartes illimitées (à valider, pas encore dans le contrat)
+
+> Rédigé le 2026-10-06. Rien de ce qui suit n'est implémenté ni figé. Une fois validé,
+> chaque élément sera reporté dans la section concernée (types, endpoints, schéma) et
+> ce bloc sera supprimé.
+
+**Besoin** : savoir dans quels cinémas une carte d'abonnement est acceptée (UGC
+Illimité, Pathé CinéPass, plus tard d'autres), et filtrer cinémas, films et séances
+selon **mes** cartes.
+
+### Sources (vérifiées le 2026-10-06)
+
+- **UGC Illimité** : `https://www.ugc.fr/cinemas-acceptant-ui.html`, page HTML
+  statique, toutes régions sur une seule page (sections `region-N`) : cinémas UGC,
+  mk2 et partenaires, chacun avec nom, adresse et `code postal + VILLE`. ~145 entrées
+  avec code postal (59 à Paris).
+- **Pathé CinéPass** : « 76 cinémas Pathé et plus de 59 partenaires ». La liste du
+  réseau est un **PDF** (`https://www.pathe.fr/media/files/conditions/Reseau%20CinePass-CineCartes.pdf`) ;
+  pathe.fr a aussi une API JSON `https://www.pathe.fr/api/cinemas` (cinémas Pathé
+  seulement ?). Format et contenu à examiner avant de choisir.
+- **Repli manuel** : `docs/data/cartes.csv` (`card_id,cinema_id`) pour les ajouts ou
+  corrections à la main (une carte locale, un partenaire mal croisé). Toujours
+  appliqué après les sources automatiques.
+
+### Croisement
+
+Même problème que le CNC (`cnc.rs`) : candidats AlloCiné de **même code postal**
+(Paris : arrondissement), puis similarité de nom. Le code de similarité du CNC
+(mots génériques, inclusion des mots, `jaro_winkler`, attribution du meilleur score
+d'abord) est sorti dans un module commun plutôt que copié. Un nom non croisé est
+loggé (`warn!`) : la liste est courte, on peut tous les relire.
+
+### Schéma
+
+```sql
+CREATE TABLE cards (
+    id          TEXT PRIMARY KEY,   -- 'ugc_illimite', 'pathe_cinepass'
+    name        TEXT NOT NULL,      -- 'UGC Illimité'
+    source_url  TEXT,
+    updated_at  TEXT NOT NULL       -- dernier import réussi de la liste
+);
+
+CREATE TABLE cinema_cards (
+    cinema_id   TEXT NOT NULL REFERENCES cinemas(id) ON DELETE CASCADE,
+    card_id     TEXT NOT NULL REFERENCES cards(id),
+    PRIMARY KEY (cinema_id, card_id)
+);
+```
+
+Import : sous-commande `import-cards` (aussi en fin d'`import-cinemas`). Pour chaque
+carte, liste téléchargée **puis** une transaction : suppression des liens de cette
+carte, insertion des nouveaux. Une source en erreur → `warn!`, anciens liens gardés
+(même règle que le CNC).
+
+### Contrat
+
+```ts
+type Card = { id: string; name: string };   // { id: "ugc_illimite", name: "UGC Illimité" }
+
+type CinemaSummary = {
+  // … champs actuels …
+  cards: string[];          // ids des cartes acceptées, [] si aucune
+};
+```
+
+- `GET /api/meta` : ajoute `cards: Card[]` (toutes les cartes connues, pour l'écran
+  « mes cartes » du front).
+- Nouveau paramètre de query **`cards`** (liste d'ids séparés par des virgules,
+  ex. `cards=ugc_illimite,pathe_cinepass`) : ne garde que les cinémas qui acceptent
+  **au moins une** de ces cartes. Sur `GET /api/cinemas`, `GET /api/movies`
+  (`cinema_count`, `showtime_count`, `next_showtime` calculés sur ces cinémas
+  seulement) et `GET /api/movies/{id}/showtimes`. Id inconnu → 400 `bad_request`.
+- Front : les cartes choisies sont gardées dans le navigateur (`localStorage`), pas
+  de compte. Badge sur les cinémas acceptant une de mes cartes, filtre activable.
+
+### Questions ouvertes
+
+1. Une carte peut-elle être acceptée seulement pour certaines séances (avant-premières
+   exclues, suppléments 3D / IMAX) ? Si oui : on l'ignore (le badge reste au niveau
+   du cinéma) ou on le note ?
+2. Pathé : PDF ou JSON ? (À trancher en regardant les deux.)
+3. Moment : après l'étape 2 (le filtre n'a d'intérêt qu'avec des séances) ou dès
+   maintenant (la partie import ne dépend que des cinémas) ?
