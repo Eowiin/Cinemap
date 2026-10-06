@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-05. **Prochaine étape : G (CNC), suite : téléchargement, croisement, écriture en base.** F-bis est fait (commit `242284e`), le parseur CNC aussi (pas encore commité).
+Dernière mise à jour : 2026-10-05. **Prochaine étape : relire le croisement CNC (G), pages ville Lyon/Marseille, puis H (rapport).**
 
 ## Déjà fait ✅
 
@@ -234,12 +234,20 @@ Résultat : **3 024 cinémas**, 3 017 avec adresse, **3 004 géocodés** (13 adr
 
 Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `NomEtab`, `Ecrans`, `fauteuils`, `DEPCOM`, `AE`).
 
-- [ ] Télécharger le XLSX en mémoire (`.bytes()`), l'ouvrir avec `calamine` sans fichier : `open_workbook_from_rs` + `std::io::Cursor`. Fixture : garde le XLSX dans `tests/fixtures/` (quelques centaines de Ko) pour tester hors ligne.
+- [x] Télécharger le XLSX en mémoire (`.bytes()`), l'ouvrir avec `calamine` sans fichier : `open_workbook_from_rs` + `std::io::Cursor`. Fixture : garde le XLSX dans `tests/fixtures/` (quelques centaines de Ko) pour tester hors ligne.
 - [x] Choisir la feuille : `sheet_names()`, garder celle dont le nom est la plus grande année (`parse::<u16>()`).
 - [x] Lignes : sauter les 4 premières, lire par **nom d'en-tête** plutôt que par index (les colonnes bougent d'une année à l'autre). Regarde si `calamine` sait désérialiser avec serde (`RangeDeserializerBuilder`). Attention aux types : un nombre Excel peut arriver en `f64`, `DEPCOM` peut perdre son zéro initial (« 1053 » au lieu de « 01053 »).
-- [ ] Croisement : regrouper le CNC par `DEPCOM` (`HashMap<String, Vec<…>>`), puis pour chaque cinéma, candidats de la même commune, comparés sur `normalize(nom)` avec une similarité (crate `strsim`, par ex. `jaro_winkler` ou `normalized_levenshtein`). Seuil à choisir en regardant les cas réels (log `debug!` des paires et scores). Un seul candidat dans la commune : l'accepter même avec un score moyen ?
-- [ ] Mettre à jour `cnc_id`, `screens`, `seats`, `art_et_essai` (une transaction).
+- [x] Croisement : regrouper le CNC par `DEPCOM` (`HashMap<String, Vec<…>>`), puis pour chaque cinéma, candidats de la même commune, comparés sur `normalize(nom)` avec une similarité (crate `strsim`, par ex. `jaro_winkler` ou `normalized_levenshtein`). Seuil à choisir en regardant les cas réels (log `debug!` des paires et scores). Un seul candidat dans la commune : l'accepter même avec un score moyen ?
+- [x] Mettre à jour `cnc_id`, `screens`, `seats`, `art_et_essai` (une transaction).
 - Vérifier : taux de croisement (on vise > 85 %) et lire une dizaine de non-croisés pour ajuster.
+- 2026-10-05 (écrit par Claude à ta demande, à relire) : sous-commande `enrich-cnc` (aussi appelée en fin d'`import-cinemas`). `fetch_with_retries` déplacé dans `client.rs` ; il prend une closure qui construit la requête (l'appelant ajoute `REFERER` pour AlloCiné, un délai de 120 s pour le CNC). Croisement par commune ; similarité = max(`jaro_winkler`, part des mots du nom le plus court présents dans l'autre), après retrait des mots génériques (« cinéma », « le », « mega »…) et `st` → `saint`. Seuil 0,85. Attribution du meilleur score d'abord, un établissement CNC par cinéma au plus. Écriture : remise à zéro puis `UPDATE` dans une seule transaction.
+  - Piège trouvé : le CNC note **Lyon et Marseille en commune entière** (`69123`, `13055`), alors que le géocodage renvoie l'arrondissement (`69381`, `13201`…). Paris est par arrondissement des deux côtés. → `commune_code()` ramène Lyon/Marseille à la commune.
+  - Résultat : **1 729 croisés / 2 060 CNC** (84 %), dont **1 712 / 1 945 salles fixes (88 %)** ; les itinérants (115) sont rarement sur AlloCiné. `cnc_id` sans doublon (1 729 distincts), 1 147 Art et Essai. Paris : 73 cinémas AlloCiné sur 107 croisés, seuls **6** établissements CNC parisiens restent sans correspondance (`PARNASSIEN` / « Sept Parnassiens », `PATHE LA GEODE` / « La Géode - IMAX »…). Les autres non-croisés AlloCiné parisiens sont des musées, instituts, festivals, absents du CNC.
+  - 128 non-croisés CNC n'ont **aucun** cinéma AlloCiné dans leur commune. À Lyon, AlloCiné n'a que 10 cinémas : manquent `CINEDUCHERE`, `Lumière Fourmi`, `CINEMA BELLECOMBE`, `CINEMA OPERA`, `LE CINEMA`, `SAINT DENIS`. À Marseille, `ALHAMBRA` et `GYPTIS` sont absents de la base. **Même symptôme que Paris** : la page département AlloCiné est incomplète pour ces deux villes → ajouter leurs pages ville (`allocine_path`), comme `ville-115755`.
+  - Égalités corrigées : « UGC Ciné Cité Lyon Part-Dieu » prenait `UGC CINE CITE` (inclusion complète, score 1,0) au lieu de `UGC CINE CITE PART-DIEU`. À score égal, le `jaro_winkler` brut départage (test dédié). 8 tests en plus, 50 au total.
+  - Mesure (`--release`, `/usr/bin/time -l`) : 0,85 s réel, 0,08 s CPU, **28 Mo** de mémoire max (contre 22 Mo pour le scraping AlloCiné).
+  - [ ] Ta relecture du code (`client.rs`, `cnc.rs`), puis décider : pages ville Lyon/Marseille ; faut-il qu'un CNC indisponible fasse échouer tout l'import (aujourd'hui oui, `?`) ou seulement un `warn!` ?
+
 
 ## H. Rapport et vérification
 
@@ -271,8 +279,8 @@ encore après 2 indices. Avant chaque relecture, lance cargo build / clippy / fm
 avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
 sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
-Où j'en suis : G (enrichissement CNC) : parseur XLSX fait et testé ; restent
-téléchargement, croisement par commune + similarité de nom, écriture en base. Mets à jour les cases et notes de docs/PLAN.md et
+Où j'en suis : G (CNC) écrit et mesuré (1 712 / 1 945 salles fixes croisées), à relire ;
+pages ville Lyon/Marseille à ajouter ; puis H (rapport de fin d'import). Mets à jour les cases et notes de docs/PLAN.md et
 docs/SUIVI.md au fur et à mesure. Réponds en français.
 Tu peux commiter et pousser quand je le demande (pas avant).
 ```

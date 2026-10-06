@@ -40,6 +40,7 @@ L'ID (`C0159`, `W7520`, `B0045`…) est l'identifiant utilisé partout ensuite �
 - Pas de GPS, pas d'adresse. Sert uniquement à ajouter `screens`, `seats`, `art_et_essai`.
 - Croisement : même `DEPCOM` que le `result_citycode` du géocodage **puis** similarité de nom. Un échec de croisement n'est pas grave (le cinéma perd juste ses infos CNC).
 - Paris : `DEPCOM` est par arrondissement (`75101`…`75120`), comme l'API Adresse → bon match.
+- **Lyon et Marseille** : au contraire, `DEPCOM` est la commune entière (`69123`, `13055`), alors que l'API Adresse renvoie l'arrondissement (`69381`…, `13201`…) → ramener ces arrondissements à la commune avant de comparer (vérifié le 2026-10-05).
 
 ## 4. AlloCiné — séances (API interne non officielle)
 

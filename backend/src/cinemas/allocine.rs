@@ -1,13 +1,17 @@
-use std::time::Duration;
+use std::{str::from_utf8, time::Duration};
 
 use anyhow::Context;
-use reqwest::{Client, header::REFERER};
+use bytes::Bytes;
+use reqwest::{Client, RequestBuilder, header::REFERER};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use tokio::time::sleep;
 use tracing::{debug, warn};
 
-use crate::cinemas::departments::Department;
+use crate::{
+    cinemas::departments::Department,
+    client::{RETRY_DELAYS, fetch_with_retries},
+};
 
 #[derive(Deserialize)]
 pub struct Cinema {
@@ -31,10 +35,11 @@ pub async fn get_cinemas_from_department(
     debug!("Récupération des cinémas : {}", &department.nom);
     while page <= max_page {
         let url = listing_url(path, page);
-        let html = fetch(client, &url).await?;
+        let bytes = fetch(client, &url).await?;
+        let html = from_utf8(&bytes)?;
 
-        max_page = max_page.max(page_count(&html));
-        cinemas.append(&mut parse_department_page(&html));
+        max_page = max_page.max(page_count(html));
+        cinemas.append(&mut parse_department_page(html));
         page += 1;
 
         if page <= max_page {
@@ -98,92 +103,18 @@ fn page_count(html: &str) -> u32 {
         .unwrap_or(1)
 }
 
-async fn fetch(client: &Client, url: &str) -> anyhow::Result<String> {
-    fetch_with_retries(
-        client,
-        url,
-        &[
-            Duration::from_secs(5),
-            Duration::from_secs(15),
-            Duration::from_secs(45),
-        ],
-    )
-    .await
+async fn fetch(client: &Client, url: &str) -> anyhow::Result<Bytes> {
+    fetch_with_retries(url, &RETRY_DELAYS, || allocine_request(client, url)).await
 }
 
-async fn fetch_with_retries(
-    client: &Client,
-    url: &str,
-    delays: &[Duration],
-) -> anyhow::Result<String> {
-    let mut attempt = 0;
-    loop {
-        match fetch_once(client, url).await {
-            Ok(html) => return Ok(html),
-            Err(error) => {
-                if !is_retryable(&error) || attempt == delays.len() {
-                    return Err(error).with_context(|| {
-                        format!("Échec de {url} après {} tentative(s)", attempt + 1)
-                    });
-                }
-                let delay = delays[attempt];
-                warn!(
-                    url,
-                    error = %error,
-                    next_attempt = attempt + 2,
-                    delay_secs = delay.as_secs(),
-                    "Erreur réseau passagère, nouvel essai prévu"
-                );
-                sleep(delay).await;
-                attempt += 1;
-            }
-        }
-    }
-}
-
-fn is_retryable(error: &reqwest::Error) -> bool {
-    if let Some(status) = error.status() {
-        return status.is_server_error();
-    }
-
-    if error.is_timeout() || error.is_connect() {
-        return true;
-    }
-
-    // Une coupure peut être enveloppée dans une erreur de requête ou de
-    // décodage. Seule sa cause d'E/S justifie alors un nouvel essai.
-    let mut cause = std::error::Error::source(error);
-    while let Some(source) = cause {
-        if let Some(io_error) = source.downcast_ref::<std::io::Error>() {
-            use std::io::ErrorKind;
-            return matches!(
-                io_error.kind(),
-                ErrorKind::ConnectionReset
-                    | ErrorKind::ConnectionAborted
-                    | ErrorKind::BrokenPipe
-                    | ErrorKind::UnexpectedEof
-                    | ErrorKind::TimedOut
-            );
-        }
-        cause = source.source();
-    }
-    false
-}
-
-async fn fetch_once(client: &Client, url: &str) -> Result<String, reqwest::Error> {
-    client
-        .get(url)
-        .header(REFERER, "https://www.allocine.fr/")
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await
+fn allocine_request(client: &Client, url: &str) -> RequestBuilder {
+    client.get(url).header(REFERER, "https://www.allocine.fr/")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::{fetch_once, is_retryable};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -237,11 +168,14 @@ mod tests {
 
     #[tokio::test]
     async fn retries_server_errors_then_returns_body() {
+        let client = test_client();
         let (url, count, server) =
             mock_server(vec![response(500), response(503), response(200)]).await;
-        let body = fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
-            .await
-            .unwrap();
+        let body = fetch_with_retries(&url, &[Duration::ZERO; 3], || {
+            allocine_request(&client, &url)
+        })
+        .await
+        .unwrap();
         assert_eq!(body, "ok");
         assert_eq!(count.load(Ordering::SeqCst), 3);
         server.await.unwrap();
@@ -249,11 +183,14 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_to_retry_client_errors() {
+        let client = test_client();
         for status in [403, 404, 429] {
             let (url, count, server) = mock_server(vec![response(status), response(200)]).await;
-            let error = fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
-                .await
-                .unwrap_err();
+            let error = fetch_with_retries(&url, &[Duration::ZERO; 3], || {
+                allocine_request(&client, &url)
+            })
+            .await
+            .unwrap_err();
             assert_eq!(
                 error
                     .downcast_ref::<reqwest::Error>()
@@ -270,10 +207,13 @@ mod tests {
 
     #[tokio::test]
     async fn returns_last_error_after_four_failed_attempts() {
+        let client = test_client();
         let (url, count, server) = mock_server(vec![response(503); 4]).await;
-        let error = fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
-            .await
-            .unwrap_err();
+        let error = fetch_with_retries(&url, &[Duration::ZERO; 3], || {
+            allocine_request(&client, &url)
+        })
+        .await
+        .unwrap_err();
         assert_eq!(
             error.downcast_ref::<reqwest::Error>().unwrap().status(),
             Some(reqwest::StatusCode::SERVICE_UNAVAILABLE)
@@ -285,13 +225,16 @@ mod tests {
 
     #[tokio::test]
     async fn retries_interrupted_response_body() {
+        let client = test_client();
         let truncated =
             "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".to_owned();
         let (url, count, server) = mock_server(vec![truncated, response(200)]).await;
         assert_eq!(
-            fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
-                .await
-                .unwrap(),
+            fetch_with_retries(&url, &[Duration::ZERO; 3], || allocine_request(
+                &client, &url
+            ))
+            .await
+            .unwrap(),
             "ok"
         );
         assert_eq!(count.load(Ordering::SeqCst), 2);
@@ -300,11 +243,14 @@ mod tests {
 
     #[tokio::test]
     async fn malformed_response_is_not_retried() {
+        let client = test_client();
         let malformed = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\ninvalid-size\r\nbody\r\n".to_owned();
         let (url, count, server) = mock_server(vec![malformed, response(200)]).await;
-        let error = fetch_with_retries(&test_client(), &url, &[Duration::ZERO; 3])
-            .await
-            .unwrap_err();
+        let error = fetch_with_retries(&url, &[Duration::ZERO; 3], || {
+            allocine_request(&client, &url)
+        })
+        .await
+        .unwrap_err();
         assert!(!is_retryable(
             error.downcast_ref::<reqwest::Error>().unwrap()
         ));
@@ -322,14 +268,20 @@ mod tests {
             .timeout(Duration::from_millis(30))
             .build()
             .unwrap();
-        let error = fetch_once(&client, &url).await.unwrap_err();
+        let error = fetch_once(allocine_request(&client, &url))
+            .await
+            .unwrap_err();
         assert!(error.is_timeout());
         assert!(is_retryable(&error));
         drop(listener);
-        let error = fetch_once(&test_client(), &url).await.unwrap_err();
+        let error = fetch_once(allocine_request(&test_client(), &url))
+            .await
+            .unwrap_err();
         assert!(error.is_connect());
         assert!(is_retryable(&error));
-        let error = fetch_once(&client, "://invalid").await.unwrap_err();
+        let error = fetch_once(allocine_request(&client, "://invalid"))
+            .await
+            .unwrap_err();
         assert!(!is_retryable(&error));
     }
 

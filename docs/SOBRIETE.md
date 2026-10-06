@@ -30,6 +30,7 @@ Autre exemple (2026-10-02) : chaque page AlloCiné (~350 Ko) est parsée deux fo
   2. **Moins d'allocations par élément** : un code INSEE de taille fixe (`[u8; 5]`) ; stocker directement le nom normalisé au lieu du nom brut plus sa version normalisée.
   3. **Des types plus petits** (`u16`, `u32`) : environ 64 octets au lieu de 88. Le gain est faible.
 - Mais le vrai poste est probablement la `Range` de calamine : **toute la feuille** en mémoire, un `calamine::Data` par cellule et pour toutes les colonnes, sans compter le XLSX et son XML décompressé. Regarder le pic mesuré par `/usr/bin/time -l` (`enrich-cnc`) avant de toucher à quoi que ce soit. Ces données ne vivent que quelques secondes une fois par nuit : si le pic reste de quelques Mo, la piste 1 suffit.
+- Mesure (2026-10-05, `enrich-cnc` en `--release`) : **28 Mo** de mémoire max, 0,85 s réel dont 0,08 s CPU (téléchargement inclus). Le XLSX brut est libéré (`drop`) juste après la lecture. Pas d'optimisation nécessaire : le pic est du même ordre que le scraping (22 Mo) et ne dure qu'une seconde.
 
 ### Outils de mesure
 

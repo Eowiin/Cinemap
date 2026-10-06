@@ -185,6 +185,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "bytes",
  "calamine",
  "clap",
  "csv",
@@ -195,6 +196,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "strsim",
  "tokio",
  "tracing",
  "tracing-subscriber",

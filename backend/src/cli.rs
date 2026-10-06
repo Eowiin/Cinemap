@@ -9,6 +9,8 @@ pub enum SubCommands {
         #[arg(long)]
         all: bool,
     },
+    /// Ajoute écrans, fauteuils et label Art et Essai depuis le fichier du CNC, sans scraping.
+    EnrichCnc,
     Scrape,
     Serve,
 }

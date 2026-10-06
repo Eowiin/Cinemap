@@ -39,6 +39,10 @@ async fn main() -> anyhow::Result<()> {
             let client = backend::client::build_client()?;
             backend::cinemas::geocode::geocode_cinemas(&pool, &client, all).await
         }
+        SubCommands::EnrichCnc => {
+            let client = backend::client::build_client()?;
+            backend::cinemas::cnc::enrich_cinemas(&pool, &client).await
+        }
         SubCommands::Scrape => {
             scrape();
             Ok(())

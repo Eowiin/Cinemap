@@ -44,6 +44,7 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
         }
     }
     geocode::geocode_cinemas(pool, &client, false).await?;
+    cnc::enrich_cinemas(pool, &client).await?;
 
     info!(
         "{} cinémas, {} doublons ignorés",
