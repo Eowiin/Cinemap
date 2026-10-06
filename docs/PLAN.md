@@ -41,6 +41,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 
 - [`API.md`](API.md) : contrat backend ↔ frontend et schéma SQLite. **Toute modification d'API passe d'abord par ce fichier.**
 - [`SOURCES.md`](SOURCES.md) : sources de données vérifiées (URLs, formats, pièges).
+- [`ETAPE2.md`](ETAPE2.md) : feuille de route détaillée du scraper de séances.
 - [`SOBRIETE.md`](SOBRIETE.md) : réflexes pour ne pas gaspiller les ressources (mesurer d'abord, où ça compte dans le projet).
 - [`EMBARQUE.md`](EMBARQUE.md) : notes perso pour passer au Rust embarqué plus tard.
 - [`data/departements.csv`](data/departements.csv) : codes INSEE ↔ noms ↔ codes AlloCiné des départements.
@@ -81,6 +82,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 - [x] Cycle de vie : cinéma masqué de l'API après 14 jours sans être vu, supprimé après 60 jours en fin d'import réussi (`API.md`, 2026-10-06). **Étape 1 terminée le 2026-10-06.**
 
 ### 2. Scraper des séances (backend, propriétaire)
+Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
 - [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
 - [ ] Pagination `p-{n}`
 - [ ] Mapping `version` (VF / VO / VOST, film français en VO = VF via la langue du film) et `formats` (liste fermée, cf. `API.md`), vérifié empiriquement sur plusieurs cinémas
@@ -119,7 +121,14 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 - [ ] Merge `rewrite` → `main`
 
 ## Idées pour plus tard
+- **Cartes illimitées** (proposé le 2026-10-06, à valider) : savoir où passe une carte UGC Illimité, Pathé CinéPass, etc. Données : UGC publie une page HTML statique `https://www.ugc.fr/cinemas-acceptant-ui.html` (nom, adresse, code postal ; UGC, mk2 et partenaires ; ~145 entrées vues, peut-être filtrées par région, à vérifier) ; Pathé annonce « 130 cinémas Pathé et partenaires » sur pathe.fr (format à trouver). Croisement avec nos cinémas : code postal + similarité de nom (réutiliser le code du CNC). Tables `cards` + `cinema_cards`, champ `cards` dans `CinemaSummary`, paramètre `card=` ; côté front, « mes cartes » en local. Passe d'abord par `API.md`.
 - Favoris (cinémas, films) stockés localement
 - Filtre « après 20h », formats IMAX / 4DX / Dolby
 - Notifications PWA (« tel film sort mercredi »)
 - Stratégie de rafraîchissement hors IDF plus fine
+- Accessibilité : séances sous-titrées pour sourds et malentendants (`_sme`), audiodescription, salle accessible (tags déjà dans la réponse AlloCiné)
+- « Ce soir près de moi » : prochaines séances de tous les cinémas proches, triées par heure de début
+- Avant-premières, ciné-rencontres, ressorties de classiques (à repérer dans les tags / `productionYear`)
+- Filtre Art et Essai (donnée CNC déjà en base)
+- Partager une séance (Web Share API) et l'ajouter à son agenda (fichier `.ics`)
+- Films qui vont bientôt quitter l'affiche (moins de séances la semaine suivante)

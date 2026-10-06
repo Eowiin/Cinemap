@@ -4,7 +4,7 @@ Feuille de route pas à pas pour le backend, à consulter sans rouvrir la conver
 Le **quoi** et le **pourquoi** sont ici, avec des indices ; le **comment**, c'est toi qui l'écris.
 À supprimer (ou à fondre dans `PLAN.md`) une fois l'étape 1 terminée.
 
-Dernière mise à jour : 2026-10-05. **Étape 1 terminée. Prochaine étape : étape 2 (séances), lot 1 hors ligne (voir la fin de ce fichier).**
+Dernière mise à jour : 2026-10-05. **Étape 1 terminée. Prochaine étape : étape 2, lot A — voir [`ETAPE2.md`](ETAPE2.md).**
 
 ## Déjà fait ✅
 
@@ -261,24 +261,16 @@ Voir `SOURCES.md` §3 (feuille la plus récente, en-têtes ligne 5, `NAutoC`, `N
 - [ ] Vérif manuelle Paris : `select count(*) from cinemas where department = '75'` (~85), aucun ID en double → cocher la dernière ligne de l'étape 1 dans `PLAN.md`.
 - [ ] Mesure (SOBRIETE.md) : `/usr/bin/time -l cargo run --release -- import-cinemas` → durée totale (dominée par les pauses) et mémoire max. Note les chiffres.
 
-## Étape 2 : séances, lot 1 (hors ligne, fixture d'abord)
+## Étape 2
 
-Même méthode qu'en C pour les cinémas : on comprend le JSON sur des fichiers avant de toucher au réseau. Voir `SOURCES.md` §4 et le schéma `movies` / `showtimes` de `API.md`.
-
-- [ ] **Fixtures** : télécharge à la main 3 réponses pour aujourd'hui avec `curl`, en envoyant les trois en-têtes de `SOURCES.md` §4 : un gros multiplexe (`C0159`, pages 1 **et** 2), un cinéma Art et Essai parisien, un petit cinéma de province. Range-les dans `tests/fixtures/showtimes-<id>-p<n>.json`. Ouvre-les avec `jq` pour voir la vraie forme.
-- [ ] **Module** `src/showtimes/` (même découpage que `cinemas/`). Structs `#[derive(Deserialize)]` avec **seulement** les champs utiles (serde ignore les autres). `#[serde(rename_all = "camelCase")]` évite un `rename` par champ. Un champ parfois `null` → `Option<T>`.
-- [ ] Les **clés variables** de `showtimes` (`original`, `original_st`, `dubbed`…) : quel type serde accepte un objet JSON dont on ne connaît pas les clés à l'avance ? (Indice : une collection de `std::collections`.)
-- [ ] `runtime` (`"1h 52min"`, `"0h 00min"` = inconnu) → fonction pure `-> Option<u32>` (minutes) dans `text.rs` ou le module, avec tests.
-- [ ] Test : la fixture `C0159` p1 donne `itemsPerPage` films, `totalPages` ≥ 2 ; un film connu a son `internalId`, son titre et au moins une séance avec `startsAt` et un lien de réservation.
-- [ ] **Exploration du mapping** (sans le figer) : un test ou un `debug!` qui liste, sur toutes les fixtures, les combinaisons distinctes (clé du groupe, `diffusionVersion`, `tags`, `languages` du film). Note le tableau dans `SOURCES.md` §4 : c'est lui qui décidera VF / VO / VOST.
-- Vérifier : `cargo test`, et le tableau des combinaisons dans `SOURCES.md`.
+Feuille de route détaillée : [`ETAPE2.md`](ETAPE2.md).
 
 ## Prompt pour reprendre dans une nouvelle conversation
 
 ```text
 On reprend la réécriture de Cinemap (branche rewrite). Lis d'abord : docs/PLAN.md,
-docs/SUIVI.md (feuille de route détaillée de l'étape 1, à jour : la ligne
-« Prochaine étape » en haut et les cases non cochées), docs/API.md (contrat figé :
+docs/SUIVI.md (étape 1, terminée), docs/ETAPE2.md (feuille de route
+détaillée de l'étape 2 : la ligne « Prochain lot » en haut et les cases), docs/API.md (contrat figé :
 toute modif passe d'abord par ce fichier), docs/SOURCES.md, docs/SOBRIETE.md
 (réflexes ressources, à enrichir pendant les relectures). Puis regarde backend/
 et `git status` (du travail peut ne pas être commité).
@@ -298,7 +290,7 @@ avec des chiffres. Ne lance PAS d'import complet (~7 min de scraping AlloCiné)
 sans me demander : note-le pour que je le lance (avec `caffeinate -i` sur le Mac).
 
 Où j'en suis : étape 1 terminée (3 134 cinémas, CNC, rapport, cycle de vie).
-Étape 2 (séances), lot 1 hors ligne : fixtures JSON, structs serde, mapping à explorer. Mets à jour les cases et notes de docs/PLAN.md et
+Étape 2 (séances) : lot A de docs/ETAPE2.md (fixtures JSON, structs serde). Mets à jour les cases et notes de docs/PLAN.md et
 docs/SUIVI.md au fur et à mesure. Réponds en français.
 Tu peux commiter et pousser quand je le demande (pas avant).
 ```
