@@ -92,6 +92,7 @@ Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
 - [ ] Vérification de fin d'étape : run France entière (`caffeinate -i`, `/usr/bin/time -l`), 3 cinémas comparés à la main (voir `ETAPE2.md` §F)
 
 ### 3. API (backend, propriétaire)
+Suivi détaillé : [`ETAPE3.md`](ETAPE3.md).
 - [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), CORS en dev
 - [ ] Recherche insensible aux accents (colonnes `*_search` normalisées)
 - [ ] Distance : bounding box en SQL, puis haversine en Rust
