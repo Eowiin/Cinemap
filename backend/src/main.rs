@@ -3,12 +3,7 @@ use backend::cinemas::import_cinemas;
 use backend::cli::{Cli, SubCommands};
 use backend::db;
 use clap::Parser;
-use tracing::info;
 use tracing_subscriber::EnvFilter;
-
-fn scrape() {
-    info!("Scrape");
-}
 
 async fn serve() -> anyhow::Result<()> {
     // build our application with a route
@@ -43,9 +38,8 @@ async fn main() -> anyhow::Result<()> {
             let client = backend::client::build_client()?;
             backend::cinemas::cnc::enrich_cinemas(&pool, &client).await
         }
-        SubCommands::Scrape => {
-            scrape();
-            Ok(())
+        SubCommands::Scrape { cinema, date } => {
+            backend::showtimes::scrape(&pool, cinema.as_deref(), date.as_deref()).await
         }
         SubCommands::Serve => serve().await,
     }

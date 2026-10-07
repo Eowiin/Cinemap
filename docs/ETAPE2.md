@@ -1,9 +1,10 @@
 # Étape 2 : scraper des séances (feuille de route détaillée)
 
 Même principe que `SUIVI.md` pour l'étape 1 : le **quoi** et le **pourquoi**, avec des indices ; le **comment**, c'est toi.
-Chaque lot se termine par une vérification chiffrée. Références : `SOURCES.md` §4 (API AlloCiné), `API.md` (schéma `movies` / `showtimes`, conventions `version` / `formats` / jour ciné).
+Chaque lot est découpé en petites étapes : **fichier à toucher → quoi y mettre → comment vérifier**. Une case = un petit pas qu'on peut compiler.
+Références : `SOURCES.md` §4 (API AlloCiné), `API.md` (schéma `movies` / `showtimes`, conventions `version` / `formats` / jour ciné).
 
-Dernière mise à jour : 2026-10-06. **Prochain lot : A.**
+Dernière mise à jour : 2026-10-07. **Où tu en es : A.1 fait, A.2 commencé** (`src/showtimes/` existe et est déclaré dans `lib.rs`).
 
 ## Vue d'ensemble
 
@@ -15,98 +16,287 @@ pour chaque cinéma visible × chaque jour ciné (J → J+2, J+6 le mercredi)
 fin : purge des séances passées, ligne dans scrape_runs, rapport
 ```
 
-Ordre conseillé : tout ce qui se teste **hors ligne** d'abord (A, B), puis **un** cinéma en réseau (C), la base (D), et seulement ensuite toute la France (E, F).
+| Lot | En une phrase | Réseau ? | Base ? |
+|---|---|---|---|
+| A | Lire les fixtures JSON dans des structs Rust | non | non |
+| B | Transformer une séance AlloCiné en `VF`/`VO`/`VOST` + formats + lien | non | non |
+| C | Télécharger un cinéma pour une date | oui (1 cinéma) | non |
+| D | Écrire films et séances en base | oui (1 cinéma) | oui |
+| E | Toute la France, en parallèle, sans se faire bloquer | oui (tout) | oui |
+| F | Purge, ligne `scrape_runs`, rapport | – | oui |
 
-Ce qu'on sait déjà d'une vraie réponse (C0159, 2026-10-06, vérifiée par Claude) :
+Ordre : on ne passe au lot suivant que quand le « C'est fini quand » du lot est vrai.
 
-- `pagination` : `{"page": 1, "totalPages": 2, "itemsPerPage": 15, "totalItems": 30}`.
-- `results[]` : `{ movie, showtimes }`. `showtimes` est un objet dont les **clés** sont des groupes : `original`, `original_st`, `original_sme`, `multiple`, `multiple_st`, `multiple_sme`, `local`, `dubbed`… (beaucoup de groupes vides).
-- Un film français (`languages: ["FRENCH"]`) arrive dans `multiple` avec `diffusionVersion: "DUBBED"` et le tag `Localization.Version.French` : le mot `DUBBED` ne veut donc **pas** dire « doublé » ici. D'où l'exploration du lot B avant de figer le mapping.
-- Un film étranger en VOST : groupe `original`, `ORIGINAL`, tags `Localization.Version.Original` + `Localization.Subtitle.French`.
-- `_sme` = sous-titres pour sourds et malentendants (à confirmer). On voit aussi des tags `Showtime.Accessibility.Accessible`, `Theater.Service.DisabledAccess`.
-- `data.ticketing` : **plusieurs** liens (`provider` : `relay`, celui du cinéma…, `type` : `DESKTOP` / `MOBILE`). Il faudra choisir.
-- `runtime` : `"1h 55min"`.
+---
+
+## Ce que contiennent les fixtures (vérifié le 2026-10-07)
+
+Fichiers dans `backend/tests/fixtures/` :
+
+| Fichier | Cinéma | `results` | Particularité |
+|---|---|---|---|
+| `showtimes-C0159-2026-10-06-p1.json` | UGC (multiplexe) | 15 films | `totalPages: 2`, `totalItems: 30` |
+| `showtimes-C0159-2026-10-06-p2.json` | idem, page 2 | 15 films | ⚠️ `"page": "2"` est une **chaîne** ici (un nombre en p1) |
+| `showtimes-C0015-2026-10-06-p1.json` | Christine Cinéma Club (Art et Essai, Paris) | 10 films | beaucoup de VO/VOST |
+| `showtimes-P1434-2026-10-06-p1.json` | Agora (Châteaulin) | 1 film | petit cinéma |
+| `showtimes-P0095-2026-10-06-p1.json` | Bonne-Garde | 0 film | jour sans séance : `error: true`, `message: "next.showtime.on"`, `nextDate: "2026-10-07"` |
+
+Trois pièges à retenir :
+
+1. **Jour sans séance = `error: true`**. Ce n'est pas une vraie erreur : le message `next.showtime.on` dit juste « prochaine séance le `nextDate` ». Il faudra le distinguer d'une vraie erreur (lot C).
+2. **`pagination.page` change de type** (nombre ou chaîne). Solution simple : ne pas mettre `page` dans ta struct, tu n'en as pas besoin (seul `totalPages` sert).
+3. **`movie.languages` peut contenir `null`** (`[null]` vu dans C0015).
 
 ---
 
 ## A. Fixtures et désérialisation (hors ligne)
 
-1. **Fixtures** : télécharge à la main avec `curl` (trois `-H` : `User-Agent`, `Accept: application/json`, `Referer`), pour aujourd'hui :
-   - `C0159` pages 1 **et** 2 (gros multiplexe, VF + VOST) ;
-   - un cinéma Art et Essai parisien (beaucoup de VOST, peut-être des ressorties) ;
-   - un petit cinéma de province (une seule page, peu de séances) ;
-   - un cinéma **un jour sans séance** (regarde ce que deviennent `results` et `nextDate`).
+### A.1 Fixtures ✅ (2026-10-06)
 
-   Range-les dans `tests/fixtures/showtimes-<id>-<date>-p<n>.json`. Explore-les avec `jq` (`jq '.results[0].movie | keys'`, `jq '.results[].showtimes | keys'`).
-2. **Module** `src/showtimes/` avec `mod.rs` (orchestration) et `allocine.rs` (types + parsing), comme `cinemas/`.
-3. **Structs serde** : `Response { error, pagination, results }`, `Result { movie, showtimes }`, `Movie { … }`, `Showtime { … }`. Seulement les champs utiles (serde ignore le reste par défaut). Pistes :
-   - `#[serde(rename_all = "camelCase")]` sur la struct évite un `rename` par champ (`internalId`, `startsAt`, `diffusionVersion`).
-   - Un champ qui peut être `null` **ou absent** : `Option<T>` + `#[serde(default)]`.
-   - Les **clés variables** de `showtimes` : quelle collection de `std::collections` serde sait remplir depuis un objet JSON aux clés inconnues ? Et si tu veux un ordre stable (pour les tests et les logs) ?
-   - Les objets imbriqués (`poster.url`, `releases[0].releaseDate.date`, `credits[].person`) : soit des petites structs, soit `serde_json::Value` pour explorer. Préfère les structs une fois la forme connue.
-   - `internalId` de séance est un **grand nombre** (`82306178985`) : quel type entier ? Le schéma le stocke en `TEXT`.
-4. **Fonctions pures** (dans `showtimes/` ou `text.rs`), chacune avec ses tests :
-   - `runtime_minutes("1h 55min") -> Option<u32>` ; `"0h 00min"` → `None` (inconnu, pas 0) ; une chaîne bizarre → `None`, pas de panique.
-   - `full_name(first, last)` pour réalisateurs et acteurs (l'un des deux peut manquer).
-5. **Tests** :
-   - `C0159` p1 : 15 films, `totalPages == 2`, `totalItems == 30` ; un film précis a son `internalId`, son titre et au moins une séance avec `startsAt` et un lien.
-   - Jour sans séance : la désérialisation **réussit** et donne 0 film.
+Rien à faire, voir le tableau ci-dessus.
 
-**Vérifier** : `cargo test` vert ; `cargo clippy --all-targets` sans warning.
+### A.2 Les structs serde
+
+**Fichier** : `src/showtimes/allocine.rs`. Uniquement des types et du parsing : pas de HTTP, pas de SQL ici.
+
+Ton brouillon actuel a la bonne forme (4 structs) mais les types sont des placeholders. À corriger :
+
+- `Result` est déjà le nom de `std::result::Result` : appelle-la autrement (`MovieShowtimes`, `Entry`…), sinon tu auras des erreurs bizarres partout dans le fichier.
+- Faute de frappe : `shotimes` → `showtimes`.
+- Ajoute `#[derive(Debug, Deserialize)]` sur chaque struct, et `#[serde(rename_all = "camelCase")]` quand un champ JSON est en camelCase (`internalId`, `startsAt`, `totalPages`…).
+- Un champ qui peut être `null` **ou absent** : `Option<T>` + `#[serde(default)]`.
+- Ne mets **que** les champs listés ci-dessous : serde ignore tout le reste par défaut.
+
+Ce qu'il faut mettre, struct par struct (chemin JSON → type Rust à choisir) :
+
+**`Response`** (la racine)
+
+| JSON | Exemple | Type Rust |
+|---|---|---|
+| `error` | `false` | `bool` |
+| `message` | `null` / `"next.showtime.on"` | `Option<String>` |
+| `nextDate` | `null` / `"2026-10-07"` | `Option<String>` |
+| `pagination.totalPages` | `2` | une petite struct `Pagination { total_pages: u32 }` |
+| `results` | tableau | `Vec<TaStructEntry>` |
+
+**Entrée de `results`** : `{ movie, showtimes }`
+
+| JSON | Type Rust |
+|---|---|
+| `movie` | `Movie` |
+| `showtimes` | objet aux **clés variables** (`"original"`, `"multiple"`, `"dubbed"`…) → valeur `Vec<Showtime>` |
+
+Indice pour `showtimes` : quelle collection de `std::collections` associe une clé `String` à une valeur ? Il y en a deux ; prends celle qui garde les clés **triées** (ordre stable dans les tests et les logs). Beaucoup de groupes sont des tableaux vides : c'est normal.
+
+**`Movie`** (seulement ce qui va dans la table `movies`)
+
+| JSON | Exemple | Colonne `movies` |
+|---|---|---|
+| `internalId` | `1000023992` | `id` (INTEGER) |
+| `title` | `"Ni vue, ni connue"` | `title` (+ `title_search` au lot D) |
+| `originalTitle` | | `original_title` |
+| `poster.url` | `"https://fr.web.img6.acsta.net/…jpg"` | `poster_url` (`poster` peut être `null`) |
+| `synopsis` | | `synopsis` |
+| `runtime` | `"1h 55min"` | `runtime_min` (converti en A.3) |
+| `languages` | `["FRENCH"]`, `[null]` | pas en base, sert au mapping de version (lot B) → `Vec<Option<String>>` |
+| `genres[].translate` | `"Comédie"` | `genres` (JSON) |
+| `countries[].localizedName` | `"France"` | `countries` (JSON) |
+| `credits[]` où `position.name == "DIRECTOR"` → `person.firstName` / `lastName` | `Marc` / `Fitoussi` | `directors` (JSON) |
+| `cast.edges[].node.actor.firstName` / `lastName` | `Isabelle` / `Huppert` | `cast_members` (JSON) |
+| `releases[0].releaseDate.date` | `"2026-10-07"` | `release_date` |
+| `releases[0].certificate.label` | `"Tout public"` | `certificate` |
+| `data.productionYear` | `2026` | `production_year` |
+
+Les objets imbriqués (`poster`, `credits[].person`, `cast.edges[].node.actor`…) = une petite struct par niveau. C'est verbeux mais simple. Si une forme te bloque, mets temporairement `serde_json::Value`, regarde avec `dbg!`, puis remplace par une struct.
+
+**`Showtime`**
+
+| JSON | Exemple | Type Rust / usage |
+|---|---|---|
+| `internalId` | `82306178985` | dépasse `u32` → quel entier ? Stocké en `TEXT` (`showtimes.id`) |
+| `startsAt` | `"2026-10-06T20:15:00"` | `String` → `starts_at` |
+| `diffusionVersion` | `"ORIGINAL"`, `"DUBBED"` | `String` (lot B) |
+| `tags` | `["Localization.Version.French", …]` | `Vec<String>` (lot B) |
+| `projection`, `sound`, `picture`, `experience` | `["DIGITAL"]`, `["DOLBY_71"]`, `null` | `Option<Vec<String>>` (lot B, formats) |
+| `data.ticketing[]` → `{ urls: [String], type, provider }` | voir B.4 | lien de réservation |
+
+`type` est un mot réservé en Rust : `#[serde(rename = "type")] kind: String`.
+
+**Vérifier A.2** : un test qui lit `tests/fixtures/showtimes-C0159-2026-10-06-p1.json` (`include_str!` ou `std::fs::read_to_string`), appelle `serde_json::from_str::<Response>` et fait `.unwrap()`. Puis la même chose sur **les 5 fixtures** (une boucle ou 5 tests). Tant qu'un `unwrap` panique, le message de serde dit quel champ et à quelle ligne.
+
+### A.3 Deux fonctions pures
+
+**Fichier** : `src/showtimes/mapping.rs`.
+
+- [ ] `runtime_minutes(&str) -> Option<u32>`
+  - `"1h 55min"` → `Some(115)` ; `"0h 00min"` → `None` (durée inconnue, pas 0) ; `""` ou `"abc"` → `None`, **jamais de panique**.
+  - Indice : `split_once('h')`, `trim`, `trim_end_matches("min")`, `parse::<u32>().ok()?`.
+- [ ] `full_name(first: Option<&str>, last: Option<&str>) -> Option<String>`
+  - les deux → `"Isabelle Huppert"` ; un seul → celui-là ; aucun → `None`.
+
+Un test par cas listé.
+
+### A.4 Tests de contenu
+
+- [ ] `C0159` p1 : `results.len() == 15`, `total_pages == 2`, le film `1000023992` s'appelle `"Ni vue, ni connue"` et a au moins une séance avec un `starts_at` et un lien.
+- [ ] `P0095` : la désérialisation **réussit**, `error == true`, `results` vide, `next_date == Some("2026-10-07")`.
+
+**C'est fini quand** : `cargo test` vert, `cargo clippy --all-targets` sans warning.
+
+---
 
 ## B. Mapping version, formats et lien (fonctions pures)
 
-1. **Exploration** : un test (`#[ignore]`, lancé avec `cargo test -- --ignored --nocapture`) ou un `debug!` qui parcourt **toutes** les fixtures et affiche les combinaisons distinctes : (clé du groupe, `diffusionVersion`, tags `Localization.*`, `movie.languages`). Note le tableau dans `SOURCES.md` §4.
-2. **Décide** le mapping à partir du tableau, puis écris `fn version(group: &str, showtime: &…, movie_languages: &[…]) -> Version` avec `enum Version { Vf, Vo, Vost }`. Rappels de `API.md` : film français en version originale = `VF` ; `VO` = sans sous-titres ; `VOST` = sous-titré. Question : que fais-tu d'un groupe inconnu ? (Indice : `warn!` + on saute la séance, plutôt que deviner.)
-3. **Formats** : liste fermée de `API.md` (`3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema`, `Dolby Atmos`). Regarde où chaque info arrive dans les fixtures (`experience`, `projection`, `sound`, `picture`, `tags`). Toute autre valeur : ignorée mais **loggée une seule fois** (un `HashSet` des valeurs déjà vues). Sérialisation en base : `serde_json::to_string(&vec)`.
-4. **Lien de réservation** : plusieurs `ticketing`. Règle à choisir et à écrire en commentaire, par exemple « `DESKTOP` du fournisseur du cinéma s'il existe, sinon `relay`, sinon `None` ». Regarde les URLs des fixtures pour trancher.
-5. **Accessibilité** (pour plus tard, ne pas le stocker encore) : note dans `SOURCES.md` les tags vus (`_sme`, `Accessible`, audiodescription ?). Ça pourra devenir un filtre (voir les idées dans `PLAN.md`).
+**Fichier** : `src/showtimes/mapping.rs`.
 
-**Vérifier** : tests de `version` sur un cas de chaque ligne du tableau (au moins : film français, VOST, VF doublée, VO sans sous-titres si tu en trouves) ; tests de `formats` (IMAX, 3D, valeur inconnue ignorée).
+### B.1 Ce qu'on voit dans les fixtures (déjà relevé)
+
+| Groupe | `diffusionVersion` | Tags `Localization.*` | `languages` | Version attendue |
+|---|---|---|---|---|
+| `multiple` | `DUBBED` | `Version.French` | `FRENCH` | `VF` (film français : `DUBBED` ne veut **pas** dire doublé ici) |
+| `multiple` | `DUBBED` | `Version.French` + `Subtitle.French` | `FRENCH` | `VF` (sous-titres français pour un film français = accessibilité) |
+| `original` | `ORIGINAL` | `Version.Original` + `Subtitle.French` | `ENGLISH`, `JAPANESE`… | `VOST` |
+| `original` | `ORIGINAL` | `Version.Original` | `ENGLISH`… | `VO` |
+| `original` | `ORIGINAL` | `Version.Original` | `FRENCH` | `VF` (film français en VO) |
+| `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | ? (coproduction : à décider) |
+
+Pas encore vu : `dubbed`, `local`, `_st`, `_sme`. Tu pourras en télécharger d'autres plus tard (un gros multiplexe avec un film d'animation doublé, par exemple).
+
+- [ ] Recopie ce tableau dans `SOURCES.md` §4.
+
+### B.2 `version`
+
+- [ ] `enum Version { Vf, Vo, Vost }` + une méthode `as_str()` qui renvoie `"VF"` / `"VO"` / `"VOST"` (ce qui va en base).
+- [ ] `fn version(showtime: &Showtime, languages: &[Option<String>]) -> Option<Version>`. Règle de départ à partir du tableau :
+  1. tag `Localization.Version.French` → `Vf` ;
+  2. sinon tag `Localization.Version.Original` : si `FRENCH` est la **première** langue du film → `Vf` ; sinon `Subtitle.French` présent → `Vost`, absent → `Vo` ;
+  3. sinon → `None` : l'appelant fait un `warn!` et **saute** la séance (mieux vaut une séance manquante qu'une fausse version).
+- [ ] Un test par ligne du tableau B.1 (tu peux construire un `Showtime` à la main dans le test, ou piocher une vraie séance dans une fixture).
+
+### B.3 `formats`
+
+- [ ] `fn formats(showtime: &Showtime) -> Vec<&'static str>` qui ne renvoie que des valeurs de la liste de `API.md` : `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema`, `Dolby Atmos`.
+- Dans les fixtures on ne voit que `DIGITAL`, `ANALOG` (projection) et `DOLBY_71` (son) : **aucun** n'est dans la liste, donc `formats` sera souvent `[]`. C'est normal.
+- Les valeurs inconnues : `debug!` pour l'instant (le « loggé une seule fois » avec un `HashSet` viendra au lot E, quand il y aura des milliers de séances).
+- Pour trouver les vraies valeurs IMAX / 3D, télécharge plus tard une fixture d'un cinéma IMAX (Pathé La Villette, Grand Rex…) et regarde `experience`, `picture`, `tags`.
+- En base : `serde_json::to_string(&formats)`.
+
+### B.4 Lien de réservation
+
+Chaque séance a deux entrées dans `data.ticketing` :
+
+- `provider: "default"` : le site du cinéma (ex. `https://www.ugc.fr/reservationSeances.html?id=…`) ;
+- `provider: "relay"` : un intermédiaire (`relay.mvtx.us`).
+
+- [ ] `fn booking_url(showtime: &Showtime) -> Option<&str>` : le premier `urls[0]` de `default` en `DESKTOP`, sinon celui de `relay`, sinon `None`. Écris la règle en commentaire au-dessus.
+
+### B.5 Accessibilité (noter seulement)
+
+- [ ] Dans `SOURCES.md` : les tags vus (`Showtime.Accessibility.Accessible`, `Theater.Service.DisabledAccess`, `SME` dans l'URL relay). Rien en base pour l'instant.
+
+**C'est fini quand** : tests de `version` (chaque ligne de B.1), `formats` (au moins `[]` sur une vraie séance) et `booking_url` (cas `default`, cas sans ticketing) verts.
+
+---
 
 ## C. Un cinéma, une date, en réseau
 
-1. **Requête** : réutilise `client::fetch_with_retries`. La closure ajoute `Accept: application/json` et le `Referer` (regarde `allocine_request` dans `cinemas/allocine.rs` : faut-il la rendre publique ou en écrire une variante ?).
-2. **URL** : `…/_/showtimes/theater-{id}/d-{date}/` puis `…/p-{n}/` (avec le `/` final, cf. le 301 évité pour les listes de cinémas). Fonction pure `showtimes_url(id, date, page)` + test.
-3. **Pagination** : lire `totalPages` dans la page 1, puis les suivantes. Pause entre deux pages (pour l'instant fixe, comme dans `get_cinemas_from_department`).
-4. **Erreurs** : `error: true` dans un JSON 200 → erreur avec `message`. 403 / 429 → **pas** de nouvel essai (déjà le cas dans `is_retryable`) : on les traitera au lot E.
-5. **Sous-commande de test** : `scrape --cinema C0159 --date 2026-10-07` (`clap` : `Option<String>` + `#[arg(long)]`) qui affiche le nombre de films et de séances, sans écrire en base.
+**Fichiers** : `src/showtimes/allocine.rs` (URL + fetch), `src/showtimes/mod.rs` (fonction appelée par la commande), `src/cli.rs` et `src/main.rs` (sous-commande).
 
-**Vérifier** : `cargo run -- scrape --cinema C0159` → 30 films (ou ce qu'affiche le site AlloCiné pour ce jour), nombre de séances cohérent avec la page web.
+- [x] **URL** : `fn showtimes_url(cinema_id: &str, date: &str, page: u32) -> String`
+  - page 1 → `https://www.allocine.fr/_/showtimes/theater-C0159/d-2026-10-07/`
+  - page 2 → `…/d-2026-10-07/p-2/`
+  - toujours le `/` final (sinon redirection 301, comme pour les listes de cinémas). Un test par cas.
+- [x] **En-têtes** : `allocine_request` envoie `Referer` et `Accept: application/json`.
+- [x] **Téléchargement** : `client::fetch_with_retries(&url, &RETRY_DELAYS, || …)` renvoie des `Bytes` → `serde_json::from_slice::<Response>`.
+- [x] **Erreur applicative** : `error == true` →
+  - `message == Some("next.showtime.on")` → pas une erreur, 0 film ;
+  - autre message → `anyhow::bail!` avec le message, l'ID et la date.
+- [x] **Pagination** : page 1, lire `total_pages`, puis boucle `2..=total_pages` avec une pause fixe entre deux pages et concaténer les `results`.
+- [x] **Sous-commande** : `Scrape` accepte `--cinema` et `--date`. Depuis le lot D, les résultats sont enregistrés en base après le téléchargement.
+
+403 et 429 ne sont déjà pas retentés (`is_retryable`) : on s'en occupe au lot E.
+
+**C'est fini quand** : `cargo run -- scrape --cinema C0159 --date <aujourd'hui>` affiche le même nombre de films que la page AlloCiné du cinéma pour ce jour, et `--cinema P0095` sur un jour vide affiche 0 sans erreur.
+
+---
 
 ## D. Écriture en base
 
-1. **Jour ciné** : la date demandée à AlloCiné, pas la date de `starts_at` (`API.md`, Conventions). Et « aujourd'hui » = aujourd'hui **à Paris**, pas en UTC (bug n°1 de l'ancien front). Crate pour le fuseau : `jiff` (`Zoned::now().in_tz("Europe/Paris")`) ou `chrono` + `chrono-tz`. Fonction `cine_dates(today, is_wednesday…) -> Vec<Date>` pure et testée (J → J+2, J+6 le mercredi : vérifie la règle dans `PLAN.md`).
-2. **Films** : upsert (`ON CONFLICT(id) DO UPDATE`), colonnes JSON (`genres`, `directors`, `cast_members`, `countries`) via `serde_json::to_string`. `title_search` = `normalize(title)`. Ne pas écraser les colonnes TMDB (`tmdb_id`, `rating`…) : elles ne sont pas dans la requête.
-3. **Séances** : pour un couple (cinéma, date), `DELETE` puis `INSERT` dans **une** transaction (une séance disparue = annulée, `SOURCES.md`). Les films d'abord (clé étrangère `movie_id`).
-4. **Transaction courte** : tout le réseau d'un (cinéma, date) est fini **avant** `pool.begin()` (même règle qu'au géocodage, `SOBRIETE.md`).
-5. **Tests** sur base en mémoire (modèle : `save_matches_replaces_previous_cnc_data` dans `cnc.rs`) : un second passage sans une séance la supprime ; les séances d'une **autre** date du même cinéma restent ; un film déjà enrichi par TMDB garde son `tmdb_id`.
+**Fichiers** : `src/showtimes/mod.rs`, `src/showtimes/db.rs`, `Cargo.toml` (`chrono` et `chrono-tz` pour `Europe/Paris`).
 
-**Vérifier** : après `scrape --cinema C0159` (cette fois avec écriture) :
+### D.1 Les dates à scraper
+
+- « Aujourd'hui » = aujourd'hui **à Paris**, pas en UTC (bug n°1 de l'ancien front). Crate : `jiff` (`Zoned::now().in_tz("Europe/Paris")`) ou `chrono` + `chrono-tz`.
+- [x] `fn cine_dates(today: Date) -> Vec<Date>` **pure** (on lui passe la date, elle ne lit pas l'horloge) : J, J+1, J+2, et en plus J+6 si `today` est un mercredi (`PLAN.md`).
+- [x] Tests : un lundi → 3 dates ; un mercredi → 4 dates ; un 30 décembre → passage d'année correct.
+- La colonne `showtimes.date` = la date **demandée** à AlloCiné, pas la date de `starts_at` (une séance à 0h30 appartient au jour ciné précédent).
+
+### D.2 Films (upsert)
+
+- [x] `INSERT INTO movies (…) VALUES (…) ON CONFLICT(id) DO UPDATE SET title = excluded.title, …`
+- Colonnes à remplir : le tableau `Movie` de A.2. `title_search = text::normalize(title)`. `updated_at` = maintenant.
+- Colonnes JSON (`genres`, `directors`, `cast_members`, `countries`) : `serde_json::to_string(&vec)`.
+- ⚠️ Ne mets **pas** `tmdb_id`, `rating`, `backdrop_url`, `trailer_url`, `tmdb_synced_at` dans la requête : ils viendront de TMDB et ne doivent pas être écrasés.
+
+### D.3 Séances (remplacement)
+
+Pour un couple (cinéma, date), dans **une** transaction :
+
+1. upsert des films (clé étrangère : le film doit exister avant la séance) ;
+2. `DELETE FROM showtimes WHERE cinema_id = ? AND date = ?` ;
+3. `INSERT` de chaque séance : `id` (= `internalId` en texte), `cinema_id`, `movie_id`, `date`, `starts_at`, `version`, `formats`, `booking_url`.
+
+Une séance qui disparaît d'AlloCiné = annulée : le `DELETE` puis `INSERT` s'en occupe.
+
+- [x] Tout le réseau du couple (cinéma, date) est terminé **avant** `pool.begin()` (transaction courte, `SOBRIETE.md`).
+
+### D.4 Tests sur base en mémoire
+
+Modèle : `save_matches_replaces_previous_cnc_data` dans `src/cinemas/cnc.rs`.
+
+- [x] Deuxième passage sans une séance → elle est supprimée.
+- [x] Les séances d'une **autre date** du même cinéma restent.
+- [x] Un film avec un `tmdb_id` déjà rempli le garde après upsert.
+
+**C'est fini quand** : après `scrape --cinema C0159` (avec écriture cette fois) :
+
 ```sql
 select count(*), count(distinct movie_id) from showtimes where cinema_id = 'C0159' and date = '…';
 select version, count(*) from showtimes group by 1;
 select count(*) from showtimes where booking_url is null;
 ```
 
+donnent des nombres cohérents avec la page AlloCiné.
+
+---
+
 ## E. Toute la France : concurrence, débit, coupe-circuit
 
-1. **Liste des cibles** : cinémas **visibles** seulement (`lat IS NOT NULL` et vus depuis moins de 14 jours, `API.md` « Cycle de vie »). Combien de requêtes ? Fais le calcul : ~3 100 cinémas × 3 dates × (pages par cinéma, en moyenne ?) ; à 3 req/s, combien de minutes ? Compare aux « ~30-40 min » de `PLAN.md` : faut-il revoir le débit, les dates, ou scraper l'IDF plus souvent que le reste ?
-2. **Concurrence** : `futures::stream::iter(cibles).map(|c| async { … }).buffer_unordered(n)` (crate `futures`). `n` petit (3-4).
-3. **Débit global** (toutes tâches confondues) : crate `governor` (un `RateLimiter` partagé, `until_ready().await` avant chaque requête), ou un `tokio::time::interval` derrière un `Mutex`. Question : pourquoi un sémaphore seul ne limite-t-il **pas** le débit ?
-4. **Coupe-circuit** : compteur de 403/429 **consécutifs** partagé (`Arc<AtomicUsize>`, remis à 0 à chaque succès). Au-delà de N (5 ?), on arrête tout proprement : plus aucune requête, on garde ce qui est déjà écrit, rapport d'erreur.
-5. **Erreurs isolées** : un cinéma en erreur ne doit pas arrêter le run (contrairement à l'import des cinémas). On compte ok / erreurs.
-6. **Écritures** : SQLite n'a qu'un écrivain. Soit chaque tâche écrit sa transaction courte (le `busy_timeout` fait attendre les autres), soit une seule tâche écrivain qui reçoit les résultats par `tokio::sync::mpsc`. Mesure avant de compliquer.
+**Fichier** : `src/showtimes/mod.rs`. Dépendances probables : `futures`, peut-être `governor`.
 
-**Vérifier** : d'abord sur un **département** (option `--department 75`), puis toute la France lancée par toi avec `caffeinate -i` et `/usr/bin/time -l` (durée, mémoire max, CPU → `SOBRIETE.md`).
+- [ ] **E.1 Liste des cibles** : requête SQL des cinémas **visibles** (`lat IS NOT NULL` et vus depuis moins de 14 jours, `API.md` « Cycle de vie »).
+- [ ] **E.2 Faire le calcul avant de coder** : ~3 100 cinémas × 3 dates × pages moyennes (C0159 = 2, les autres = 1 : prends ~1,2) ≈ combien de requêtes ? À 3 req/s, combien de minutes ? Compare aux « ~30-40 min » de `PLAN.md` et note le résultat.
+- [ ] **E.3 Parallélisme** : `futures::stream::iter(cibles).map(|c| async move { … }).buffer_unordered(4)`.
+- [ ] **E.4 Débit global** (toutes tâches confondues, pages suivantes et retries compris) : un `governor::RateLimiter` partagé (`until_ready().await` avant chaque requête), ou un `tokio::time::interval` derrière un `Mutex`. Question à te poser : pourquoi un sémaphore seul limite le nombre de requêtes **en même temps**, mais pas le nombre **par seconde** ?
+- [ ] **E.5 Coupe-circuit** : un `Arc<AtomicUsize>` partagé = nombre de 403/429 **consécutifs**. Remis à 0 à chaque succès. À 5 : plus aucune nouvelle requête, on garde ce qui est déjà écrit, on le dit dans le rapport. Problème à résoudre : `fetch_once` transforme le statut HTTP en `reqwest::Error` ; regarde `error.status()` pour retrouver 403/429.
+- [ ] **E.6 Erreurs isolées** : un cinéma en erreur ne doit **pas** arrêter le run (contrairement à l'import des cinémas). On compte ok / erreurs. Une erreur ne doit **jamais** supprimer les séances existantes de ce cinéma.
+- [ ] **E.7 Écritures** : commence simple, chaque tâche fait sa transaction courte (`db.rs` a déjà WAL + `busy_timeout`). Un écrivain unique via `tokio::sync::mpsc` seulement si tu mesures des `SQLITE_BUSY`.
+- [ ] **E.8 Option `--department 75`** pour tester sur un seul département.
+
+**C'est fini quand** : `scrape --department 75` passe sans erreur, puis toute la France lancée par toi avec `caffeinate -i` et `/usr/bin/time -l` (durée, mémoire max, CPU → `SOBRIETE.md`).
+
+---
 
 ## F. Purge, suivi des runs, rapport
 
-1. **Purge** des séances passées (`date < aujourd'hui Paris`) en fin de run. Films sans aucune séance : les garder (TMDB les a peut-être enrichis), ou les purger après N jours ? À décider.
-2. **`scrape_runs`** : une ligne au début (`kind = 'showtimes'`, `started_at`), mise à jour à la fin (`finished_at`, `ok_count`, `error_count`). Un run interrompu garde `finished_at = NULL` : utile pour `/api/meta` (date de dernière mise à jour).
-3. **Rapport** (`info!`, sur le modèle d'`import_report`) : cinémas scrapés / en erreur, films, séances par version, séances sans lien, durée.
+**Fichier** : `src/showtimes/mod.rs`. Modèle : `log_import_report` / `import_report` dans `src/cinemas/mod.rs`.
 
-**Vérifier (fin de l'étape 2, à cocher dans `PLAN.md`)** :
-- 3 cinémas comparés à la main avec le site AlloCiné (un multiplexe, un Art et Essai, un petit) : mêmes films, même nombre de séances, versions justes.
+- [ ] **F.1 `scrape_runs`** : `INSERT` au début (`kind = 'showtimes'`, `started_at`), garder l'`id`, puis `UPDATE` de **cette** ligne à la fin (`finished_at`, `ok_count`, `error_count`). Un run interrompu garde `finished_at = NULL` (utile pour `/api/meta`). Décide si `ok_count` compte des cinémas ou des couples (cinéma, date) et écris-le en commentaire.
+- [ ] **F.2 Purge** en fin de run : `DELETE FROM showtimes WHERE date < ?` avec « aujourd'hui à Paris » (la même fonction qu'en D.1). Test : hier supprimé, aujourd'hui et demain gardés. Films sans séance : on les garde pour l'instant (TMDB les aura peut-être enrichis).
+- [ ] **F.3 Rapport** (`info!`) : cinémas ok / en erreur, films, séances par version, séances sans lien, durée, coupe-circuit déclenché ou non.
+
+**C'est fini quand (fin de l'étape 2, à cocher dans `PLAN.md`)** :
+
+- 3 cinémas comparés à la main avec le site AlloCiné (C0159, C0015, P1434) : mêmes films, même nombre de séances, versions justes.
 - Aucun film manquant sur les gros cinémas (pagination) : `select cinema_id, date, count(distinct movie_id) from showtimes group by 1, 2 order by 3 desc limit 5`.
 - Durée, mémoire et nombre de requêtes d'un run complet notés dans `SOBRIETE.md`.

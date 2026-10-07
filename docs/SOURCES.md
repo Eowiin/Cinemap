@@ -103,6 +103,23 @@ L'ancien scraper ne lisait que la page 1 → il manquait plus de la moitié des 
 
 Les clés `*_st` indiquent des sous-titres (VOST). À vérifier empiriquement sur plusieurs cinémas avant de figer le mapping vers `VO` / `VOST` / `VF`.
 
+### Mapping de version vérifié sur les fixtures (2026-10-06)
+
+| Groupe | `diffusionVersion` | Tags `Localization.*` | Langues du film | Version retenue |
+|---|---|---|---|---|
+| `multiple` | `DUBBED` | `Version.French` | `FRENCH` | `VF` (pour un film français, `DUBBED` seul ne signifie pas doublage) |
+| `multiple` | `DUBBED` | `Version.French` + `Subtitle.French` | `FRENCH` | `VF` (sous-titres français liés à l'accessibilité) |
+| `original` | `ORIGINAL` | `Version.Original` + `Subtitle.French` | `ENGLISH`, `JAPANESE`… | `VOST` |
+| `original` | `ORIGINAL` | `Version.Original` | `ENGLISH`… | `VO` |
+| `original` | `ORIGINAL` | `Version.Original` | `FRENCH` | `VF` (film français en version originale) |
+| `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | `VO` selon la règle actuelle : seule la première langue est prise en compte |
+
+Les formats persistés sont limités à `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema` et `Dolby Atmos`. Les valeurs `DIGITAL`, `ANALOG` et `DOLBY_71` observées dans les fixtures ne sont pas des formats retenus.
+
+### Accessibilité observée
+
+Tags relevés : `Showtime.Accessibility.Accessible` et `Theater.Service.DisabledAccess`. Certaines URLs relay contiennent également `SME`. Ces informations sont notées pour référence et ne sont pas enregistrées en base pour l'instant.
+
 ### Bonnes pratiques
 
 - Débit global limité (~3 req/s), quelques requêtes concurrentes max, retry avec backoff exponentiel.
