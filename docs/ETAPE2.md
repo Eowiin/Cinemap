@@ -291,9 +291,16 @@ donnent des nombres cohérents avec la page AlloCiné.
 
 **Fichier** : `src/showtimes/mod.rs`. Modèle : `log_import_report` / `import_report` dans `src/cinemas/mod.rs`.
 
-- [ ] **F.1 `scrape_runs`** : `INSERT` au début (`kind = 'showtimes'`, `started_at`), garder l'`id`, puis `UPDATE` de **cette** ligne à la fin (`finished_at`, `ok_count`, `error_count`). Un run interrompu garde `finished_at = NULL` (utile pour `/api/meta`). Décide si `ok_count` compte des cinémas ou des couples (cinéma, date) et écris-le en commentaire.
-- [ ] **F.2 Purge** en fin de run : `DELETE FROM showtimes WHERE date < ?` avec « aujourd'hui à Paris » (la même fonction qu'en D.1). Test : hier supprimé, aujourd'hui et demain gardés. Films sans séance : on les garde pour l'instant (TMDB les aura peut-être enrichis).
-- [ ] **F.3 Rapport** (`info!`) : cinémas ok / en erreur, films, séances par version, séances sans lien, durée, coupe-circuit déclenché ou non.
+- [x] **F.1 `scrape_runs`** : `INSERT` au début (`kind = 'showtimes'`, `started_at`), garder l'`id`, puis `UPDATE` de **cette** ligne à la fin (`finished_at`, `ok_count`, `error_count`). Un run interrompu garde `finished_at = NULL` (utile pour `/api/meta`). Décide si `ok_count` compte des cinémas ou des couples (cinéma, date) et écris-le en commentaire.
+- [x] **F.2 Purge** en fin de run : `DELETE FROM showtimes WHERE date < ?` avec « aujourd'hui à Paris » (la même fonction qu'en D.1). Test : hier supprimé, aujourd'hui et demain gardés. Films sans séance : on les garde pour l'instant (TMDB les aura peut-être enrichis).
+- [x] **F.3 Rapport** (`info!`) : cinémas ok / en erreur, films, séances par version, séances sans lien, durée, coupe-circuit déclenché ou non.
+
+Fait le 2026-10-08 :
+
+- `ok_count` / `error_count` = couples **(cinéma, date)** (l'unité de transaction ; un cinéma peut réussir J et rater J+1). Les cinémas non lancés à cause du coupe-circuit comptent en erreur (leurs dates ne sont pas rafraîchies).
+- `kind = 'showtimes'` pour un run France entière, `'showtimes_partial'` pour `--cinema` / `--department` : `/api/meta` ne lira que les runs complets.
+- La commande sort en erreur (code ≠ 0, utile pour le cron) si le coupe-circuit s'est déclenché ou si aucun couple n'a réussi.
+- Rapport : deux lignes `info!` : compteurs du run (cinémas, couples, séances écrites, purge, durée, coupe-circuit) puis état de la base (séances, films, cinémas, VF / VO / VOST, sans lien).
 
 **C'est fini quand (fin de l'étape 2, à cocher dans `PLAN.md`)** :
 

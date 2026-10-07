@@ -101,27 +101,40 @@ impl CircuitBreaker {
     }
 }
 
+/// Résultat d'un cinéma : les dates non terminées (erreur ou coupe-circuit) se déduisent
+/// de `dates.len() - completed_dates`.
 #[derive(Debug, Default)]
 struct CinemaReport {
     completed_dates: usize,
-    error_dates: usize,
-    movies: usize,
     showtimes: usize,
 }
 
-impl CinemaReport {
-    fn succeeded(&self, expected_dates: usize) -> bool {
-        self.error_dates == 0 && self.completed_dates == expected_dates
-    }
-}
-
+/// Compteurs du run. `ok_dates` / `error_dates` sont des couples (cinéma, date), comme
+/// `scrape_runs.ok_count` / `error_count`.
 #[derive(Debug, Default)]
 struct RunReport {
     successful_cinemas: usize,
     failed_cinemas: usize,
-    movies: usize,
+    not_started_cinemas: usize,
+    ok_dates: usize,
+    error_dates: usize,
     showtimes: usize,
     panicked_tasks: usize,
+    circuit_breaker_tripped: bool,
+}
+
+impl RunReport {
+    fn add_cinema(&mut self, cinema: &CinemaReport, expected_dates: usize) {
+        let failed_dates = expected_dates - cinema.completed_dates;
+        if failed_dates == 0 {
+            self.successful_cinemas += 1;
+        } else {
+            self.failed_cinemas += 1;
+        }
+        self.ok_dates += cinema.completed_dates;
+        self.error_dates += failed_dates;
+        self.showtimes += cinema.showtimes;
+    }
 }
 
 async fn visible_cinema_ids(
@@ -148,7 +161,6 @@ async fn scrape_cinema(
     let mut report = CinemaReport::default();
     for date in &dates {
         if circuit_breaker.is_tripped() {
-            report.error_dates += 1;
             break;
         }
         let date_string = date.format("%Y-%m-%d").to_string();
@@ -166,16 +178,13 @@ async fn scrape_cinema(
                 if let Err(error) =
                     db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await
                 {
-                    report.error_dates += 1;
                     warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
                 } else {
                     report.completed_dates += 1;
-                    report.movies += movies.len();
                     report.showtimes += count;
                 }
             }
             Err(error) => {
-                report.error_dates += 1;
                 warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Scraping de ce cinéma/date en échec");
             }
         }
@@ -206,8 +215,8 @@ async fn scrape_cinemas(
     pool: &SqlitePool,
     client: reqwest::Client,
     cinema_ids: Vec<String>,
-    dates: Vec<NaiveDate>,
-) -> anyhow::Result<()> {
+    dates: &[NaiveDate],
+) -> RunReport {
     let mut remaining = VecDeque::from(cinema_ids);
     let rate_limiter = SharedRateLimiter::new();
     let circuit_breaker = Arc::new(CircuitBreaker::default());
@@ -222,7 +231,7 @@ async fn scrape_cinemas(
             pool,
             &client,
             cinema_id,
-            &dates,
+            dates,
             &rate_limiter,
             &circuit_breaker,
         );
@@ -230,17 +239,10 @@ async fn scrape_cinemas(
 
     while let Some(result) = tasks.join_next().await {
         match result {
-            Ok(cinema_report) => {
-                if cinema_report.succeeded(dates.len()) {
-                    report.successful_cinemas += 1;
-                } else {
-                    report.failed_cinemas += 1;
-                }
-                report.movies += cinema_report.movies;
-                report.showtimes += cinema_report.showtimes;
-            }
+            Ok(cinema_report) => report.add_cinema(&cinema_report, dates.len()),
             Err(error) => {
                 report.failed_cinemas += 1;
+                report.error_dates += dates.len();
                 report.panicked_tasks += 1;
                 warn!(error = %error, "Tâche de scraping interrompue");
             }
@@ -254,24 +256,49 @@ async fn scrape_cinemas(
                 pool,
                 &client,
                 cinema_id,
-                &dates,
+                dates,
                 &rate_limiter,
                 &circuit_breaker,
             );
         }
     }
 
+    // Coupe-circuit : les cinémas jamais lancés comptent en erreur (données pas rafraîchies).
+    report.not_started_cinemas = remaining.len();
+    report.error_dates += remaining.len() * dates.len();
+    report.circuit_breaker_tripped = circuit_breaker.is_tripped();
+    report
+}
+
+fn log_run_report(
+    report: &RunReport,
+    summary: &db::ShowtimesSummary,
+    purged: u64,
+    elapsed: Duration,
+) {
     info!(
         cinemas_ok = report.successful_cinemas,
         cinemas_en_erreur = report.failed_cinemas,
-        cinemas_non_lances = remaining.len(),
-        films = report.movies,
-        seances = report.showtimes,
+        cinemas_non_lances = report.not_started_cinemas,
+        couples_ok = report.ok_dates,
+        couples_en_erreur = report.error_dates,
+        seances_ecrites = report.showtimes,
         taches_interrompues = report.panicked_tasks,
-        coupe_circuit = circuit_breaker.is_tripped(),
+        coupe_circuit = report.circuit_breaker_tripped,
+        seances_passees_purgees = purged,
+        duree_s = elapsed.as_secs(),
         "Scraping terminé"
     );
-    Ok(())
+    info!(
+        seances = summary.showtimes,
+        films = summary.movies,
+        cinemas = summary.cinemas,
+        vf = summary.vf,
+        vo = summary.vo,
+        vost = summary.vost,
+        sans_lien = summary.without_booking_url,
+        "État de la base après le run"
+    );
 }
 
 pub async fn scrape(
@@ -280,13 +307,13 @@ pub async fn scrape(
     requested_date: Option<&str>,
     department: Option<&str>,
 ) -> anyhow::Result<()> {
+    let today = Utc::now().with_timezone(&Paris).date_naive();
     let dates = if let Some(date) = requested_date {
         vec![
             NaiveDate::parse_from_str(date, "%Y-%m-%d")
                 .with_context(|| format!("Date invalide : {date}. Format attendu : YYYY-MM-DD"))?,
         ]
     } else {
-        let today = Utc::now().with_timezone(&Paris).date_naive();
         cine_dates(today)
     };
 
@@ -299,8 +326,33 @@ pub async fn scrape(
         bail!("Aucun cinéma visible à scraper pour ce département");
     }
 
+    // Seul un run complet alimente `/api/meta` (`last_scrape_at`) : un test sur un cinéma
+    // ou un département ne doit pas faire croire que toute la France est à jour.
+    let kind = if cinema_id.is_none() && department.is_none() {
+        "showtimes"
+    } else {
+        "showtimes_partial"
+    };
+    let started = Instant::now();
     let client = crate::client::build_client()?;
-    scrape_cinemas(pool, client, cinema_ids, dates).await
+    let run_id = db::start_run(pool, kind).await?;
+
+    let report = scrape_cinemas(pool, client, cinema_ids, &dates).await;
+    let purged = db::purge_past_showtimes(pool, &today.format("%Y-%m-%d").to_string()).await?;
+    db::finish_run(pool, run_id, report.ok_dates, report.error_dates).await?;
+    let summary = db::showtimes_summary(pool).await?;
+    log_run_report(&report, &summary, purged, started.elapsed());
+
+    // Code de sortie non nul pour le cron : coupe-circuit ou run entièrement raté.
+    if report.circuit_breaker_tripped {
+        bail!(
+            "Coupe-circuit déclenché ({MAX_CONSECUTIVE_BLOCKS} réponses 403/429 consécutives) : AlloCiné nous bloque peut-être"
+        );
+    }
+    if report.ok_dates == 0 {
+        bail!("Aucun couple cinéma/date n'a pu être scrapé");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -345,6 +397,31 @@ mod tests {
                 NaiveDate::from_ymd_opt(2027, 1, 1).unwrap(),
                 NaiveDate::from_ymd_opt(2027, 1, 5).unwrap(),
             ]
+        );
+    }
+
+    #[test]
+    fn run_report_counts_cinema_dates() {
+        let mut report = RunReport::default();
+        let complete = CinemaReport {
+            completed_dates: 3,
+            showtimes: 10,
+        };
+        let partial = CinemaReport {
+            completed_dates: 1,
+            showtimes: 2,
+        };
+        report.add_cinema(&complete, 3);
+        report.add_cinema(&partial, 3);
+        assert_eq!(
+            (
+                report.successful_cinemas,
+                report.failed_cinemas,
+                report.ok_dates,
+                report.error_dates,
+                report.showtimes
+            ),
+            (1, 1, 4, 2, 12)
         );
     }
 

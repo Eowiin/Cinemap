@@ -83,12 +83,13 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 
 ### 2. Scraper des séances (backend, propriétaire)
 Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
-- [ ] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
-- [ ] Pagination `p-{n}`
-- [ ] Mapping `version` (VF / VO / VOST, film français en VO = VF via la langue du film) et `formats` (liste fermée, cf. `API.md`), vérifié empiriquement sur plusieurs cinémas
-- [ ] Upsert des films, remplacement des séances par (cinéma, date) dans une transaction
-- [ ] Concurrence + limite de débit globale (`governor` ou sémaphore), retry avec backoff, coupe-circuit sur 403/429
-- [ ] Purge des séances passées, table `scrape_runs`
+- [x] Récupération d'une page de séances et désérialisation `serde` (voir `SOURCES.md`)
+- [x] Pagination `p-{n}`
+- [x] Mapping `version` (VF / VO / VOST, film français en VO = VF via la langue du film) et `formats` (liste fermée, cf. `API.md`), vérifié empiriquement sur plusieurs cinémas
+- [x] Upsert des films, remplacement des séances par (cinéma, date) dans une transaction
+- [x] Concurrence + limite de débit globale (`governor` ou sémaphore), retry avec backoff, coupe-circuit sur 403/429
+- [x] Purge des séances passées, table `scrape_runs`
+- [ ] Vérification de fin d'étape : run France entière (`caffeinate -i`, `/usr/bin/time -l`), 3 cinémas comparés à la main (voir `ETAPE2.md` §F)
 
 ### 3. API (backend, propriétaire)
 - [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), CORS en dev

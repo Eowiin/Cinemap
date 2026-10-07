@@ -102,6 +102,8 @@ type Showtime = {
 }
 ```
 
+`last_scrape_at` = `finished_at` du dernier run `kind = 'showtimes'` terminé (`finished_at IS NOT NULL`). Les runs `showtimes_partial` (`--cinema`, `--department`) sont ignorés. Les compteurs `ok_count` / `error_count` d'un run de séances comptent des couples (cinéma, date).
+
 ### `GET /api/cinemas`
 
 Tous les cinémas géolocalisés, pour la carte (~2 000 éléments, gzip ≈ 60 Ko).
@@ -253,7 +255,7 @@ CREATE INDEX idx_showtimes_date        ON showtimes(date);
 
 CREATE TABLE scrape_runs (
     id          INTEGER PRIMARY KEY,
-    kind        TEXT NOT NULL,             -- cinemas | showtimes | tmdb
+    kind        TEXT NOT NULL,             -- cinemas | showtimes | showtimes_partial | tmdb
     started_at  TEXT NOT NULL,
     finished_at TEXT,
     ok_count    INTEGER NOT NULL DEFAULT 0,

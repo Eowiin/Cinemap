@@ -37,6 +37,76 @@ pub(super) async fn save_showtimes(
     Ok(())
 }
 
+/// Ouvre une ligne `scrape_runs` et renvoie son `id`. Tant que `finish_run` n'a pas été
+/// appelé, `finished_at` reste `NULL` : un run interrompu (crash, Ctrl+C) se voit.
+pub(super) async fn start_run(pool: &SqlitePool, kind: &str) -> Result<i64> {
+    let result =
+        sqlx::query("INSERT INTO scrape_runs (kind, started_at) VALUES (?, datetime('now'))")
+            .bind(kind)
+            .execute(pool)
+            .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// Ferme **cette** ligne. Les compteurs sont des couples (cinéma, date) : c'est l'unité
+/// d'écriture (une transaction), et un cinéma peut réussir J et rater J+1.
+pub(super) async fn finish_run(
+    pool: &SqlitePool,
+    run_id: i64,
+    ok_count: usize,
+    error_count: usize,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE scrape_runs SET finished_at = datetime('now'), ok_count = ?, error_count = ? WHERE id = ?",
+    )
+    .bind(i64::try_from(ok_count)?)
+    .bind(i64::try_from(error_count)?)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Supprime les séances des jours ciné passés (`date < today`, `today` = aujourd'hui à
+/// Paris) et renvoie leur nombre. Les films sans séance restent : TMDB a pu les enrichir.
+pub(super) async fn purge_past_showtimes(pool: &SqlitePool, today: &str) -> Result<u64> {
+    let result = sqlx::query("DELETE FROM showtimes WHERE date < ?")
+        .bind(today)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
+/// État de la table `showtimes` en fin de run (après la purge), pour le rapport.
+#[derive(Debug, PartialEq, sqlx::FromRow)]
+pub(super) struct ShowtimesSummary {
+    pub showtimes: i64,
+    pub movies: i64,
+    pub cinemas: i64,
+    pub vf: i64,
+    pub vo: i64,
+    pub vost: i64,
+    pub without_booking_url: i64,
+}
+
+/// Une seule requête, comme `import_report` dans `cinemas/mod.rs` : `sum(condition)`
+/// compte les lignes où la condition vaut 1 (`coalesce` car `sum` d'une table vide = `NULL`).
+pub(super) async fn showtimes_summary(pool: &SqlitePool) -> Result<ShowtimesSummary> {
+    Ok(sqlx::query_as(
+        "SELECT
+            count(*) AS showtimes,
+            count(DISTINCT movie_id) AS movies,
+            count(DISTINCT cinema_id) AS cinemas,
+            coalesce(sum(version = 'VF'), 0) AS vf,
+            coalesce(sum(version = 'VO'), 0) AS vo,
+            coalesce(sum(version = 'VOST'), 0) AS vost,
+            coalesce(sum(booking_url IS NULL), 0) AS without_booking_url
+         FROM showtimes",
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
 struct MovieValues<'a> {
     id: i64,
     title: &'a str,
@@ -219,6 +289,117 @@ mod tests {
 
     const C0159_PAGE_1: &str =
         include_str!("../../tests/fixtures/showtimes-C0159-2026-10-06-p1.json");
+
+    async fn memory_pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_showtime_row(pool: &SqlitePool, id: &str, date: &str, version: &str) {
+        sqlx::query(
+            "INSERT INTO showtimes (id, cinema_id, movie_id, date, starts_at, version, booking_url)
+             VALUES (?, 'C1', 1, ?, ?, ?, CASE WHEN ? = 'VO' THEN NULL ELSE 'https://x' END)",
+        )
+        .bind(id)
+        .bind(date)
+        .bind(format!("{date}T20:00:00"))
+        .bind(version)
+        .bind(version)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn pool_with_one_cinema_and_movie() -> SqlitePool {
+        let pool = memory_pool().await;
+        sqlx::query(
+            "INSERT INTO cinemas (id, name, name_search, updated_at) VALUES ('C1', 'C', 'c', datetime('now'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO movies (id, title, title_search, updated_at) VALUES (1, 'F', 'f', datetime('now'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn purge_removes_only_past_dates() {
+        let pool = pool_with_one_cinema_and_movie().await;
+        insert_showtime_row(&pool, "yesterday", "2026-10-07", "VF").await;
+        insert_showtime_row(&pool, "today", "2026-10-08", "VF").await;
+        insert_showtime_row(&pool, "tomorrow", "2026-10-09", "VF").await;
+
+        let purged = purge_past_showtimes(&pool, "2026-10-08").await.unwrap();
+
+        let remaining: Vec<String> = sqlx::query_scalar("SELECT id FROM showtimes ORDER BY date")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(purged, 1);
+        assert_eq!(remaining, ["today", "tomorrow"]);
+    }
+
+    #[tokio::test]
+    async fn run_stays_open_until_finished() {
+        let pool = memory_pool().await;
+        let first = start_run(&pool, "showtimes").await.unwrap();
+        let second = start_run(&pool, "showtimes").await.unwrap();
+        finish_run(&pool, second, 12, 3).await.unwrap();
+
+        let rows: Vec<(i64, Option<String>, i64, i64)> = sqlx::query_as(
+            "SELECT id, finished_at, ok_count, error_count FROM scrape_runs ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].0, rows[0].1.is_none()), (first, true));
+        assert_eq!((rows[1].0, rows[1].1.is_some()), (second, true));
+        assert_eq!((rows[1].2, rows[1].3), (12, 3));
+    }
+
+    #[tokio::test]
+    async fn summary_counts_versions_and_missing_links() {
+        let pool = pool_with_one_cinema_and_movie().await;
+        assert_eq!(
+            showtimes_summary(&pool).await.unwrap(),
+            ShowtimesSummary {
+                showtimes: 0,
+                movies: 0,
+                cinemas: 0,
+                vf: 0,
+                vo: 0,
+                vost: 0,
+                without_booking_url: 0,
+            }
+        );
+        insert_showtime_row(&pool, "a", "2026-10-08", "VF").await;
+        insert_showtime_row(&pool, "b", "2026-10-08", "VOST").await;
+        insert_showtime_row(&pool, "c", "2026-10-09", "VO").await;
+
+        assert_eq!(
+            showtimes_summary(&pool).await.unwrap(),
+            ShowtimesSummary {
+                showtimes: 3,
+                movies: 1,
+                cinemas: 1,
+                vf: 1,
+                vo: 1,
+                vost: 1,
+                without_booking_url: 1,
+            }
+        );
+    }
 
     #[tokio::test]
     async fn save_showtimes_replaces_date_and_preserves_tmdb_data() {
