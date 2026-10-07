@@ -38,8 +38,18 @@ async fn main() -> anyhow::Result<()> {
             let client = backend::client::build_client()?;
             backend::cinemas::cnc::enrich_cinemas(&pool, &client).await
         }
-        SubCommands::Scrape { cinema, date } => {
-            backend::showtimes::scrape(&pool, cinema.as_deref(), date.as_deref()).await
+        SubCommands::Scrape {
+            cinema,
+            date,
+            department,
+        } => {
+            backend::showtimes::scrape(
+                &pool,
+                cinema.as_deref(),
+                date.as_deref(),
+                department.as_deref(),
+            )
+            .await
         }
         SubCommands::Serve => serve().await,
     }

@@ -113,6 +113,8 @@ Les clés `*_st` indiquent des sous-titres (VOST). À vérifier empiriquement su
 | `original` | `ORIGINAL` | `Version.Original` | `ENGLISH`… | `VO` |
 | `original` | `ORIGINAL` | `Version.Original` | `FRENCH` | `VF` (film français en version originale) |
 | `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | `VO` selon la règle actuelle : seule la première langue est prise en compte |
+| `multiple_sme` | `LOCAL` | `Language.French` (+ `Accessibility.Subtitled`) | `FRENCH` | `VF` (vu sur P0095 le 2026-10-08 : film français avec sous-titres SME) |
+| `original_st` | `ORIGINAL` | `Version.Original` + `Accessibility.Subtitled` (pas de `Subtitle.French`) | `TURKISH` | `VOST` (vu sur P0095 le 2026-10-08) |
 
 Les formats persistés sont limités à `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema` et `Dolby Atmos`. Les valeurs `DIGITAL`, `ANALOG` et `DOLBY_71` observées dans les fixtures ne sont pas des formats retenus.
 

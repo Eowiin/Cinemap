@@ -16,28 +16,25 @@ impl Version {
     }
 }
 
+/// Règles (voir `SOURCES.md` §4, « Mapping de version ») :
+/// 1. `Localization.Version.French` ou `Localization.Language.French` (`LOCAL`, film en
+///    langue française, souvent avec sous-titres SME) → VF ;
+/// 2. `Localization.Version.Original` : film dont la première langue est le français → VF,
+///    sinon sous-titré (`Localization.Subtitle.French` ou `Showtime.Accessibility.Subtitled`,
+///    vu dans les groupes `*_st`) → VOST, sinon VO ;
+/// 3. autre cas → `None` : l'appelant saute la séance plutôt que d'inventer une version.
 pub(super) fn version(showtime: &Showtime, languages: &[Option<String>]) -> Option<Version> {
-    if showtime
-        .tags
-        .iter()
-        .any(|tag| tag == "Localization.Version.French")
-    {
+    let has_tag = |wanted: &str| showtime.tags.iter().any(|tag| tag == wanted);
+
+    if has_tag("Localization.Version.French") || has_tag("Localization.Language.French") {
         return Some(Version::Vf);
     }
 
-    if showtime
-        .tags
-        .iter()
-        .any(|tag| tag == "Localization.Version.Original")
-    {
+    if has_tag("Localization.Version.Original") {
         if languages.first().and_then(Option::as_deref) == Some("FRENCH") {
             return Some(Version::Vf);
         }
-        if showtime
-            .tags
-            .iter()
-            .any(|tag| tag == "Localization.Subtitle.French")
-        {
+        if has_tag("Localization.Subtitle.French") || has_tag("Showtime.Accessibility.Subtitled") {
             return Some(Version::Vost);
         }
         return Some(Version::Vo);
@@ -250,6 +247,32 @@ mod tests {
             &languages(&[Some("CANTONESE"), Some("FRENCH")]),
         );
         assert!(matches!(&result, Some(Version::Vo)));
+    }
+
+    #[test]
+    fn version_maps_local_french_language_to_vf() {
+        // Vu sur P0095 le 2026-10-08 : groupe `multiple_sme`, `diffusionVersion: LOCAL`.
+        let result = version(
+            &showtime(&[
+                "Showtime.Accessibility.Subtitled",
+                "Localization.Language.French",
+            ]),
+            &languages(&[Some("FRENCH")]),
+        );
+        assert!(matches!(&result, Some(Version::Vf)));
+    }
+
+    #[test]
+    fn version_maps_original_with_accessibility_subtitles_to_vost() {
+        // Vu sur P0095 le 2026-10-08 : groupe `original_st`, film turc.
+        let result = version(
+            &showtime(&[
+                "Showtime.Accessibility.Subtitled",
+                "Localization.Version.Original",
+            ]),
+            &languages(&[Some("TURKISH")]),
+        );
+        assert!(matches!(&result, Some(Version::Vost)));
     }
 
     #[test]

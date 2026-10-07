@@ -4,7 +4,7 @@ Même principe que `SUIVI.md` pour l'étape 1 : le **quoi** et le **pourquoi**, 
 Chaque lot est découpé en petites étapes : **fichier à toucher → quoi y mettre → comment vérifier**. Une case = un petit pas qu'on peut compiler.
 Références : `SOURCES.md` §4 (API AlloCiné), `API.md` (schéma `movies` / `showtimes`, conventions `version` / `formats` / jour ciné).
 
-Dernière mise à jour : 2026-10-07. **Où tu en es : A.1 fait, A.2 commencé** (`src/showtimes/` existe et est déclaré dans `lib.rs`).
+Dernière mise à jour : 2026-10-08. **Où tu en es : lots A à E faits (avec Codex, relus), F fait. Reste : la vérification de fin d'étape (run complet lancé par toi, comparaison à la main de 3 cinémas).**
 
 ## Vue d'ensemble
 
@@ -128,18 +128,18 @@ Les objets imbriqués (`poster`, `credits[].person`, `cast.edges[].node.actor`�
 
 **Fichier** : `src/showtimes/mapping.rs`.
 
-- [ ] `runtime_minutes(&str) -> Option<u32>`
+- [x] `runtime_minutes(&str) -> Option<u32>`
   - `"1h 55min"` → `Some(115)` ; `"0h 00min"` → `None` (durée inconnue, pas 0) ; `""` ou `"abc"` → `None`, **jamais de panique**.
   - Indice : `split_once('h')`, `trim`, `trim_end_matches("min")`, `parse::<u32>().ok()?`.
-- [ ] `full_name(first: Option<&str>, last: Option<&str>) -> Option<String>`
+- [x] `full_name(first: Option<&str>, last: Option<&str>) -> Option<String>`
   - les deux → `"Isabelle Huppert"` ; un seul → celui-là ; aucun → `None`.
 
 Un test par cas listé.
 
 ### A.4 Tests de contenu
 
-- [ ] `C0159` p1 : `results.len() == 15`, `total_pages == 2`, le film `1000023992` s'appelle `"Ni vue, ni connue"` et a au moins une séance avec un `starts_at` et un lien.
-- [ ] `P0095` : la désérialisation **réussit**, `error == true`, `results` vide, `next_date == Some("2026-10-07")`.
+- [x] `C0159` p1 : `results.len() == 15`, `total_pages == 2`, le film `1000023992` s'appelle `"Ni vue, ni connue"` et a au moins une séance avec un `starts_at` et un lien.
+- [x] `P0095` : la désérialisation **réussit**, `error == true`, `results` vide, `next_date == Some("2026-10-07")`.
 
 **C'est fini quand** : `cargo test` vert, `cargo clippy --all-targets` sans warning.
 
@@ -160,22 +160,22 @@ Un test par cas listé.
 | `original` | `ORIGINAL` | `Version.Original` | `FRENCH` | `VF` (film français en VO) |
 | `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | ? (coproduction : à décider) |
 
-Pas encore vu : `dubbed`, `local`, `_st`, `_sme`. Tu pourras en télécharger d'autres plus tard (un gros multiplexe avec un film d'animation doublé, par exemple).
+Vu ensuite en réel (P0095, 2026-10-08) : `multiple_sme` / `LOCAL` avec `Localization.Language.French` → `VF`, et `original_st` avec `Showtime.Accessibility.Subtitled` sans `Subtitle.French` → `VOST` (règles ajoutées, voir `SOURCES.md`). Pas encore vu : `dubbed`. Tu pourras en télécharger d'autres plus tard (un gros multiplexe avec un film d'animation doublé, par exemple).
 
-- [ ] Recopie ce tableau dans `SOURCES.md` §4.
+- [x] Recopie ce tableau dans `SOURCES.md` §4.
 
 ### B.2 `version`
 
-- [ ] `enum Version { Vf, Vo, Vost }` + une méthode `as_str()` qui renvoie `"VF"` / `"VO"` / `"VOST"` (ce qui va en base).
-- [ ] `fn version(showtime: &Showtime, languages: &[Option<String>]) -> Option<Version>`. Règle de départ à partir du tableau :
+- [x] `enum Version { Vf, Vo, Vost }` + une méthode `as_str()` qui renvoie `"VF"` / `"VO"` / `"VOST"` (ce qui va en base).
+- [x] `fn version(showtime: &Showtime, languages: &[Option<String>]) -> Option<Version>`. Règle de départ à partir du tableau :
   1. tag `Localization.Version.French` → `Vf` ;
   2. sinon tag `Localization.Version.Original` : si `FRENCH` est la **première** langue du film → `Vf` ; sinon `Subtitle.French` présent → `Vost`, absent → `Vo` ;
   3. sinon → `None` : l'appelant fait un `warn!` et **saute** la séance (mieux vaut une séance manquante qu'une fausse version).
-- [ ] Un test par ligne du tableau B.1 (tu peux construire un `Showtime` à la main dans le test, ou piocher une vraie séance dans une fixture).
+- [x] Un test par ligne du tableau B.1 (tu peux construire un `Showtime` à la main dans le test, ou piocher une vraie séance dans une fixture).
 
 ### B.3 `formats`
 
-- [ ] `fn formats(showtime: &Showtime) -> Vec<&'static str>` qui ne renvoie que des valeurs de la liste de `API.md` : `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema`, `Dolby Atmos`.
+- [x] `fn formats(showtime: &Showtime) -> Vec<&'static str>` qui ne renvoie que des valeurs de la liste de `API.md` : `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema`, `Dolby Atmos`.
 - Dans les fixtures on ne voit que `DIGITAL`, `ANALOG` (projection) et `DOLBY_71` (son) : **aucun** n'est dans la liste, donc `formats` sera souvent `[]`. C'est normal.
 - Les valeurs inconnues : `debug!` pour l'instant (le « loggé une seule fois » avec un `HashSet` viendra au lot E, quand il y aura des milliers de séances).
 - Pour trouver les vraies valeurs IMAX / 3D, télécharge plus tard une fixture d'un cinéma IMAX (Pathé La Villette, Grand Rex…) et regarde `experience`, `picture`, `tags`.
@@ -188,11 +188,11 @@ Chaque séance a deux entrées dans `data.ticketing` :
 - `provider: "default"` : le site du cinéma (ex. `https://www.ugc.fr/reservationSeances.html?id=…`) ;
 - `provider: "relay"` : un intermédiaire (`relay.mvtx.us`).
 
-- [ ] `fn booking_url(showtime: &Showtime) -> Option<&str>` : le premier `urls[0]` de `default` en `DESKTOP`, sinon celui de `relay`, sinon `None`. Écris la règle en commentaire au-dessus.
+- [x] `fn booking_url(showtime: &Showtime) -> Option<&str>` : le premier `urls[0]` de `default` en `DESKTOP`, sinon celui de `relay`, sinon `None`. Écris la règle en commentaire au-dessus.
 
 ### B.5 Accessibilité (noter seulement)
 
-- [ ] Dans `SOURCES.md` : les tags vus (`Showtime.Accessibility.Accessible`, `Theater.Service.DisabledAccess`, `SME` dans l'URL relay). Rien en base pour l'instant.
+- [x] Dans `SOURCES.md` : les tags vus (`Showtime.Accessibility.Accessible`, `Theater.Service.DisabledAccess`, `SME` dans l'URL relay). Rien en base pour l'instant.
 
 **C'est fini quand** : tests de `version` (chaque ligne de B.1), `formats` (au moins `[]` sur une vraie séance) et `booking_url` (cas `default`, cas sans ticketing) verts.
 
@@ -274,14 +274,14 @@ donnent des nombres cohérents avec la page AlloCiné.
 
 **Fichier** : `src/showtimes/mod.rs`. Dépendances probables : `futures`, peut-être `governor`.
 
-- [ ] **E.1 Liste des cibles** : requête SQL des cinémas **visibles** (`lat IS NOT NULL` et vus depuis moins de 14 jours, `API.md` « Cycle de vie »).
-- [ ] **E.2 Faire le calcul avant de coder** : ~3 100 cinémas × 3 dates × pages moyennes (C0159 = 2, les autres = 1 : prends ~1,2) ≈ combien de requêtes ? À 3 req/s, combien de minutes ? Compare aux « ~30-40 min » de `PLAN.md` et note le résultat.
-- [ ] **E.3 Parallélisme** : `futures::stream::iter(cibles).map(|c| async move { … }).buffer_unordered(4)`.
-- [ ] **E.4 Débit global** (toutes tâches confondues, pages suivantes et retries compris) : un `governor::RateLimiter` partagé (`until_ready().await` avant chaque requête), ou un `tokio::time::interval` derrière un `Mutex`. Question à te poser : pourquoi un sémaphore seul limite le nombre de requêtes **en même temps**, mais pas le nombre **par seconde** ?
-- [ ] **E.5 Coupe-circuit** : un `Arc<AtomicUsize>` partagé = nombre de 403/429 **consécutifs**. Remis à 0 à chaque succès. À 5 : plus aucune nouvelle requête, on garde ce qui est déjà écrit, on le dit dans le rapport. Problème à résoudre : `fetch_once` transforme le statut HTTP en `reqwest::Error` ; regarde `error.status()` pour retrouver 403/429.
-- [ ] **E.6 Erreurs isolées** : un cinéma en erreur ne doit **pas** arrêter le run (contrairement à l'import des cinémas). On compte ok / erreurs. Une erreur ne doit **jamais** supprimer les séances existantes de ce cinéma.
-- [ ] **E.7 Écritures** : commence simple, chaque tâche fait sa transaction courte (`db.rs` a déjà WAL + `busy_timeout`). Un écrivain unique via `tokio::sync::mpsc` seulement si tu mesures des `SQLITE_BUSY`.
-- [ ] **E.8 Option `--department 75`** pour tester sur un seul département.
+- [x] **E.1 Liste des cibles** : requête SQL des cinémas **visibles** (`lat IS NOT NULL` et vus depuis moins de 14 jours, `API.md` « Cycle de vie »).
+- [x] **E.2 Estimation avant mesure** : 3 100 cinémas × 3 dates × 1,2 page en moyenne = 11 160 requêtes, soit environ **62 minutes à 3 req/s**. Le mercredi ajoute environ 1/7 de date en moyenne (environ 65 minutes). Cela dépasse les 30–40 minutes prévues dans `PLAN.md`; retries, latences et écritures peuvent encore allonger le run. Détail dans `SOBRIETE.md`.
+- [x] **E.3 Parallélisme** : quatre cinémas au plus sont traités simultanément avec `tokio::task::JoinSet`.
+- [x] **E.4 Débit global** : un limiteur partagé espace toutes les tentatives d'au moins 333 ms, y compris pages et retries.
+- [x] **E.5 Coupe-circuit** : un compteur atomique partagé suit les réponses 403/429 consécutives, se réinitialise sur une réponse réussie et arrête les nouveaux appels à cinq.
+- [x] **E.6 Erreurs isolées** : une erreur réseau ou SQLite marque le cinéma/date en échec, laisse ses données existantes en place et n'interrompt pas les autres tâches.
+- [x] **E.7 Écritures** : chaque cinéma/date écrit dans sa transaction courte; le pool garde son `busy_timeout`.
+- [x] **E.8 Option `--department 75`** pour lancer un département ciblé.
 
 **C'est fini quand** : `scrape --department 75` passe sans erreur, puis toute la France lancée par toi avec `caffeinate -i` et `/usr/bin/time -l` (durée, mémoire max, CPU → `SOBRIETE.md`).
 

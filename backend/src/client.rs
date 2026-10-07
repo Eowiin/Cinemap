@@ -48,9 +48,32 @@ pub async fn fetch_with_retries(
     delays: &[Duration],
     request: impl Fn() -> RequestBuilder,
 ) -> anyhow::Result<Bytes> {
+    fetch_with_retries_and_hooks(url, delays, || async { Ok(()) }, |_| {}, request).await
+}
+
+/// Comme `fetch_with_retries`, avec deux crochets appelés à **chaque** essai (retries compris) :
+/// `before_attempt` avant l'envoi (attendre le limiteur de débit, refuser si le coupe-circuit
+/// est déclenché) et `observe_attempt` après la réponse (compter les 403/429).
+pub async fn fetch_with_retries_and_hooks<B, Fut, O>(
+    url: &str,
+    delays: &[Duration],
+    before_attempt: B,
+    observe_attempt: O,
+    request: impl Fn() -> RequestBuilder,
+) -> anyhow::Result<Bytes>
+where
+    B: Fn() -> Fut,
+    Fut: Future<Output = anyhow::Result<()>>,
+    O: Fn(&Result<Bytes, reqwest::Error>),
+{
     let mut attempt = 0;
     loop {
-        match fetch_once(request()).await {
+        before_attempt()
+            .await
+            .with_context(|| format!("Préparation de la requête {url}"))?;
+        let result = fetch_once(request()).await;
+        observe_attempt(&result);
+        match result {
             Ok(body) => return Ok(body),
             Err(error) => {
                 if !is_retryable(&error) || attempt == delays.len() {

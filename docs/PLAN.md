@@ -121,7 +121,7 @@ Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
 - [ ] Merge `rewrite` → `main`
 
 ## Idées pour plus tard
-- **Cartes illimitées** (proposé le 2026-10-06, à valider) : savoir où passe une carte UGC Illimité, Pathé CinéPass, etc. Données : UGC publie une page HTML statique `https://www.ugc.fr/cinemas-acceptant-ui.html` (nom, adresse, code postal ; UGC, mk2 et partenaires ; ~145 entrées, toutes régions sur une page) ; Pathé annonce « 130 cinémas Pathé et partenaires » sur pathe.fr (format à trouver). Croisement avec nos cinémas : code postal + similarité de nom (réutiliser le code du CNC). Proposition détaillée (schéma, contrat, questions ouvertes) en fin d'`API.md`, à valider.
+- **Cartes illimitées** (proposé le 2026-10-06, à valider) : savoir où passe une carte UGC Illimité, Pathé CinéPass, etc. Données : UGC publie une page HTML statique `https://www.ugc.fr/cinemas-acceptant-ui.html` (nom, adresse, code postal ; UGC, mk2 et partenaires ; ~145 entrées, toutes régions sur une page) ; Pathé annonce « 130 cinémas Pathé et partenaires » sur pathe.fr (format à trouver). Croisement avec nos cinémas : code postal + similarité de nom (réutiliser le code du CNC). Proposition détaillée (schéma, contrat, décisions) en fin d'`API.md` ; à faire **après l'étape 2**, source Pathé à choisir à ce moment-là.
 - Favoris (cinémas, films) stockés localement
 - Filtre « après 20h », formats IMAX / 4DX / Dolby
 - Notifications PWA (« tel film sort mercredi »)

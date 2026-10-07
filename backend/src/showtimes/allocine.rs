@@ -1,13 +1,11 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 
+use crate::client::{RETRY_DELAYS, fetch_with_retries_and_hooks};
 use anyhow::{Context, bail};
 use reqwest::{Client, header::ACCEPT};
 use serde::Deserialize;
-use tokio::time::sleep;
 
-use crate::client::{RETRY_DELAYS, fetch_with_retries};
-
-use super::mapping;
+use super::{CircuitBreaker, SharedRateLimiter, mapping};
 
 const BASE_URL: &str = "https://www.allocine.fr";
 
@@ -207,13 +205,22 @@ async fn fetch_page(
     cinema_id: &str,
     date: &str,
     page: u32,
+    rate_limiter: &SharedRateLimiter,
+    circuit_breaker: &CircuitBreaker,
 ) -> anyhow::Result<Response> {
     let url = showtimes_url(cinema_id, date, page);
-    let bytes = fetch_with_retries(&url, &RETRY_DELAYS, || allocine_request(client, &url))
-        .await
-        .with_context(|| {
-            format!("Téléchargement des séances {cinema_id} du {date}, page {page}")
-        })?;
+    let bytes = fetch_with_retries_and_hooks(
+        &url,
+        &RETRY_DELAYS,
+        || async {
+            rate_limiter.wait().await;
+            circuit_breaker.ensure_active()
+        },
+        |result| circuit_breaker.observe(result),
+        || allocine_request(client, &url),
+    )
+    .await
+    .with_context(|| format!("Téléchargement des séances {cinema_id} du {date}, page {page}"))?;
     serde_json::from_slice(&bytes)
         .with_context(|| format!("Désérialisation des séances {cinema_id} du {date}, page {page}"))
 }
@@ -222,8 +229,10 @@ pub(super) async fn fetch_showtimes(
     client: &Client,
     cinema_id: &str,
     date: &str,
+    rate_limiter: &SharedRateLimiter,
+    circuit_breaker: &CircuitBreaker,
 ) -> anyhow::Result<Vec<MovieResult>> {
-    let first_page = fetch_page(client, cinema_id, date, 1).await?;
+    let first_page = fetch_page(client, cinema_id, date, 1, rate_limiter, circuit_breaker).await?;
     if first_page.error {
         if first_page.message.as_deref() == Some("next.showtime.on") {
             tracing::info!(
@@ -242,8 +251,8 @@ pub(super) async fn fetch_showtimes(
 
     let mut results = first_page.results;
     for page in 2..=first_page.pagination.total_pages.max(1) {
-        sleep(Duration::from_millis(500)).await;
-        let response = fetch_page(client, cinema_id, date, page).await?;
+        let response =
+            fetch_page(client, cinema_id, date, page, rate_limiter, circuit_breaker).await?;
         if response.error {
             bail!(
                 "Erreur AlloCiné pour le cinéma {cinema_id} le {date}, page {page} : {}",

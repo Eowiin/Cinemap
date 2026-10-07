@@ -32,6 +32,12 @@ Autre exemple (2026-10-02) : chaque page AlloCiné (~350 Ko) est parsée deux fo
 - Mais le vrai poste est probablement la `Range` de calamine : **toute la feuille** en mémoire, un `calamine::Data` par cellule et pour toutes les colonnes, sans compter le XLSX et son XML décompressé. Regarder le pic mesuré par `/usr/bin/time -l` (`enrich-cnc`) avant de toucher à quoi que ce soit. Ces données ne vivent que quelques secondes une fois par nuit : si le pic reste de quelques Mo, la piste 1 suffit.
 - Mesure (2026-10-05, `enrich-cnc` en `--release`) : **28 Mo** de mémoire max, 0,85 s réel dont 0,08 s CPU (téléchargement inclus). Le XLSX brut est libéré (`drop`) juste après la lecture. Pas d'optimisation nécessaire : le pic est du même ordre que le scraping (22 Mo) et ne dure qu'une seconde.
 
+### Estimation préalable du scraping des séances (2026-10-08)
+
+Ordre de grandeur du lot E, pas une mesure : 3 100 cinémas × 3 dates × 1,2 page moyenne ≈ **11 160 requêtes**. Au plafond global de 3 requêtes/s, le plancher théorique est **3 720 s, soit 62 min**. En ajoutant la date J+6 du mercredi (un jour sur sept), la moyenne monte à environ **11 726 requêtes / 65 min 9 s**. Les délais de réseau et les retries ne sont pas inclus.
+
+Cette estimation dépasse les 30–40 min prévues dans `PLAN.md`. Atteindre 30–40 min demanderait environ 4,7–6,5 requêtes/s, au-dessus du plafond de 3 req/s retenu pour l'instant. Il faudra mesurer un run de département avant de revoir ce budget.
+
 ### Outils de mesure
 
 - **Toujours en `--release`** : le mode debug est 10 à 100 fois plus lent, ses chiffres ne veulent rien dire.

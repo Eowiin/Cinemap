@@ -402,11 +402,16 @@ type CinemaSummary = {
 - Front : les cartes choisies sont gardées dans le navigateur (`localStorage`), pas
   de compte. Badge sur les cinémas acceptant une de mes cartes, filtre activable.
 
-### Questions ouvertes
+### Décisions et questions ouvertes
 
-1. Une carte peut-elle être acceptée seulement pour certaines séances (avant-premières
-   exclues, suppléments 3D / IMAX) ? Si oui : on l'ignore (le badge reste au niveau
-   du cinéma) ou on le note ?
-2. Pathé : PDF ou JSON ? (À trancher en regardant les deux.)
-3. Moment : après l'étape 2 (le filtre n'a d'intérêt qu'avec des séances) ou dès
-   maintenant (la partie import ne dépend que des cinémas) ?
+1. ✅ (2026-10-06) Restrictions par séance (avant-premières exclues, suppléments
+   3D / IMAX) : **ignorées** pour l'instant. Le badge reste au niveau du cinéma.
+2. ⏳ Source Pathé : **à trancher au moment de l'implémentation**, en ouvrant les deux :
+   - PDF du réseau CinéPass : https://www.pathe.fr/media/files/conditions/Reseau%20CinePass-CineCartes.pdf
+   - API JSON de pathe.fr : https://www.pathe.fr/api/cinemas
+   - Page de l'offre (« 76 cinémas Pathé et plus de 59 partenaires ») : https://www.pathe.fr/cinepass
+
+   Questions à se poser : la liste des partenaires est-elle dans le JSON, ou seulement
+   dans le PDF ? Le PDF a-t-il des colonnes lisibles (nom, code postal) ? À défaut,
+   les partenaires Pathé iront dans `docs/data/cartes.csv` à la main.
+3. ✅ (2026-10-06) Moment : **après l'étape 2**.
