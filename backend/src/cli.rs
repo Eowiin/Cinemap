@@ -23,6 +23,12 @@ pub enum SubCommands {
         #[arg(long, conflicts_with = "cinema")]
         department: Option<String>,
     },
+    /// Enrichit les films à l'affiche avec TMDB (image de fond, bande-annonce, note).
+    Tmdb {
+        /// Retraite aussi les films synchronisés il y a moins de 7 jours.
+        #[arg(long)]
+        all: bool,
+    },
     /// Lance l'API HTTP.
     Serve {
         /// Adresse d'écoute (en prod, nginx est devant : inutile d'exposer le port).

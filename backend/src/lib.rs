@@ -6,3 +6,4 @@ pub mod db;
 pub mod showtimes;
 pub mod text;
 pub mod time;
+pub mod tmdb;
