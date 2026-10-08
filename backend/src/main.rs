@@ -1,20 +1,8 @@
-use axum::{Router, routing::get};
 use backend::cinemas::import_cinemas;
 use backend::cli::{Cli, SubCommands};
 use backend::db;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
-
-async fn serve() -> anyhow::Result<()> {
-    // build our application with a route
-    let app = Router::new()
-        // `GET /` goes to `root`
-        .route("/", get(root));
-
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    Ok(axum::serve(listener, app).await?)
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -51,11 +39,6 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        SubCommands::Serve => serve().await,
+        SubCommands::Serve { addr } => backend::api::serve(pool, &addr).await,
     }
-}
-
-// basic handler that responds with a static string
-async fn root() -> &'static str {
-    "Hello, World!"
 }

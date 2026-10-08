@@ -10,7 +10,7 @@ bytes = "1.12.1"
 calamine = "0.36.1"
 chrono = "0.4.45"
 chrono-tz = "0.10.4"
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
 csv = "1.4.0"
 deunicode = "1.6.2"
 dotenvy = "0.15.7"
@@ -18,8 +18,13 @@ reqwest = { version = "0.13.5", features = ["multipart"] }
 scraper = "0.27.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "macros", "migrate", "json"] }
 strsim = "0.11.1"
 tokio = { version = "1.53.1", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["compression-gzip", "set-header", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

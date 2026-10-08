@@ -93,10 +93,11 @@ Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
 
 ### 3. API (backend, propriétaire)
 Suivi détaillé : [`ETAPE3.md`](ETAPE3.md).
-- [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), pas de CORS (proxy Vite en dev)
-- [ ] Recherche insensible aux accents (colonnes `*_search` normalisées)
-- [ ] Distance : bounding box en SQL, puis haversine en Rust
-- [ ] Tests d'intégration sur une base de test
+- [x] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), pas de CORS (proxy Vite en dev)
+- [x] Recherche insensible aux accents (colonnes `*_search` normalisées)
+- [x] Distance : bounding box en SQL, puis haversine en Rust
+- [x] Tests d'intégration sur une base de test (`tests/api.rs`, 19 tests)
+- [x] Vérification sur la base de Paris (`curl` des lots D à I, mesures `oha` dans `SOBRIETE.md`) ; pas de re-vérification France entière (décision du 2026-10-08). **Étape 3 terminée le 2026-10-08.**
 
 ### 4. Enrichissement TMDB (backend, propriétaire)
 - [ ] Clé TMDB (compte gratuit), stockée dans `.env`

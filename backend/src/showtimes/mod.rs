@@ -13,8 +13,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bytes::Bytes;
-use chrono::{Datelike, Days, NaiveDate, Utc};
-use chrono_tz::Europe::Paris;
+use chrono::{Datelike, Days, NaiveDate};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
 use tokio::{
@@ -23,6 +22,8 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 use tracing::{info, warn};
+
+use crate::time::{DATE_FORMAT, paris_today};
 
 const MAX_CONCURRENT_CINEMAS: usize = 4;
 const MAX_CONSECUTIVE_BLOCKS: usize = 5;
@@ -142,7 +143,7 @@ async fn visible_cinema_ids(
     department: Option<&str>,
 ) -> anyhow::Result<Vec<String>> {
     Ok(sqlx::query_scalar(
-        "SELECT id FROM cinemas WHERE lat IS NOT NULL AND updated_at >= datetime('now', '-14 days') AND (? IS NULL OR department = ?) ORDER BY id",
+        "SELECT id FROM visible_cinemas WHERE (? IS NULL OR department = ?) ORDER BY id",
     )
     .bind(department)
     .bind(department)
@@ -163,7 +164,7 @@ async fn scrape_cinema(
         if circuit_breaker.is_tripped() {
             break;
         }
-        let date_string = date.format("%Y-%m-%d").to_string();
+        let date_string = date.format(DATE_FORMAT).to_string();
         let result = allocine::fetch_showtimes(
             &client,
             &cinema_id,
@@ -307,10 +308,10 @@ pub async fn scrape(
     requested_date: Option<&str>,
     department: Option<&str>,
 ) -> anyhow::Result<()> {
-    let today = Utc::now().with_timezone(&Paris).date_naive();
+    let today = paris_today();
     let dates = if let Some(date) = requested_date {
         vec![
-            NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            NaiveDate::parse_from_str(date, DATE_FORMAT)
                 .with_context(|| format!("Date invalide : {date}. Format attendu : YYYY-MM-DD"))?,
         ]
     } else {
@@ -338,7 +339,7 @@ pub async fn scrape(
     let run_id = db::start_run(pool, kind).await?;
 
     let report = scrape_cinemas(pool, client, cinema_ids, &dates).await;
-    let purged = db::purge_past_showtimes(pool, &today.format("%Y-%m-%d").to_string()).await?;
+    let purged = db::purge_past_showtimes(pool, &today.format(DATE_FORMAT).to_string()).await?;
     db::finish_run(pool, run_id, report.ok_dates, report.error_dates).await?;
     let summary = db::showtimes_summary(pool).await?;
     log_run_report(&report, &summary, purged, started.elapsed());
@@ -451,11 +452,12 @@ mod tests {
             .unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
         sqlx::query(
-            "INSERT INTO cinemas (id, name, name_search, lat, department, updated_at) VALUES
-             ('PARIS', 'Paris', 'paris', 48.0, '75', datetime('now')),
-             ('LYON', 'Lyon', 'lyon', 45.0, '69', datetime('now')),
-             ('NO_GEO', 'Sans GPS', 'sans gps', NULL, '75', datetime('now')),
-             ('OLD', 'Ancien', 'ancien', 48.0, '75', '2000-01-01 00:00:00')",
+            "INSERT INTO cinemas (id, name, name_search, lat, lng, department, updated_at) VALUES
+             ('PARIS', 'Paris', 'paris', 48.0, 2.0, '75', datetime('now')),
+             ('LYON', 'Lyon', 'lyon', 45.0, 4.0, '69', datetime('now')),
+             ('NO_GEO', 'Sans GPS', 'sans gps', NULL, NULL, '75', datetime('now')),
+             ('NO_LNG', 'Sans longitude', 'sans longitude', 48.0, NULL, '75', datetime('now')),
+             ('OLD', 'Ancien', 'ancien', 48.0, 2.0, '75', '2000-01-01 00:00:00')",
         )
         .execute(&pool)
         .await

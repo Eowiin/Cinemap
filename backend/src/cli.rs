@@ -23,7 +23,12 @@ pub enum SubCommands {
         #[arg(long, conflicts_with = "cinema")]
         department: Option<String>,
     },
-    Serve,
+    /// Lance l'API HTTP.
+    Serve {
+        /// Adresse d'écoute (en prod, nginx est devant : inutile d'exposer le port).
+        #[arg(long, env = "BIND_ADDR", default_value = "127.0.0.1:3000")]
+        addr: String,
+    },
 }
 
 #[derive(Parser)]

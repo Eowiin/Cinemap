@@ -5,7 +5,7 @@ Le **quoi** et le **pourquoi** sont écrits en entier. Le SQL est donné presque
 
 Références : `API.md` (le contrat, **fait foi** : toute modification se fait d'abord là-bas), `SOBRIETE.md`, `ETAPE2.md` (pour le style des tests sur base en mémoire).
 
-Dernière mise à jour : 2026-10-08. **Où tu en es : lot 0.1 fait (données de Paris en base), 0.2 et 0.3 à faire.** `serve` répond encore « Hello, World! » sur `0.0.0.0:3000`.
+Dernière mise à jour : 2026-10-08. **Où tu en es : lots 0 à K écrits par Claude à ta demande (2026-10-08)**, `cargo test` (140 tests) / `clippy --all-targets` / `fmt --check` propres, `curl` des lots D à I vérifiés sur la base de Paris. Mesures `oha` faites ; vérification France entière abandonnée (2026-10-08 : peu d'intérêt, on passe aux étapes 4 et 5). **Étape 3 terminée.** Écarts avec la feuille de route en bas du fichier.
 
 ## Vue d'ensemble
 
@@ -91,9 +91,9 @@ WHERE lat IS NOT NULL
 DROP VIEW visible_cinemas;
 ```
 
-- [ ] Crée la migration.
-- [ ] Remplace la requête de `visible_cinema_ids` (`src/showtimes/mod.rs`) par `SELECT id FROM visible_cinemas WHERE (? IS NULL OR department = ?) ORDER BY id`.
-- [ ] Le test `visible_cinema_query_filters_location_age_and_department` doit rester vert **sans modification** : c'est la preuve que la vue dit la même chose que l'ancienne requête.
+- [x] Crée la migration.
+- [x] Remplace la requête de `visible_cinema_ids` (`src/showtimes/mod.rs`) par `SELECT id FROM visible_cinemas WHERE (? IS NULL OR department = ?) ORDER BY id`.
+- [x] Le test `visible_cinema_query_filters_location_age_and_department` doit rester vert **sans modification** : c'est la preuve que la vue dit la même chose que l'ancienne requête.
 
 Pourquoi une vue et pas une constante Rust : la vue marche aussi dans `sqlite3` à la main, et les macros `query!` la vérifient à la compilation.
 
@@ -103,9 +103,9 @@ Pourquoi une vue et pas une constante Rust : la vue marche aussi dans `sqlite3` 
 
 L'API a besoin du « jour ciné d'aujourd'hui » (date par défaut, `/api/meta`), exactement comme le scraper.
 
-- [ ] **Fichier** : `src/time.rs` (et `pub mod time;` dans `lib.rs`).
-- [ ] `pub fn paris_today() -> NaiveDate` : déplace la ligne `Utc::now().with_timezone(&Paris).date_naive()` de `showtimes::scrape` ici, et appelle-la depuis le scraper.
-- [ ] Ajoute aussi `pub const DATE_FORMAT: &str = "%Y-%m-%d";` et remplace les `"%Y-%m-%d"` du scraper : un seul endroit pour le format.
+- [x] **Fichier** : `src/time.rs` (et `pub mod time;` dans `lib.rs`).
+- [x] `pub fn paris_today() -> NaiveDate` : déplace la ligne `Utc::now().with_timezone(&Paris).date_naive()` de `showtimes::scrape` ici, et appelle-la depuis le scraper.
+- [x] Ajoute aussi `pub const DATE_FORMAT: &str = "%Y-%m-%d";` et remplace les `"%Y-%m-%d"` du scraper : un seul endroit pour le format.
 
 **C'est fini quand** : `cargo test` vert, `select count(*) from visible_cinemas` donne le même nombre que `select count(*) from cinemas where lat is not null and lng is not null and updated_at >= datetime('now','-14 days')`.
 
@@ -127,7 +127,7 @@ http-body-util = "0.1"                                 # lire le corps d'une ré
 
 Et dans `sqlx`, ajoute la feature `"json"` (décision 7).
 
-- [ ] `cargo build` passe.
+- [x] `cargo build` passe.
 
 ### A.2 Le module `api`
 
@@ -168,17 +168,17 @@ Indices :
 - Un handler reçoit l'état avec `State(state): State<AppState>`.
 - La table des départements : `get_departments().map(|d| (d.code_insee, d.nom)).collect()`.
 
-- [ ] `AppState`, `router()` avec une seule route provisoire `/api/meta` qui renvoie `"ok"`.
+- [x] `AppState`, `router()` avec une seule route provisoire `/api/meta` qui renvoie `"ok"`.
 
 ### A.3 La commande `serve`
 
 **Fichiers** : `src/cli.rs`, `src/main.rs`.
 
-- [ ] `Serve { #[arg(long, env = "BIND_ADDR", default_value = "127.0.0.1:3000")] addr: String }` (décision 6). Pour `env = …`, clap a besoin de la feature `"env"` dans `Cargo.toml`.
-- [ ] `serve(pool, addr)` : construit l'état, `TcpListener::bind(&addr)`, `info!(%addr, "API démarrée")`, `axum::serve(listener, router(state))`.
-- [ ] **Arrêt propre** : `.with_graceful_shutdown(shutdown_signal())` avec `async fn shutdown_signal() { tokio::signal::ctrl_c().await.ok(); }`. Les requêtes en cours se terminent avant la sortie. (En prod, systemd envoie `SIGTERM` : on l'ajoutera à l'étape 6 avec `tokio::signal::unix::signal(SignalKind::terminate())`.)
-- [ ] Supprime `root()` et le « Hello, World! ».
-- [ ] Déplace `serve` hors de `main.rs` (dans `api/mod.rs`, `pub async fn serve(...)`), pour que `main.rs` reste un aiguillage.
+- [x] `Serve { #[arg(long, env = "BIND_ADDR", default_value = "127.0.0.1:3000")] addr: String }` (décision 6). Pour `env = …`, clap a besoin de la feature `"env"` dans `Cargo.toml`.
+- [x] `serve(pool, addr)` : construit l'état, `TcpListener::bind(&addr)`, `info!(%addr, "API démarrée")`, `axum::serve(listener, router(state))`.
+- [x] **Arrêt propre** : `.with_graceful_shutdown(shutdown_signal())` avec `async fn shutdown_signal() { tokio::signal::ctrl_c().await.ok(); }`. Les requêtes en cours se terminent avant la sortie. (En prod, systemd envoie `SIGTERM` : on l'ajoutera à l'étape 6 avec `tokio::signal::unix::signal(SignalKind::terminate())`.)
+- [x] Supprime `root()` et le « Hello, World! ».
+- [x] Déplace `serve` hors de `main.rs` (dans `api/mod.rs`, `pub async fn serve(...)`), pour que `main.rs` reste un aiguillage.
 
 **C'est fini quand** :
 
@@ -210,12 +210,12 @@ pub enum AppError {
 pub type ApiResult<T> = Result<T, AppError>;
 ```
 
-- [ ] `impl IntoResponse for AppError` :
+- [x] `impl IntoResponse for AppError` :
   - choisir `(StatusCode, code, message)` avec un `match` ;
   - pour `Internal` : **logguer** l'erreur complète (`tracing::error!(error = format!("{e:#}"), …)`) mais renvoyer au client un message générique (`"Erreur interne"`) : on ne divulgue jamais un message SQLite ;
   - construire le corps avec `serde_json::json!({ "error": { "code": code, "message": message } })` et renvoyer `(status, Json(body)).into_response()`.
-- [ ] `impl From<sqlx::Error> for AppError` et `impl From<anyhow::Error> for AppError` → `Internal`. Grâce à ça, `?` fonctionne directement dans les handlers sur une requête SQL.
-- [ ] Tests : pour chaque variante, `into_response()` donne le bon statut. Pour lire le corps dans un test : `axum::body::to_bytes(response.into_body(), usize::MAX).await` puis `serde_json::from_slice::<serde_json::Value>`.
+- [x] `impl From<sqlx::Error> for AppError` et `impl From<anyhow::Error> for AppError` → `Internal`. Grâce à ça, `?` fonctionne directement dans les handlers sur une requête SQL.
+- [x] Tests : pour chaque variante, `into_response()` donne le bon statut. Pour lire le corps dans un test : `axum::body::to_bytes(response.into_body(), usize::MAX).await` puis `serde_json::from_slice::<serde_json::Value>`.
 
 Question à te poser : pourquoi `NotFound(&'static str)` et pas `String` ? (Indice : qui alloue, et combien de fois ?)
 
@@ -248,26 +248,26 @@ Dans les handlers : `Query(raw): Query<RawQuery>`. Avec des `Option<String>`, `Q
 
 **Fichier** : `src/api/params.rs`. Chacune : `fn …(raw: Option<&str>, …) -> Result<…, AppError>`, **pure**, testée.
 
-- [ ] `parse_date(raw: Option<&str>, today: NaiveDate) -> ApiResult<NaiveDate>`
+- [x] `parse_date(raw: Option<&str>, today: NaiveDate) -> ApiResult<NaiveDate>`
   - `None` → `today` ; `"2026-10-08"` → la date ; `"2026-13-01"`, `"08/10/2026"`, `""` → `BadRequest("Date invalide : …. Format attendu : YYYY-MM-DD")`.
   - `today` est un **paramètre** : la fonction ne lit pas l'horloge, donc elle se teste (même idée que `cine_dates`).
   - Indice : `NaiveDate::parse_from_str(s, DATE_FORMAT)`.
-- [ ] `parse_after(raw: Option<&str>) -> ApiResult<Option<NaiveTime>>`
+- [x] `parse_after(raw: Option<&str>) -> ApiResult<Option<NaiveTime>>`
   - `"20:00"` → `Some(20:00)` ; `"9:05"` → accepté (décision 10, un test le fixe) ; `"25:00"`, `"20h"` → `BadRequest`.
   - Indice : `NaiveTime::parse_from_str(s, "%H:%M")`.
-- [ ] `after_bound(date: NaiveDate, after: Option<NaiveTime>) -> Option<String>`
+- [x] `after_bound(date: NaiveDate, after: Option<NaiveTime>) -> Option<String>`
   - → `Some("2026-10-08T20:00:00")`, la chaîne à comparer à `starts_at` (convention `after` de `API.md` : on compare le `starts_at` **complet**, donc la séance de 00h15 le lendemain reste incluse avec `after=22:00`).
-- [ ] `enum VersionFilter { Vf, Vo }` + `parse_version(raw) -> ApiResult<Option<VersionFilter>>`
+- [x] `enum VersionFilter { Vf, Vo }` + `parse_version(raw) -> ApiResult<Option<VersionFilter>>`
   - `"VF"` → `Vf`, `"VO"` → `Vo` ; `"VOST"`, `"vf"`, `"xx"` → `BadRequest` (décision 9 : `"vf"` → 400, teste-le).
   - Méthode utile : `fn as_sql(&self) -> &'static str` qui renvoie `"VF"` / `"VO"`, pour la requête (voir B.4).
-- [ ] `parse_bool(raw) -> ApiResult<Option<bool>>` : `"true"` / `"false"` seulement.
-- [ ] `struct Position { lat: f64, lng: f64 }` + `parse_position(lat, lng) -> ApiResult<Option<Position>>`
+- [x] `parse_bool(raw) -> ApiResult<Option<bool>>` : `"true"` / `"false"` seulement.
+- [x] `struct Position { lat: f64, lng: f64 }` + `parse_position(lat, lng) -> ApiResult<Option<Position>>`
   - les deux absents → `None` ; les deux présents et valides → `Some` ;
   - un seul des deux → `BadRequest("lat et lng vont ensemble")` ;
   - hors bornes (`lat` ∉ [-90, 90], `lng` ∉ [-180, 180]) ou `NaN` → `BadRequest`. ⚠️ `"NaN".parse::<f64>()` **réussit** : vérifie `is_finite()`.
-- [ ] `parse_radius(raw) -> ApiResult<f64>` : défaut 15, `> 0` et `≤ 100`, sinon `BadRequest`.
-- [ ] `parse_limit(raw) -> ApiResult<u32>` : défaut 50, de 1 à 200 (décision 5).
-- [ ] `parse_search_query(raw) -> ApiResult<String>` : `trim`, puis `text::normalize`, puis au moins **2 caractères** (`chars().count()`, pas `len()` : `"é"` fait 2 octets). Renvoie la chaîne normalisée.
+- [x] `parse_radius(raw) -> ApiResult<f64>` : défaut 15, `> 0` et `≤ 100`, sinon `BadRequest`.
+- [x] `parse_limit(raw) -> ApiResult<u32>` : défaut 50, de 1 à 200 (décision 5).
+- [x] `parse_search_query(raw) -> ApiResult<String>` : `trim`, puis `text::normalize`, puis au moins **2 caractères** (`chars().count()`, pas `len()` : `"é"` fait 2 octets). Renvoie la chaîne normalisée.
 
 Astuce pour ne pas répéter le même code : une petite fonction générique
 
@@ -300,14 +300,14 @@ Avec les macros `query!`, les paramètres sont positionnels (`?`) : il faut lier
 
 SQLite n'a pas de fonctions géographiques. Stratégie (`API.md`, « Distance ») : un filtre **grossier** en SQL avec un rectangle (bounding box, qui profite d'un simple `BETWEEN`), puis le calcul **exact** en Rust sur les quelques dizaines de cinémas restants.
 
-- [ ] `pub fn haversine_km(a: Position, b: Position) -> f64`
+- [x] `pub fn haversine_km(a: Position, b: Position) -> f64`
   - Formule : `R = 6371.0` ; `dlat = (b.lat - a.lat).to_radians()` ; `dlng` idem ; `h = sin²(dlat/2) + cos(lat_a) · cos(lat_b) · sin²(dlng/2)` ; `d = 2R · asin(√h)`.
   - Tests : même point → `0.0` ; Paris (48.8566, 2.3522) – Lyon (45.7640, 4.8357) ≈ **392 km** (tolérance ±2 km : `(d - 392.0).abs() < 2.0`, jamais d'`assert_eq!` sur des `f64`).
-- [ ] `pub struct BoundingBox { min_lat, max_lat, min_lng, max_lng: f64 }` + `pub fn bounding_box(center: Position, radius_km: f64) -> BoundingBox`
+- [x] `pub struct BoundingBox { min_lat, max_lat, min_lng, max_lng: f64 }` + `pub fn bounding_box(center: Position, radius_km: f64) -> BoundingBox`
   - 1° de latitude ≈ 111,32 km partout : `dlat = radius_km / 111.32`.
   - 1° de longitude rétrécit vers les pôles : `dlng = radius_km / (111.32 * center.lat.to_radians().cos())`.
   - Test : le rectangle autour de Paris avec 15 km contient un point à 14 km au nord (`lat + 14/111.32`) et pas un point à 16 km.
-- [ ] `pub fn round_km(d: f64) -> f64` (décision 3) : `(d * 10.0).round() / 10.0`.
+- [x] `pub fn round_km(d: f64) -> f64` (décision 3) : `(d * 10.0).round() / 10.0`.
 
 Pourquoi le rectangle d'abord : sans lui, il faudrait lire les 3 100 cinémas et calculer 3 100 distances à chaque requête. Ce n'est pas énorme pour un processeur, mais c'est du travail inutile multiplié par chaque visiteur (`SOBRIETE.md` : mesurer, puis éviter le travail qui ne sert à rien).
 
@@ -331,11 +331,11 @@ Piège de tri : `f64` n'implémente pas `Ord` (à cause de `NaN`). Utilise `sort
 
 **Fichier** : `src/api/types.rs`. Ce sont les types TypeScript de `API.md`, traduits en Rust, avec `#[derive(Serialize)]`.
 
-- [ ] `CinemaSummary { id: String, name: String, city: Option<String>, lat: f64, lng: f64, art_et_essai: bool, distance_km: Option<f64> }`
-- [ ] `Cinema` = `CinemaSummary` + `address`, `postal_code`, `department`, `screens`, `seats`, `allocine_url`.
+- [x] `CinemaSummary { id: String, name: String, city: Option<String>, lat: f64, lng: f64, art_et_essai: bool, distance_km: Option<f64> }`
+- [x] `Cinema` = `CinemaSummary` + `address`, `postal_code`, `department`, `screens`, `seats`, `allocine_url`.
   - Indice : `#[serde(flatten)] summary: CinemaSummary` met les champs du résumé **au même niveau** dans le JSON, comme le `&` de TypeScript.
-- [ ] Rappel du contrat : « champs inconnus = `null` (jamais absents) ». Donc **pas** de `#[serde(skip_serializing_if = "Option::is_none")]`. Le comportement par défaut de serde (`None` → `null`) est exactement le bon.
-- [ ] `allocine_url` : `format!("https://www.allocine.fr/seance/salle_gen_csalle={id}.html")`. Calculé, pas stocké.
+- [x] Rappel du contrat : « champs inconnus = `null` (jamais absents) ». Donc **pas** de `#[serde(skip_serializing_if = "Option::is_none")]`. Le comportement par défaut de serde (`None` → `null`) est exactement le bon.
+- [x] `allocine_url` : `format!("https://www.allocine.fr/seance/salle_gen_csalle={id}.html")`. Calculé, pas stocké.
 
 ### D.2 La lecture en base
 
@@ -358,9 +358,9 @@ Une struct de ligne (`CinemaRow`) séparée de la struct de réponse (`CinemaSum
 
 **Fichier** : `src/api/cinemas.rs`.
 
-- [ ] Handler `pub async fn list(State(state): State<AppState>, Query(raw): Query<RawQuery>) -> ApiResult<Json<Vec<CinemaSummary>>>`.
-- [ ] Paramètres : `art_et_essai` (`parse_bool`), `lat`/`lng` (`parse_position`).
-- [ ] Requête :
+- [x] Handler `pub async fn list(State(state): State<AppState>, Query(raw): Query<RawQuery>) -> ApiResult<Json<Vec<CinemaSummary>>>`.
+- [x] Paramètres : `art_et_essai` (`parse_bool`), `lat`/`lng` (`parse_position`).
+- [x] Requête :
 
 ```sql
 SELECT id, name, city, lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool"
@@ -369,18 +369,18 @@ WHERE (?1 IS NULL OR art_et_essai = ?1)
 ORDER BY name_search
 ```
 
-- [ ] Si position : `distance_km = Some(round_km(haversine_km(position, cinema)))` pour chaque cinéma, puis tri par distance (décision 2). Ici **pas** de bounding box : l'endpoint renvoie tous les cinémas (pour la carte), seule la distance s'ajoute.
-- [ ] Route : `.route("/api/cinemas", get(cinemas::list))`.
+- [x] Si position : `distance_km = Some(round_km(haversine_km(position, cinema)))` pour chaque cinéma, puis tri par distance (décision 2). Ici **pas** de bounding box : l'endpoint renvoie tous les cinémas (pour la carte), seule la distance s'ajoute.
+- [x] Route : `.route("/api/cinemas", get(cinemas::list))`.
 
 Sobriété : la réponse fait ~3 100 éléments. Construis le `Vec<CinemaSummary>` directement avec `.into_iter().map(...).collect()` (une seule allocation, à la bonne taille), pas en poussant dans un `Vec::new()` qui se réalloue.
 
 ### D.4 `GET /api/cinemas/{id}`
 
-- [ ] Handler `pub async fn get_one(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Cinema>>`.
-- [ ] Requête : toutes les colonnes utiles `FROM visible_cinemas WHERE id = ?`, avec `.fetch_optional(&state.pool)`.
-- [ ] `None` → `AppError::NotFound("Cinéma introuvable")`. Indice : `.ok_or(AppError::NotFound(…))?`.
-- [ ] `department` : `row.department.and_then(|code| state.departments.get(&code).cloned())` (décision 1). Si le code est inconnu de la table, `null`.
-- [ ] Une fonction `async fn fetch_cinema(pool, departments, id) -> ApiResult<Cinema>` réutilisable : le lot F en a besoin.
+- [x] Handler `pub async fn get_one(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Cinema>>`.
+- [x] Requête : toutes les colonnes utiles `FROM visible_cinemas WHERE id = ?`, avec `.fetch_optional(&state.pool)`.
+- [x] `None` → `AppError::NotFound("Cinéma introuvable")`. Indice : `.ok_or(AppError::NotFound(…))?`.
+- [x] `department` : `row.department.and_then(|code| state.departments.get(&code).cloned())` (décision 1). Si le code est inconnu de la table, `null`.
+- [x] Une fonction `async fn fetch_cinema(pool, departments, id) -> ApiResult<Cinema>` réutilisable : le lot F en a besoin.
 
 **C'est fini quand** :
 
@@ -404,9 +404,9 @@ Et un cinéma non géocodé (`select id from cinemas where lat is null limit 1`)
 
 C'est aussi le **health check** du déploiement (étape 6) : il doit être rapide et ne jamais échouer tant que la base répond.
 
-- [ ] Struct de réponse : `Meta { today: String, last_scrape_at: Option<String>, dates_available: Vec<String>, cinema_count: i64, movie_count: i64 }`.
-- [ ] `today` = `paris_today()` formatée.
-- [ ] `last_scrape_at` (règle écrite dans `API.md`) : `finished_at` du dernier run `kind = 'showtimes'` **terminé**. La base stocke `2026-10-07 22:18:17` (UTC, format SQLite) ; le contrat veut `2026-10-07T22:18:17Z`. Fais la conversion en SQL :
+- [x] Struct de réponse : `Meta { today: String, last_scrape_at: Option<String>, dates_available: Vec<String>, cinema_count: i64, movie_count: i64 }`.
+- [x] `today` = `paris_today()` formatée.
+- [x] `last_scrape_at` (règle écrite dans `API.md`) : `finished_at` du dernier run `kind = 'showtimes'` **terminé**. La base stocke `2026-10-07 22:18:17` (UTC, format SQLite) ; le contrat veut `2026-10-07T22:18:17Z`. Fais la conversion en SQL :
 
 ```sql
 SELECT strftime('%Y-%m-%dT%H:%M:%SZ', finished_at) AS "at!: String"
@@ -417,7 +417,7 @@ LIMIT 1
 ```
 
   (`fetch_optional` : aucun run complet → `null`. Tant que tu n'as lancé que des `--department`, ce sera `null` : c'est voulu.)
-- [ ] `dates_available` : jours ≥ aujourd'hui ayant au moins une séance dans un cinéma visible.
+- [x] `dates_available` : jours ≥ aujourd'hui ayant au moins une séance dans un cinéma visible.
 
 ```sql
 SELECT DISTINCT s.date AS "date!: String"
@@ -426,8 +426,8 @@ WHERE s.date >= ?1
 ORDER BY s.date
 ```
 
-- [ ] `cinema_count` = `SELECT count(*) FROM visible_cinemas` ; `movie_count` = films distincts ayant une séance ≥ aujourd'hui dans un cinéma visible.
-- [ ] 4 petites requêtes séquentielles, c'est très bien (quelques millisecondes). Si tu veux t'entraîner : `tokio::try_join!` les lance en parallèle sur le pool (4 connexions). Mesure avant/après (lot J) : tu verras sans doute que ça ne change rien de visible, et c'est une bonne leçon.
+- [x] `cinema_count` = `SELECT count(*) FROM visible_cinemas` ; `movie_count` = films distincts ayant une séance ≥ aujourd'hui dans un cinéma visible.
+- [x] 4 petites requêtes séquentielles, c'est très bien (quelques millisecondes). Si tu veux t'entraîner : `tokio::try_join!` les lance en parallèle sur le pool (4 connexions). Mesure avant/après (lot J) : tu verras sans doute que ça ne change rien de visible, et c'est une bonne leçon.
 
 **C'est fini quand** :
 
@@ -448,10 +448,10 @@ Le programme d'un cinéma pour un jour : films triés par titre, séances par he
 
 **Fichier** : `src/api/types.rs`.
 
-- [ ] `MovieSummary { id: i64, title: String, poster_url: Option<String>, genres: Vec<String>, runtime_min: Option<i64>, release_date: Option<String> }`
-- [ ] `Showtime { id: String, starts_at: String, version: String, formats: Vec<String>, booking_url: Option<String> }`
-- [ ] `MovieShowtimes { movie: MovieSummary, showtimes: Vec<Showtime> }`
-- [ ] `CinemaShowtimesResponse { cinema: Cinema, date: String, dates: Vec<String>, movies: Vec<MovieShowtimes> }`
+- [x] `MovieSummary { id: i64, title: String, poster_url: Option<String>, genres: Vec<String>, runtime_min: Option<i64>, release_date: Option<String> }`
+- [x] `Showtime { id: String, starts_at: String, version: String, formats: Vec<String>, booking_url: Option<String> }`
+- [x] `MovieShowtimes { movie: MovieSummary, showtimes: Vec<Showtime> }`
+- [x] `CinemaShowtimesResponse { cinema: Cinema, date: String, dates: Vec<String>, movies: Vec<MovieShowtimes> }`
 
 Colonnes JSON (décision 7) : dans la struct de **ligne**, `genres AS "genres!: Json<Vec<String>>"` ; dans la réponse, `genres: row.genres.0` (le `.0` sort le `Vec` du `Json`, sans copie).
 
@@ -488,15 +488,15 @@ Une fonction **pure** `fn group_by_movie(rows: Vec<ShowtimeRow>) -> Vec<MovieSho
 
 ### F.3 Le handler
 
-- [ ] Ordre : `fetch_cinema` d'abord (404 si cinéma inconnu ou masqué, **avant** de lire les séances) ; puis paramètres (`date`, `version`, `after`) ; puis séances ; puis `dates`.
-- [ ] `dates` : jours ≥ aujourd'hui ayant au moins une séance **dans ce cinéma**, filtres `version`/`after` **ignorés** (le contrat le dit : c'est pour griser les jours vides dans le sélecteur).
+- [x] Ordre : `fetch_cinema` d'abord (404 si cinéma inconnu ou masqué, **avant** de lire les séances) ; puis paramètres (`date`, `version`, `after`) ; puis séances ; puis `dates`.
+- [x] `dates` : jours ≥ aujourd'hui ayant au moins une séance **dans ce cinéma**, filtres `version`/`after` **ignorés** (le contrat le dit : c'est pour griser les jours vides dans le sélecteur).
 
 ```sql
 SELECT DISTINCT date AS "date!: String" FROM showtimes WHERE cinema_id = ?1 AND date >= ?2 ORDER BY date
 ```
 
-- [ ] Date sans séance (ou hors `dates_available`) → **200** avec `movies: []` (convention de `API.md`), jamais 404.
-- [ ] Route : `.route("/api/cinemas/{id}/showtimes", get(cinemas::showtimes))`.
+- [x] Date sans séance (ou hors `dates_available`) → **200** avec `movies: []` (convention de `API.md`), jamais 404.
+- [x] Route : `.route("/api/cinemas/{id}/showtimes", get(cinemas::showtimes))`.
 
 **C'est fini quand** (après `scrape --department 75`) :
 
@@ -519,11 +519,11 @@ Et compare à l'œil avec la page AlloCiné du cinéma : mêmes films, mêmes ho
 
 ### G.1 `GET /api/movies/{id}`
 
-- [ ] Type `Movie` = `MovieSummary` (flatten) + `original_title`, `synopsis`, `directors: Vec<String>`, `cast: Vec<Person>`, `countries: Vec<String>`, `production_year`, `certificate`, `backdrop_url`, `trailer_url`, `rating`, `user_rating`.
-- [ ] `Person { name: String, role: Option<String> }` avec `#[derive(Serialize, Deserialize)]` : `Deserialize` parce qu'on la lit depuis la colonne JSON `cast_members` (`Json<Vec<Person>>`), `Serialize` parce qu'on la renvoie.
-- [ ] ⚠️ Nom : la colonne s'appelle `cast_members`, le champ du contrat s'appelle `cast`.
-- [ ] Un film existe en base mais n'a plus de séance → on le renvoie quand même (200) : un lien partagé hier doit encore afficher la fiche. Seul un `id` inconnu donne 404 (`"Film introuvable"`).
-- [ ] `id` : `Path(id): Path<i64>`. Un `id` non numérique (`/api/movies/abc`) : axum répond lui-même un 400 en texte. Pour garder notre format JSON, prends `Path(id): Path<String>` et parse avec `parse_number`… (décision 11).
+- [x] Type `Movie` = `MovieSummary` (flatten) + `original_title`, `synopsis`, `directors: Vec<String>`, `cast: Vec<Person>`, `countries: Vec<String>`, `production_year`, `certificate`, `backdrop_url`, `trailer_url`, `rating`, `user_rating`.
+- [x] `Person { name: String, role: Option<String> }` avec `#[derive(Serialize, Deserialize)]` : `Deserialize` parce qu'on la lit depuis la colonne JSON `cast_members` (`Json<Vec<Person>>`), `Serialize` parce qu'on la renvoie.
+- [x] ⚠️ Nom : la colonne s'appelle `cast_members`, le champ du contrat s'appelle `cast`.
+- [x] Un film existe en base mais n'a plus de séance → on le renvoie quand même (200) : un lien partagé hier doit encore afficher la fiche. Seul un `id` inconnu donne 404 (`"Film introuvable"`).
+- [x] `id` : `Path(id): Path<i64>`. Un `id` non numérique (`/api/movies/abc`) : axum répond lui-même un 400 en texte. Pour garder notre format JSON, prends `Path(id): Path<String>` et parse avec `parse_number`… (décision 11).
 
 ### G.2 Les cinémas dans un rayon (fonction partagée avec H)
 
@@ -546,11 +546,11 @@ Test sur base en mémoire : 3 cinémas (à 1 km, à 14 km, à 20 km du centre) a
 
 ### G.3 `GET /api/movies/{id}/showtimes`
 
-- [ ] `lat`/`lng` **obligatoires** : `parse_position(...)?.ok_or(AppError::BadRequest("lat et lng sont obligatoires".into()))?`.
-- [ ] `radius_km` (défaut 15, max 100), `date`, `version`, `after`.
-- [ ] Film inconnu → 404 (vérifie d'abord avec une requête légère sur `movies`, qui sert aussi à remplir `movie: MovieSummary`).
-- [ ] `cinemas_within(...)` → liste d'IDs.
-- [ ] **Passer une liste d'IDs à SQLite** : sqlx ne sait pas lier un `Vec` à `IN (?)` avec SQLite. L'astuce : sérialiser la liste en JSON et utiliser `json_each`, la fonction de table JSON de SQLite :
+- [x] `lat`/`lng` **obligatoires** : `parse_position(...)?.ok_or(AppError::BadRequest("lat et lng sont obligatoires".into()))?`.
+- [x] `radius_km` (défaut 15, max 100), `date`, `version`, `after`.
+- [x] Film inconnu → 404 (vérifie d'abord avec une requête légère sur `movies`, qui sert aussi à remplir `movie: MovieSummary`).
+- [x] `cinemas_within(...)` → liste d'IDs.
+- [x] **Passer une liste d'IDs à SQLite** : sqlx ne sait pas lier un `Vec` à `IN (?)` avec SQLite. L'astuce : sérialiser la liste en JSON et utiliser `json_each`, la fonction de table JSON de SQLite :
 
 ```sql
 SELECT s.cinema_id AS "cinema_id!: String", s.id AS "showtime_id!: String", s.starts_at, s.version,
@@ -565,8 +565,8 @@ ORDER BY s.cinema_id, s.starts_at
 ```
 
   avec `?3 = serde_json::to_string(&ids)?`.
-- [ ] Regroupement : les séances arrivent triées par cinéma. Range-les dans une `HashMap<&str, Vec<Showtime>>` (clé = `cinema_id`), puis parcours `nearby` (**déjà trié par distance**) et garde seulement les cinémas qui ont des séances. Le tri par distance du contrat est ainsi gratuit.
-- [ ] `dates` : jours ≥ aujourd'hui où ce film a au moins une séance **dans le rayon** (filtres version/after ignorés) : même `json_each`, `SELECT DISTINCT date`.
+- [x] Regroupement : les séances arrivent triées par cinéma. Range-les dans une `HashMap<&str, Vec<Showtime>>` (clé = `cinema_id`), puis parcours `nearby` (**déjà trié par distance**) et garde seulement les cinémas qui ont des séances. Le tri par distance du contrat est ainsi gratuit.
+- [x] `dates` : jours ≥ aujourd'hui où ce film a au moins une séance **dans le rayon** (filtres version/after ignorés) : même `json_each`, `SELECT DISTINCT date`.
 
 **C'est fini quand** :
 
@@ -587,9 +587,9 @@ curl -s "localhost:3000/api/movies/$M/showtimes?date=$D&lat=48.8566&lng=2.3522&r
 
 La page d'accueil : les films d'un jour, triés par nombre de cinémas qui les passent.
 
-- [ ] Paramètres : `date`, `lat`/`lng` (optionnels ici), `radius_km` (défaut 15, ne sert que si position), `version`, `after`, `limit`.
-- [ ] Sans position : France entière (toutes les séances des cinémas visibles). Avec position : seulement les cinémas de `cinemas_within` → `json_each`.
-- [ ] Une seule requête d'agrégation :
+- [x] Paramètres : `date`, `lat`/`lng` (optionnels ici), `radius_km` (défaut 15, ne sert que si position), `version`, `after`, `limit`.
+- [x] Sans position : France entière (toutes les séances des cinémas visibles). Avec position : seulement les cinémas de `cinemas_within` → `json_each`.
+- [x] Une seule requête d'agrégation :
 
 ```sql
 SELECT
@@ -611,8 +611,8 @@ LIMIT ?5
 ```
 
   `?2` = `None` sans position (pas de filtre), `Some(json)` avec.
-- [ ] Cas limite : position fournie mais **aucun** cinéma dans le rayon → réponds directement `movies: []` sans lancer la requête (sinon `json_each('[]')` marche aussi, mais autant ne pas travailler pour rien).
-- [ ] `next_showtime` = la plus petite heure ≥ `after`. Le front passera `after=<heure actuelle>` pour « la prochaine séance » ; le backend ne lit pas l'heure courante (reste testable).
+- [x] Cas limite : position fournie mais **aucun** cinéma dans le rayon → réponds directement `movies: []` sans lancer la requête (sinon `json_each('[]')` marche aussi, mais autant ne pas travailler pour rien).
+- [x] `next_showtime` = la plus petite heure ≥ `after`. Le front passera `after=<heure actuelle>` pour « la prochaine séance » ; le backend ne lit pas l'heure courante (reste testable).
 
 Sobriété : c'est l'endpoint le plus coûteux (agrégation sur toutes les séances du jour, ~50 000 lignes pour la France). L'index `idx_showtimes_date` sert ici. Vérifie avec `EXPLAIN QUERY PLAN` dans `sqlite3` que tu vois `USING INDEX idx_showtimes_date` et pas `SCAN showtimes`. Note le temps de réponse au lot J.
 
@@ -631,15 +631,15 @@ curl -s "localhost:3000/api/movies?date=$D&limit=500" | jq .error.code          
 
 **Fichier** : `src/api/search.rs`.
 
-- [ ] `q` : `parse_search_query` (normalisée, ≥ 2 caractères, sinon 400).
-- [ ] ⚠️ **`LIKE` et les jokers** : dans `LIKE`, `%` et `_` sont des jokers. Si l'utilisateur tape `100%`, il ne faut pas que `%` matche tout. Échappe-les avant de construire le motif :
+- [x] `q` : `parse_search_query` (normalisée, ≥ 2 caractères, sinon 400).
+- [x] ⚠️ **`LIKE` et les jokers** : dans `LIKE`, `%` et `_` sont des jokers. Si l'utilisateur tape `100%`, il ne faut pas que `%` matche tout. Échappe-les avant de construire le motif :
 
 ```rust
 fn like_pattern(q: &str) -> String  // "100%" → "%100\%%"   (puis `LIKE ?1 ESCAPE '\'`)
 ```
 
   Remplace `\` par `\\`, `%` par `\%`, `_` par `\_`, puis entoure de `%`. Teste-la (fonction pure).
-- [ ] Films : uniquement ceux qui ont au moins une séance ≥ aujourd'hui dans un cinéma visible ; les « plus diffusés d'abord » = nombre de séances.
+- [x] Films : uniquement ceux qui ont au moins une séance ≥ aujourd'hui dans un cinéma visible ; les « plus diffusés d'abord » = nombre de séances.
 
 ```sql
 SELECT m.id AS "id!: i64", m.title, m.poster_url, m.genres AS "genres!: Json<Vec<String>>", m.runtime_min, m.release_date
@@ -654,7 +654,7 @@ LIMIT 8
 ```
 
   Le titre original n'a pas de colonne `_search` : on cherche sur le titre français seul. Chercher aussi « The Batman » quand le titre français diffère demanderait une migration `original_title_search` + son remplissage dans `upsert_movie` : note-le en idée, ne le fais pas maintenant.
-- [ ] Cinémas : nom **ou** ville (`"montreuil"` doit trouver le Méliès).
+- [x] Cinémas : nom **ou** ville (`"montreuil"` doit trouver le Méliès).
 
 ```sql
 SELECT id, name, city, lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool"
@@ -665,7 +665,7 @@ LIMIT 8
 ```
 
   `distance_km` = `null` (pas de position dans `/api/search`).
-- [ ] Réponse : `{ "movies": [...], "cinemas": [...] }`.
+- [x] Réponse : `{ "movies": [...], "cinemas": [...] }`.
 
 Pourquoi c'est rapide sans index plein texte : `LIKE '%…%'` lit toute la table, mais `cinemas` fait 3 100 lignes et les films à l'affiche quelques centaines. C'est de l'ordre de la milliseconde. Un index FTS5 ne se justifierait qu'à des centaines de milliers de lignes : ne l'ajoute pas sans mesure.
 
@@ -687,18 +687,18 @@ curl -s 'localhost:3000/api/search?q=a_' | jq '.cinemas | length'               
 
 Une couche (`layer`) enveloppe tous les handlers : c'est là qu'on met ce qui vaut pour **toutes** les réponses.
 
-- [ ] **J.1 Logs** : `.layer(TraceLayer::new_for_http())`. Avec `RUST_LOG=info,tower_http=debug`, chaque requête est loggée avec sa durée.
-- [ ] **J.2 Gzip** : `.layer(CompressionLayer::new())`. Ne compresse que si le client envoie `Accept-Encoding: gzip`. Vérifie le gain sur `/api/cinemas` :
+- [x] **J.1 Logs** : `.layer(TraceLayer::new_for_http())`. Avec `RUST_LOG=info,tower_http=debug`, chaque requête est loggée avec sa durée.
+- [x] **J.2 Gzip** : `.layer(CompressionLayer::new())`. Ne compresse que si le client envoie `Accept-Encoding: gzip`. Vérifie le gain sur `/api/cinemas` :
 
 ```bash
 curl -s localhost:3000/api/cinemas | wc -c                                   # taille brute
 curl -s -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas | wc -c        # taille compressée (API.md annonce ≈ 90 Ko pour ~3 100 cinémas)
 ```
 
-- [ ] **J.3 Cache** : `Cache-Control: public, max-age=300` sur les réponses (contrat). `SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300"))`. Décision 8 : seulement sur les **2xx**, et `no-store` sur les erreurs. Indice : `SetResponseHeaderLayer::overriding` accepte aussi une closure qui reçoit la réponse (`|res: &Response<_>| …` → `Option<HeaderValue>`) : regarde `res.status().is_success()`. Autre option : mettre `no-store` directement dans `AppError::into_response`, et `if_not_present(public, max-age=300)` en couche. Teste les deux cas (200 et 404).
+- [x] **J.3 Cache** : `Cache-Control: public, max-age=300` sur les réponses (contrat). `SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300"))`. Décision 8 : seulement sur les **2xx**, et `no-store` sur les erreurs. Indice : `SetResponseHeaderLayer::overriding` accepte aussi une closure qui reçoit la réponse (`|res: &Response<_>| …` → `Option<HeaderValue>`) : regarde `res.status().is_success()`. Autre option : mettre `no-store` directement dans `AppError::into_response`, et `if_not_present(public, max-age=300)` en couche. Teste les deux cas (200 et 404).
 - ~~**J.4 CORS**~~ : supprimé (décision 12). En dev, le front passe par le proxy Vite ; en prod, même domaine.
 - [ ] **J.5 Bonus sobriété** (optionnel) : les colonnes `genres`, `formats`… sont déjà du JSON en base. Les décoder en `Vec<String>` puis les ré-encoder en JSON, c'est un aller-retour inutile. `Box<serde_json::value::RawValue>` permet de les recopier telles quelles dans la réponse. Mesure d'abord (J.6) : si le gain n'est pas visible, garde `Json<Vec<String>>`, plus simple et qui valide le format.
-- [ ] **J.6 Mesures** → `SOBRIETE.md` (toujours en `--release`) :
+- [x] **J.6 Mesures** (faites sur la base Paris, `oha` compris ; pas de re-mesure France entière, décision du 2026-10-08) → `SOBRIETE.md` (toujours en `--release`) :
   - mémoire au repos du processus `serve` : `ps -o rss= -p $(pgrep -f 'backend serve')` (en Ko) ;
   - temps de réponse de chaque endpoint : `curl -s -o /dev/null -w '%{time_total}\n' URL` (5 fois, prends la médiane) ;
   - débit sous charge, si tu installes `oha` (`brew install oha`) : `oha -z 10s -c 20 "localhost:3000/api/movies?date=$D"` → requêtes/s et latence p99.
@@ -749,21 +749,21 @@ let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
 ### K.3 Les tests à écrire (un par ligne)
 
-- [ ] `/api/cinemas` : `LYON`, `PARIS1`, `PARIS2` seulement (ni `NOGEO` ni `OLD`) ; `distance_km` = `null` sans position.
-- [ ] `/api/cinemas?lat=…&lng=…` : ordre `PARIS1`, `PARIS2`, `LYON` ; distances arrondies à 0,1.
-- [ ] `/api/cinemas/NOGEO` et `/api/cinemas/OLD` → 404 avec `error.code = "not_found"`.
-- [ ] `/api/cinemas/PARIS1` : `department = "Paris"`, **tous** les champs présents (vérifie qu'une clé `null` existe bien : `json.get("screens").is_some()`).
-- [ ] `/api/cinemas/PARIS1/showtimes?date=2026-10-08&after=22:00` : contient la séance de 00h15.
-- [ ] `/api/cinemas/PARIS1/showtimes?date=2026-10-09` : ne contient **pas** la séance de 00h15.
-- [ ] `…?version=VO` : versions ⊂ {VO, VOST} ; `…?version=VF` : uniquement VF.
-- [ ] `…?date=2030-01-01` → 200, `movies: []`.
-- [ ] `/api/movies?date=2026-10-08` : film C absent, tri par `cinema_count`.
-- [ ] `/api/movies/{C}` → 200 ; `/api/movies/999` → 404.
-- [ ] `/api/movies/{A}/showtimes` sans `lat` → 400 ; avec Paris et `radius_km=5` → seulement `PARIS1`.
-- [ ] `/api/search?q=cine cite` et `?q=montreuil` trouvent le bon cinéma ; `?q=a` → 400.
-- [ ] Paramètres invalides (`date=2026-13-01`, `after=25:00`, `version=VOST`, `version=vf`, `art_et_essai=oui`, `limit=0`, `/api/movies/abc`) → 400 `bad_request` au format JSON.
-- [ ] Une erreur porte `cache-control: no-store`, une réponse 200 `public, max-age=300`.
-- [ ] `/api/meta` : `dates_available` ne contient que des dates ≥ `today` (attention, `today` dépend de l'horloge dans ce test : vérifie la forme, pas les valeurs exactes).
+- [x] `/api/cinemas` : `LYON`, `PARIS1`, `PARIS2` seulement (ni `NOGEO` ni `OLD`) ; `distance_km` = `null` sans position.
+- [x] `/api/cinemas?lat=…&lng=…` : ordre `PARIS1`, `PARIS2`, `LYON` ; distances arrondies à 0,1.
+- [x] `/api/cinemas/NOGEO` et `/api/cinemas/OLD` → 404 avec `error.code = "not_found"`.
+- [x] `/api/cinemas/PARIS1` : `department = "Paris"`, **tous** les champs présents (vérifie qu'une clé `null` existe bien : `json.get("screens").is_some()`).
+- [x] `/api/cinemas/PARIS1/showtimes?date=2026-10-08&after=22:00` : contient la séance de 00h15.
+- [x] `/api/cinemas/PARIS1/showtimes?date=2026-10-09` : ne contient **pas** la séance de 00h15.
+- [x] `…?version=VO` : versions ⊂ {VO, VOST} ; `…?version=VF` : uniquement VF.
+- [x] `…?date=2030-01-01` → 200, `movies: []`.
+- [x] `/api/movies?date=2026-10-08` : film C absent, tri par `cinema_count`.
+- [x] `/api/movies/{C}` → 200 ; `/api/movies/999` → 404.
+- [x] `/api/movies/{A}/showtimes` sans `lat` → 400 ; avec Paris et `radius_km=5` → seulement `PARIS1`.
+- [x] `/api/search?q=cine cite` et `?q=montreuil` trouvent le bon cinéma ; `?q=a` → 400.
+- [x] Paramètres invalides (`date=2026-13-01`, `after=25:00`, `version=VOST`, `version=vf`, `art_et_essai=oui`, `limit=0`, `/api/movies/abc`) → 400 `bad_request` au format JSON.
+- [x] Une erreur porte `cache-control: no-store`, une réponse 200 `public, max-age=300`.
+- [x] `/api/meta` : `dates_available` ne contient que des dates ≥ `today` (attention, `today` dépend de l'horloge dans ce test : vérifie la forme, pas les valeurs exactes).
 
 **C'est fini quand (fin de l'étape 3, à cocher dans `PLAN.md`)** :
 
@@ -790,3 +790,26 @@ Ensuite : étape 4 (TMDB) côté backend, et je branche le front sur la vraie AP
 | Lancer | `axum::serve(listener, app).with_graceful_shutdown(signal).await` |
 
 Erreur de compilation fréquente : « the trait `Handler<_, _>` is not implemented ». Causes habituelles : un argument du handler n'est pas un extracteur, le type de retour n'implémente pas `IntoResponse`, ou le futur n'est pas `Send` (un `MutexGuard` de `std` ou un `Rc` gardé à travers un `.await`). `#[axum::debug_handler]` au-dessus du handler (feature `"macros"` d'axum) donne un message beaucoup plus clair.
+
+---
+
+## Ce qui a été fait différemment de la feuille de route (2026-10-08)
+
+À relire en priorité : ce sont les endroits où le code ne suit pas le texte ci-dessus.
+
+- **0.2** : le test `visible_cinema_query_filters_location_age_and_department` **a dû changer**. La vue exige aussi `lng IS NOT NULL`, l'ancienne requête du scraper ne regardait que `lat`, et le test insérait des cinémas sans `lng`. La fixture donne maintenant une `lng`, et un cinéma `NO_LNG` vérifie la nouvelle règle (c'est celle du contrat).
+- **A.1** : `tower-http` 0.7 (déjà dans ton `Cargo.toml`) au lieu de 0.6, sans la feature `cors` (décision 12). `clap` a reçu la feature `env`.
+- **A.3** : seulement `ctrl_c` pour l'arrêt propre ; `pkill` (SIGTERM) tue le processus sans le log « API arrêtée ». SIGTERM reste pour l'étape 6.
+- **B.3** : `Position` est dans `geo.rs` (pas `params.rs`). `parse_value` (une chaîne) + `parse_number` (une `Option`) au lieu d'une seule fonction, pour éviter des `.expect()` dans `parse_position` et `parse_movie_id`.
+- **H** : `ORDER BY count(DISTINCT s.cinema_id) DESC, count(*) DESC` au lieu de `ORDER BY cinema_count` : avec les macros, l'alias s'appelle littéralement `cinema_count!: i64`, SQLite répond « no such column ».
+- **J.3** : les deux options combinées : `AppError::into_response` pose `no-store`, et la couche `SetResponseHeaderLayer::if_not_present` met `public, max-age=300` sur les 2xx (et `no-store` sur le reste, pour le 404 de route inconnue).
+- **Route inconnue** : `.fallback` renvoie un 404 JSON (`"Route introuvable"`) au lieu du 404 vide d'axum.
+- **J.5** (`RawValue`) : pas fait, les mesures ne le justifient pas (≤ 3 ms hors `/api/cinemas`).
+- **K.1** : séances en **2099** au lieu du 08/10/2026, pour que les filtres `date >= aujourd'hui` (dates, recherche, meta) ne cassent pas les tests dès demain.
+- **Département** : `get_departments()` ignore Mayotte (976, pas de chemin AlloCiné) et logge un `WARN` au démarrage de `serve`. Aucun cinéma 976 en base aujourd'hui ; si un jour il y en a, son `department` sera `null`.
+
+Questions pour toi (la partie Rust non triviale) :
+
+1. Dans `movies::showtimes` (fin de la fonction), pourquoi `by_cinema.remove(&cinema.summary.id)` plutôt que `by_cinema.get(&cinema.summary.id).cloned()` ? Que coûterait la seconde version ?
+2. Dans `cinemas::list`, le tri se fait sur la distance **arrondie** avec `sort_by` (stable). Qu'est-ce que la stabilité apporte ici, et que se passerait-il avec `sort_unstable_by` ?
+3. `AppState` est cloné à chaque requête : qu'est-ce qui est réellement copié ?

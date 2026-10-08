@@ -42,6 +42,32 @@ Cette estimation dépasse les 30–40 min prévues dans `PLAN.md`. Atteindre 30�
 
 107 cinémas, 321 couples (cinéma, date), 5 464 séances écrites, **117 s**, sans erreur ni coupe-circuit. Soit ≈ 1,1 s par cinéma (3 dates). Extrapolé aux ~3 100 cinémas visibles : ≈ **57 min**, cohérent avec l'estimation de 62–65 min au plafond de 3 req/s (beaucoup de petits cinémas n'ont qu'une page, certains répondent « aucune séance »). Mémoire et CPU : à mesurer sur le run complet avec `/usr/bin/time -l`.
 
+### API : premières mesures (2026-10-08, base Paris seulement)
+
+`serve` en `--release`, base après `scrape --department 75` (3 121 cinémas visibles, 5 465 séances). Médiane de 5 `curl` en local, avec `Accept-Encoding: gzip` :
+
+| Endpoint | Temps |
+|---|---|
+| `/api/meta` | 7,1 ms |
+| `/api/cinemas` (3 121 éléments) | 11,9 ms |
+| `/api/cinemas/C0159` | 0,5 ms |
+| `/api/cinemas/C0159/showtimes` | 1,5 ms |
+| `/api/movies` (France) | 1,9 ms |
+| `/api/movies` (Paris, 15 km) | 3,0 ms |
+| `/api/movies/{id}` | 0,5 ms |
+| `/api/movies/{id}/showtimes` (Paris) | 2,0 ms |
+| `/api/search?q=cine cite` | 2,9 ms |
+
+- `/api/cinemas` : **430 Ko** bruts, **98 Ko** en gzip (÷ 4,4), proche des ≈ 90 Ko annoncés par `API.md`.
+- RSS de `serve` au repos : **22 Mo**, 22,5 Mo après la série de requêtes (runtime tokio multi-thread + cache de pages SQLite ; plus que les « quelques Mo » espérés, à creuser si ça compte : `#[tokio::main(flavor = "current_thread")]` serait la première piste à mesurer).
+- `EXPLAIN QUERY PLAN` de `/api/movies` : `SEARCH s USING INDEX idx_showtimes_date`, pas de `SCAN showtimes`.
+- `/api/meta` est le plus lent des petits endpoints : `DISTINCT date` joint à `visible_cinemas` parcourt toutes les séances à venir. À remesurer sur la France entière (~10× plus de séances) avant d'y toucher.
+- Débit sous charge, `oha -z 10s -c 20` avec gzip, même base :
+  - `/api/movies?date=…` : **602 req/s**, moyenne 33 ms, p99 41 ms. Avec 20 clients pour 4 connexions SQLite, la file d'attente du pool fait l'essentiel de la latence (≈ 6–7 ms de connexion par requête).
+  - `/api/cinemas` : **77 req/s**, moyenne 263 ms, p99 291 ms. Ici c'est le CPU : sérialiser 430 Ko de JSON puis les compresser, à chaque requête, pour une réponse qui ne change qu'à l'import des cinémas. Piste si ça compte un jour : garder la réponse compressée en mémoire (ou laisser le cache nginx/PWA de 5 min faire le travail, ce qui suffit sans doute pour l'usage prévu).
+  - RSS après la charge : **37 Mo** (22 Mo au repos).
+- Pas de mesure sur la France entière (décidé le 2026-10-08 : peu d'intérêt pour l'API, place disque économisée). Les ordres de grandeur ci-dessus suffisent pour avancer.
+
 ### Outils de mesure
 
 - **Toujours en `--release`** : le mode debug est 10 à 100 fois plus lent, ses chiffres ne veulent rien dire.
