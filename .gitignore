@@ -16,3 +16,4 @@ frontend/dist/
 
 # macOS
 .DS_Store
+frontend/dev-dist/

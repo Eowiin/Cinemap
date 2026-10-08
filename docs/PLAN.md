@@ -48,7 +48,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 
 ## Répartition du travail
 
-- **Backend (Rust)** : le propriétaire l'écrit **lui-même**. Claude explique, oriente (crates, concepts, pièges) et fait la revue de code, **sans écrire l'implémentation** sauf demande explicite.
+- **Backend (Rust)** : le propriétaire l'écrit **lui-même**. Claude explique, oriente (crates, concepts, pièges) et fait la revue de code, **sans écrire l'implémentation** sauf demande explicite. Le 2026-10-08, le propriétaire a délégué les étapes 3 et 4 à Claude pour avancer : chaque fichier `ETAPE*.md` liste alors les écarts et quelques questions Rust pour s'approprier le code.
 - **Frontend** : Claude l'implémente.
 - **Doc / CI / déploiement** : Claude, validé par le propriétaire.
 
@@ -99,22 +99,26 @@ Suivi détaillé : [`ETAPE3.md`](ETAPE3.md).
 - [x] Tests d'intégration sur une base de test (`tests/api.rs`, 19 tests)
 - [x] Vérification sur la base de Paris (`curl` des lots D à I, mesures `oha` dans `SOBRIETE.md`) ; pas de re-vérification France entière (décision du 2026-10-08). **Étape 3 terminée le 2026-10-08.**
 
-### 4. Enrichissement TMDB (backend, propriétaire)
-- [ ] Clé TMDB (compte gratuit), stockée dans `.env`
-- [ ] Croisement par titre original + année, puis bande-annonce, image de fond, note
-- [ ] Attribution TMDB affichée dans le front
+### 4. Enrichissement TMDB (backend, écrit par Claude à la demande du propriétaire)
+Suivi détaillé : [`ETAPE4.md`](ETAPE4.md).
+- [x] Clé TMDB (compte gratuit, usage personnel), stockée dans `backend/.env` (`TMDB_API_KEY`)
+- [x] Croisement par titre original + année, puis bande-annonce, image de fond, note (`cargo run -- tmdb`, tests sur réponses écrites à la main)
+- [x] Attribution TMDB affichée dans le front (fiche film, dès qu'une donnée TMDB est affichée)
+- [x] Premier run réel (2026-10-08, Paris) : 312 films croisés sur 344 (91 %), 0 erreur, 77 s ; 12 croisements tirés au hasard tous corrects. **Étape 4 terminée.**
 
 ### 5. Frontend PWA (Claude, en parallèle dès l'étape 0 validée)
-- [ ] Vite + Svelte (+ TypeScript), prettier / eslint / vitest
-- [ ] Types TS générés à la main depuis `API.md`, données factices (fixtures JSON) tant que l'API n'existe pas
-- [ ] Carte MapLibre + OpenFreeMap, regroupement des marqueurs, thème clair/sombre
-- [ ] Accueil « à l'affiche » (avec géolocalisation, Paris par défaut)
-- [ ] Recherche film / cinéma
-- [ ] Fiche film et ses séances par cinéma (filtres VO / heure / date)
-- [ ] Fiche cinéma et ses séances
-- [ ] État dans l'URL (liens partageables), date calculée à Paris
-- [ ] PWA : manifeste, icônes, service worker (cache de la dernière réponse)
-- [ ] Responsive mobile d'abord
+Suivi détaillé : [`FRONT.md`](FRONT.md).
+- [x] Vite + Svelte 5 (+ TypeScript), prettier / eslint / vitest
+- [x] Types TS écrits à la main depuis `API.md` (branchés directement sur la vraie API, pas de données factices)
+- [x] Carte MapLibre + OpenFreeMap, regroupement des marqueurs, thème clair/sombre
+- [x] Accueil « à l'affiche » (avec géolocalisation, Paris par défaut)
+- [x] Recherche film / cinéma
+- [x] Fiche film et ses séances par cinéma (filtres VO / heure / date)
+- [x] Fiche cinéma et ses séances
+- [x] État dans l'URL (liens partageables), date calculée à Paris
+- [x] PWA : manifeste, icônes, service worker (cache de la dernière réponse)
+- [x] Responsive mobile d'abord
+- [ ] Essai sur un vrai téléphone (installation PWA, géolocalisation) par le propriétaire
 
 ### 6. Déploiement
 - [ ] Réécrire `docs/DEPLOY.md` : binaire + systemd + nginx (front statique, `/api` vers axum)

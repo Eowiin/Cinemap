@@ -17,6 +17,20 @@ docs/
   data/       données de référence (codes départements)
 ```
 
+## Développement
+
+```bash
+# API (depuis backend/, base dans backend/database.db)
+cargo run -- serve                 # http://127.0.0.1:3000
+cargo run -- scrape --department 75
+cargo run -- tmdb                  # nécessite TMDB_API_KEY dans backend/.env
+
+# Front (depuis frontend/, Node ≥ 20.19 : `nvm use`)
+npm install
+npm run dev                        # http://localhost:5173, /api relayé vers :3000
+npm test && npm run check && npm run lint
+```
+
 ## Plan de la réécriture
 
 Voir [`docs/PLAN.md`](docs/PLAN.md) : objectifs, décisions, étapes et avancement.
