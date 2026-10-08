@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\",\n                  lat AS \"lat!: f64\", lng AS \"lng!: f64\", art_et_essai AS \"art_et_essai!: bool\"\n           FROM visible_cinemas\n           WHERE (?1 IS NULL OR art_et_essai = ?1)\n           ORDER BY name_search",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "city?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "city"
+          }
+        }
+      },
+      {
+        "name": "lat!: f64",
+        "ordinal": 3,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "lat"
+          }
+        }
+      },
+      {
+        "name": "lng!: f64",
+        "ordinal": 4,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "lng"
+          }
+        }
+      },
+      {
+        "name": "art_et_essai!: bool",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "art_et_essai"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "64727a0ede3f3050ea9754fc79cff5aa2c6580d318395237996112f4ac05e737"
+}

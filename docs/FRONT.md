@@ -25,7 +25,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
 
-Toute page est rechargeable : nginx doit renvoyer `index.html` pour les chemins inconnus (`try_files $uri /index.html`, à écrire à l'étape 6).
+Toute page est rechargeable : nginx doit renvoyer `index.html` pour les chemins inconnus (`try_files $uri $uri/ /index.html` dans `deploy/nginx/cinemap.conf`).
 
 ## Les bugs de l'ancien site, et ce qui les évite
 

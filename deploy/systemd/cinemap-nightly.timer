@@ -1,0 +1,10 @@
+[Unit]
+Description=Cinemap : séances chaque nuit à 4 h (heure de Paris)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Europe/Paris
+# Rattrape le run manqué si le VPS était éteint à 4 h.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

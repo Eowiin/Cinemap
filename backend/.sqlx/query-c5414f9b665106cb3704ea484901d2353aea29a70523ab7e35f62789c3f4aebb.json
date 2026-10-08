@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: i64\", title AS \"title!: String\", poster_url AS \"poster_url?: String\",\n                  genres AS \"genres!: SqlJson<Vec<String>>\",\n                  runtime_min AS \"runtime_min?: i64\", release_date AS \"release_date?: String\"\n           FROM movies\n           WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "poster_url?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "poster_url"
+          }
+        }
+      },
+      {
+        "name": "genres!: SqlJson<Vec<String>>",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "genres"
+          }
+        }
+      },
+      {
+        "name": "runtime_min?: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "runtime_min"
+          }
+        }
+      },
+      {
+        "name": "release_date?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "release_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c5414f9b665106cb3704ea484901d2353aea29a70523ab7e35f62789c3f4aebb"
+}

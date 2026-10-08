@@ -15,7 +15,7 @@ Site public (d'abord pour moi et mes potes) qui répond à :
 
 Périmètre : toute la France, **Paris / Île-de-France en priorité** (qualité des données vérifiée d'abord là). Utilisable en site web et en **PWA** installable.
 
-Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS existant (https://cinemap.eowinstudio.com).
+Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS existant, à **https://cinemap.ethansaux.fr** (décision du 2026-10-08 : `cinemap.eowinstudio.com` est abandonné).
 
 ## Décisions
 
@@ -121,11 +121,14 @@ Suivi détaillé : [`FRONT.md`](FRONT.md).
 - [ ] Essai sur un vrai téléphone (installation PWA, géolocalisation) par le propriétaire
 
 ### 6. Déploiement
-- [ ] Réécrire `docs/DEPLOY.md` : binaire + systemd + nginx (front statique, `/api` vers axum)
-- [ ] Timer systemd pour les scrapers
-- [ ] GitHub Actions : CI (fmt, clippy, tests, build front) + déploiement (binaire + `dist/` par SSH, restart, health check)
-- [ ] Migration de la prod : nouvelle base, suppression de l'ancien service Python
-- [ ] Merge `rewrite` → `main`
+Suivi détaillé, procédure et écarts : [`DEPLOY.md`](DEPLOY.md). Préparé par Claude le 2026-10-08.
+- [x] Réécrire `docs/DEPLOY.md` : binaire + systemd + nginx (front statique, `/api` vers axum), HTTPS (certbot), domaine `cinemap.ethansaux.fr`
+- [x] SIGTERM dans `serve` (arrêt propre sous systemd)
+- [x] Timers systemd : `scrape` puis `tmdb` chaque nuit à 4 h, `import-cinemas` le mardi à 2 h (`deploy/systemd/`)
+- [x] GitHub Actions (`ci.yml`) : CI (fmt, clippy, tests, build front) + déploiement (binaire + `dist/` par SSH, releases versionnées, restart, health check, retour arrière automatique) ; `backend/.sqlx/` versionné, `SQLX_OFFLINE=true`
+- [ ] Préparation du VPS par le propriétaire (DNS, ancien service retiré, utilisateur `cinemap`, unités, nginx, certbot) : `DEPLOY.md` étapes 1 à 5
+- [ ] Merge `rewrite` → `main` (premier déploiement par la CI)
+- [ ] Migration de la prod : base remplie (`cinemap-weekly` puis `cinemap-nightly`), timers activés, ancien service supprimé
 
 ## Idées pour plus tard
 - **Cartes illimitées** (proposé le 2026-10-06, à valider) : savoir où passe une carte UGC Illimité, Pathé CinéPass, etc. Données : UGC publie une page HTML statique `https://www.ugc.fr/cinemas-acceptant-ui.html` (nom, adresse, code postal ; UGC, mk2 et partenaires ; ~145 entrées, toutes régions sur une page) ; Pathé annonce « 130 cinémas Pathé et partenaires » sur pathe.fr (format à trouver). Croisement avec nos cinémas : code postal + similarité de nom (réutiliser le code du CNC). Proposition détaillée (schéma, contrat, décisions) en fin d'`API.md` ; à faire **après l'étape 2**, source Pathé à choisir à ce moment-là.

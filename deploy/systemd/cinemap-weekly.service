@@ -1,0 +1,29 @@
+# Référentiel des cinémas : liste AlloCiné, puis géocodage des nouvelles adresses
+# et données CNC (import-cinemas enchaîne les trois). Un cinéma non revu depuis
+# 14 jours est masqué : une fois par semaine suffit.
+# Lancé par cinemap-weekly.timer ; à la main : systemctl start cinemap-weekly
+[Unit]
+Description=Cinemap : import des cinémas (AlloCiné, géocodage, CNC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cinemap
+Group=cinemap
+EnvironmentFile=/etc/cinemap/cinemap.env
+StateDirectory=cinemap
+WorkingDirectory=/var/lib/cinemap
+ExecStart=/opt/cinemap/current/cinemap import-cinemas
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM cinemas WHERE updated_at < datetime(?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9be1681f528958cf3870fa6786d3376877564c16f705c26ac3c64c0c08795e9c"
+}

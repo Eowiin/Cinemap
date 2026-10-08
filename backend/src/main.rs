@@ -2,6 +2,7 @@ use backend::cinemas::import_cinemas;
 use backend::cli::{Cli, SubCommands};
 use backend::db;
 use clap::Parser;
+use std::io::IsTerminal;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -9,7 +10,11 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    // Pas de couleurs ANSI hors terminal (journald sous systemd).
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_ansi(std::io::stdout().is_terminal())
+        .init();
 
     let args = Cli::parse();
     let pool = db::establish_connection().await?;

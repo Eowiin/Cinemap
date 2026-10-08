@@ -89,8 +89,32 @@ pub async fn serve(pool: SqlitePool, addr: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Les requêtes en cours se terminent avant la sortie.
+/// Ctrl-C en local, SIGTERM sous systemd (`systemctl stop` / `restart`) :
+/// les requêtes en cours se terminent avant la sortie.
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c().await.ok();
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.ok();
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            // Sans SIGTERM, Ctrl-C reste disponible : on attend indéfiniment ici.
+            Err(e) => {
+                tracing::warn!("SIGTERM non écouté : {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
     info!("Arrêt demandé, fin des requêtes en cours");
 }
