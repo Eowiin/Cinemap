@@ -98,7 +98,8 @@ where
 
 pub fn is_retryable(error: &reqwest::Error) -> bool {
     if let Some(status) = error.status() {
-        return status.is_server_error();
+        // 429 : « trop de requêtes », passager par nature. 403 et autres 4xx : non.
+        return status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
     }
 
     if error.is_timeout() || error.is_connect() {

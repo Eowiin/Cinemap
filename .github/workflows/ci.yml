@@ -2,9 +2,9 @@ name: CI
 
 # Sur toutes les branches : vérifications. Sur main seulement : déploiement
 # (à chaque push, ou à la main depuis l'onglet Actions : « Run workflow »).
+# Pas de `pull_request` : les checks du push s'affichent déjà sur la PR (sinon tout tourne deux fois).
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   backend:
-    # Même Ubuntu que le VPS (24.04, glibc 2.39) : le binaire y tourne tel quel.
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -23,6 +22,8 @@ jobs:
       # Les macros sqlx::query! lisent le SQL vérifié dans backend/.sqlx/ au lieu d'une base.
       SQLX_OFFLINE: "true"
       CARGO_TERM_COLOR: always
+      # Pas d'infos de debug pour les tests : compilation ~25 % plus rapide, cache ~40 % plus petit.
+      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -31,14 +32,33 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
+          # Seul main enregistre le cache ; les autres branches le relisent (portée des caches GitHub).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
+      # clippy (vérification seule) et test (code machine) ne partagent pas les dépendances
+      # compilées : deux passes inévitables, mais servies par le cache dès le 2e run de main.
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
-      - name: Build release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        run: cargo build --release
+
+  # Binaire de prod, en parallèle des vérifications : le déploiement attend les deux.
+  build:
+    if: github.ref == 'refs/heads/main'
+    # Même Ubuntu que le VPS (24.04, glibc 2.39) : le binaire y tourne tel quel.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SQLX_OFFLINE: "true"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - run: cargo build --release
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           name: backend
           path: backend/target/release/backend
@@ -62,15 +82,15 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         with:
           name: frontend
           path: frontend/dist/
           retention-days: 7
 
   deploy:
-    needs: [backend, frontend]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, build]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

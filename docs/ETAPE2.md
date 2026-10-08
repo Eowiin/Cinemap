@@ -308,3 +308,30 @@ Fait le 2026-10-08 :
 - 3 cinémas comparés à la main avec le site AlloCiné (C0159, C0015, P1434) : mêmes films, même nombre de séances, versions justes.
 - Aucun film manquant sur les gros cinémas (pagination) : `select cinema_id, date, count(distinct movie_id) from showtimes group by 1, 2 order by 3 desc limit 5`.
 - Durée, mémoire et nombre de requêtes d'un run complet notés dans `SOBRIETE.md`.
+
+---
+
+## Après le déploiement : rythme adaptatif (2026-10-08, écrit par Claude à ta demande)
+
+**Constat** (chiffres dans `SOBRIETE.md`) : depuis le VPS, AlloCiné refuse environ 1 requête sur 10 à 3 req/s (429). Le premier run France s'est arrêté au bout de 75 s (5 refus d'affilée → coupe-circuit), et un 429 n'était jamais réessayé. La boucle Île-de-France (un département toutes les 2 min) montre qu'après une rafale de ~300 requêtes, **l'IP reste bloquée 4 à 6 min** : 92 et 93 refusés dès la 1re requête, 2 et 4 min après la fin de 75 ; 94 et 77 passent ensuite sans aucune erreur à 3 req/s.
+
+**Ce qui a changé** :
+
+1. **Rythme adaptatif (AIMD, comme le contrôle de congestion de TCP)** : `struct Pace` dans `showtimes/mod.rs`, logique pure testée sans réseau ni horloge réelle (`now` en paramètre).
+   - départ à 3 req/s (`MIN_INTERVAL` = 333 ms) ;
+   - à chaque refus 403/429 : **pause de tous les workers**, de 30 s puis doublée à chaque refus d'affilée (30 s, 1, 2, 4 min, plafond 5 min, pour couvrir un blocage de plusieurs minutes), et intervalle ×2 (jusqu'à `MAX_INTERVAL` = 5 s) ;
+   - les refus **et les réponses correctes** qui arrivent pendant la pause sont ignorés : ce sont les réponses de requêtes parties avant, ils ne disent rien de l'état du blocage (sinon un seul épisode diviserait le débit par 16, ou une vieille réponse remettrait le compteur de refus à zéro) ;
+   - toutes les 20 réponses correctes d'affilée : intervalle ×0,8, sans descendre sous 333 ms. Le retour au rythme normal est progressif.
+2. **Un 429 est réessayé** (`client::is_retryable`, pour toutes les sources : AlloCiné, API Adresse, TMDB) après la pause. Un 403 ne l'est toujours pas.
+3. **Coupe-circuit** : il ne compte plus les réponses brutes, mais les refus « nouveaux » comptés par `Pace` (chacun après une pause), sans réponse correcte entre eux. 5 d'affilée = **7 min 30 de pauses** (30 s + 1 + 2 + 4 min) et toujours refusé : là, AlloCiné nous bloque vraiment.
+4. **Jours annoncés vides** : `fetch_showtimes` renvoie `Day::Showtimes(..)` ou `Day::Empty { empty_until }`. `no.showtime.error` → plus rien de programmé, on saute les jours suivants ; `next.showtime.on` + `nextDate` → on saute les jours avant cette date. Les jours sautés sont **quand même enregistrés vides** (ça efface les séances d'un run précédent) et comptent comme réussis. `nextDate` absent ou illisible : on ne saute rien.
+5. Log de fin : `dates_sautees`, `ralentissements`, `intervalle_final_ms`.
+
+**Vérifié** : 160 tests (dont 8 nouveaux sur `Pace`, `empty_until` et le retry du 429), clippy, fmt. Paris depuis le Mac : 321/321 couples, 97 s au lieu de 116 s, 56 requêtes évitées ; 10 jours sautés revérifiés un par un sur AlloCiné : tous vides. Le comportement sous 429 n'a été testé qu'en tests unitaires : à confirmer sur le VPS (`ralentissements` dans le log).
+
+**Questions pour toi** :
+
+1. `SharedRateLimiter` est passé d'un `tokio::sync::Mutex` tenu pendant `sleep_until` à un `std::sync::Mutex` relâché avant d'attendre (on « réserve » un créneau, puis on dort sans verrou). Pourquoi un `std::sync::Mutex` est-il ici correct (et même préférable) dans du code async, et quelle règle faut-il respecter pour qu'il le reste ?
+2. Dans `SharedRateLimiter::wait`, pourquoi faut-il une boucle, au lieu de réserver un créneau et de dormir une seule fois ?
+3. `Pace::on_block` reçoit `now: Instant` au lieu d'appeler `Instant::now()` lui-même. Qu'est-ce que ça change pour les tests ?
+

@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 
 use crate::client::{RETRY_DELAYS, fetch_with_retries_and_hooks};
 use anyhow::{Context, bail};
+use chrono::NaiveDate;
 use reqwest::{Client, header::ACCEPT};
 use serde::Deserialize;
 
-use super::{CircuitBreaker, SharedRateLimiter};
+use super::{CircuitBreaker, SharedRateLimiter, observe_response};
+use crate::time::DATE_FORMAT;
 
 const BASE_URL: &str = "https://www.allocine.fr";
 
@@ -258,7 +260,7 @@ async fn fetch_page(
             rate_limiter.wait().await;
             circuit_breaker.ensure_active()
         },
-        |result| circuit_breaker.observe(result),
+        |result| observe_response(result, rate_limiter, circuit_breaker),
         || allocine_request(client, &url),
     )
     .await
@@ -267,13 +269,34 @@ async fn fetch_page(
         .with_context(|| format!("Désérialisation des séances {cinema_id} du {date}, page {page}"))
 }
 
+/// Séances d'un cinéma pour un jour.
+pub(super) enum Day {
+    Showtimes(Vec<MovieResult>),
+    /// Aucune séance ce jour-là. `empty_until` : AlloCiné garantit qu'il n'y en a pas non plus
+    /// avant cette date (exclue) ; `None` si on ne sait rien des jours suivants.
+    Empty {
+        empty_until: Option<NaiveDate>,
+    },
+}
+
+/// Jusqu'à quand (exclu) un cinéma sans séance ce jour-là n'en a aucune, d'après AlloCiné.
+fn empty_until(message: Option<&str>, next_date: Option<&str>) -> Option<NaiveDate> {
+    match (message, next_date) {
+        // Aucune séance programmée du tout.
+        (Some("no.showtime.error"), _) => Some(NaiveDate::MAX),
+        // Rien avant la prochaine séance. Date illisible ou absente : on ne saute rien.
+        (Some("next.showtime.on"), Some(next)) => NaiveDate::parse_from_str(next, DATE_FORMAT).ok(),
+        _ => None,
+    }
+}
+
 pub(super) async fn fetch_showtimes(
     client: &Client,
     cinema_id: &str,
     date: &str,
     rate_limiter: &SharedRateLimiter,
     circuit_breaker: &CircuitBreaker,
-) -> anyhow::Result<Vec<MovieResult>> {
+) -> anyhow::Result<Day> {
     let first_page = fetch_page(client, cinema_id, date, 1, rate_limiter, circuit_breaker).await?;
     if first_page.error {
         // `next.showtime.on` : rien ce jour-là, prochaine séance le `nextDate`.
@@ -288,7 +311,12 @@ pub(super) async fn fetch_showtimes(
                 next_date = ?first_page.next_date,
                 "Aucune séance pour cette date"
             );
-            return Ok(Vec::new());
+            return Ok(Day::Empty {
+                empty_until: empty_until(
+                    first_page.message.as_deref(),
+                    first_page.next_date.as_deref(),
+                ),
+            });
         }
         bail!(
             "Erreur AlloCiné pour le cinéma {cinema_id} le {date} : {}",
@@ -308,7 +336,7 @@ pub(super) async fn fetch_showtimes(
         }
         results.extend(response.results);
     }
-    Ok(results)
+    Ok(Day::Showtimes(results))
 }
 
 #[cfg(test)]
@@ -375,8 +403,23 @@ mod tests {
         let response: Response = serde_json::from_str(P0095_PAGE_1).unwrap();
         assert!(response.error);
         assert!(response.results.is_empty());
-        // nextDate is irrelevant to scraping logic; serde ignores this extra property.
         assert_eq!(response.message.as_deref(), Some("next.showtime.on"));
+        assert_eq!(
+            empty_until(response.message.as_deref(), response.next_date.as_deref()),
+            NaiveDate::from_ymd_opt(2026, 10, 7)
+        );
+    }
+
+    #[test]
+    fn empty_until_skips_nothing_when_unsure() {
+        assert_eq!(
+            empty_until(Some("no.showtime.error"), None),
+            Some(NaiveDate::MAX)
+        );
+        assert_eq!(empty_until(Some("next.showtime.on"), None), None);
+        assert_eq!(empty_until(Some("next.showtime.on"), Some("demain")), None);
+        assert_eq!(empty_until(Some("autre.message"), Some("2026-10-07")), None);
+        assert_eq!(empty_until(None, None), None);
     }
 
     #[test]

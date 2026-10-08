@@ -5,8 +5,8 @@ mod mapping;
 use std::{
     collections::VecDeque,
     sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -17,7 +17,6 @@ use chrono::{Datelike, Days, NaiveDate};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
 use tokio::{
-    sync::Mutex,
     task::JoinSet,
     time::{Instant, sleep_until},
 };
@@ -26,8 +25,19 @@ use tracing::{info, warn};
 use crate::time::{DATE_FORMAT, paris_today};
 
 const MAX_CONCURRENT_CINEMAS: usize = 4;
-const MAX_CONSECUTIVE_BLOCKS: usize = 5;
-const REQUEST_INTERVAL: Duration = Duration::from_nanos(333_333_334);
+/// Refus (403/429) d'affilée, chacun après une pause, sans aucune réponse correcte entre
+/// eux : avec les pauses croissantes, ~7 min 30 de refus continus. On arrête le run.
+const MAX_CONSECUTIVE_BLOCKS: u32 = 5;
+/// Rythme de départ et rythme maximal : 3 requêtes/s.
+const MIN_INTERVAL: Duration = Duration::from_nanos(333_333_334);
+/// Rythme minimal après ralentissements : une requête toutes les 5 s.
+const MAX_INTERVAL: Duration = Duration::from_secs(5);
+/// Pause de tous les workers après un refus, doublée à chaque refus d'affilée (30 s, 1 min,
+/// 2 min, 4 min) : vu depuis le VPS le 2026-10-08, AlloCiné bloque l'IP 4 à 6 min.
+const BLOCK_PAUSE: Duration = Duration::from_secs(30);
+const MAX_BLOCK_PAUSE: Duration = Duration::from_secs(5 * 60);
+/// Réponses correctes d'affilée avant d'accélérer d'un cran.
+const SPEEDUP_AFTER: u32 = 20;
 
 fn cine_dates(today: NaiveDate) -> Vec<NaiveDate> {
     let mut dates = vec![today, today + Days::new(1), today + Days::new(2)];
@@ -37,30 +47,153 @@ fn cine_dates(today: NaiveDate) -> Vec<NaiveDate> {
     dates
 }
 
+fn is_block(status: Option<StatusCode>) -> bool {
+    matches!(
+        status,
+        Some(StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS)
+    )
+}
+
+/// Rythme des requêtes, partagé par tous les workers (logique pure : `now` est passé en
+/// paramètre, ce qui rend les tests déterministes).
+///
+/// Même principe que le contrôle de congestion de TCP (AIMD) : on part vite, on divise le
+/// débit par deux à chaque refus (avec une pause), et on le remonte doucement tant que
+/// tout passe (+25 % toutes les `SPEEDUP_AFTER` réponses correctes).
+#[derive(Debug)]
+struct Pace {
+    interval: Duration,
+    next_slot: Instant,
+    paused_until: Instant,
+    successes: u32,
+    /// Refus d'affilée (hors pause), remis à zéro par une réponse correcte hors pause.
+    consecutive_blocks: u32,
+    slowdowns: usize,
+}
+
+impl Pace {
+    fn new(now: Instant) -> Self {
+        Self {
+            interval: MIN_INTERVAL,
+            next_slot: now,
+            paused_until: now,
+            successes: 0,
+            consecutive_blocks: 0,
+            slowdowns: 0,
+        }
+    }
+
+    /// Réserve le prochain créneau d'envoi : jamais pendant une pause, et espacé de
+    /// `interval` du créneau précédent.
+    fn reserve(&mut self, now: Instant) -> Instant {
+        let slot = self.next_slot.max(now).max(self.paused_until);
+        self.next_slot = slot + self.interval;
+        slot
+    }
+
+    fn is_paused(&self, now: Instant) -> bool {
+        now < self.paused_until
+    }
+
+    /// Une réponse correcte reçue pendant une pause vient d'une requête partie avant le refus :
+    /// elle ne prouve pas que le blocage est levé, on l'ignore.
+    fn on_success(&mut self, now: Instant) {
+        if self.is_paused(now) {
+            return;
+        }
+        self.consecutive_blocks = 0;
+        self.successes += 1;
+        if self.successes >= SPEEDUP_AFTER {
+            self.successes = 0;
+            self.interval = (self.interval * 4 / 5).max(MIN_INTERVAL);
+        }
+    }
+
+    /// Renvoie le nombre de refus d'affilée, ou `None` si le refus arrive pendant une pause :
+    /// c'est la réponse d'une requête partie avant le ralentissement, déjà pris en compte.
+    fn on_block(&mut self, now: Instant) -> Option<u32> {
+        if self.is_paused(now) {
+            return None;
+        }
+        self.consecutive_blocks += 1;
+        self.interval = (self.interval * 2).min(MAX_INTERVAL);
+        self.paused_until = now + self.pause();
+        self.next_slot = self.next_slot.max(self.paused_until);
+        self.successes = 0;
+        self.slowdowns += 1;
+        Some(self.consecutive_blocks)
+    }
+
+    /// Pause après le dernier refus : `BLOCK_PAUSE`, doublée à chaque refus d'affilée.
+    fn pause(&self) -> Duration {
+        let doublings = self.consecutive_blocks.saturating_sub(1).min(8);
+        (BLOCK_PAUSE * 2u32.pow(doublings)).min(MAX_BLOCK_PAUSE)
+    }
+}
+
 #[derive(Clone)]
 struct SharedRateLimiter {
-    next_request_at: Arc<Mutex<Instant>>,
+    // Mutex de std (pas de tokio) : jamais tenu pendant un `.await`, seulement le temps d'un calcul.
+    pace: Arc<Mutex<Pace>>,
 }
 
 impl SharedRateLimiter {
     fn new() -> Self {
         Self {
-            next_request_at: Arc::new(Mutex::new(Instant::now())),
+            pace: Arc::new(Mutex::new(Pace::new(Instant::now()))),
         }
     }
 
+    fn pace(&self) -> MutexGuard<'_, Pace> {
+        // Un panic pendant un calcul de quelques lignes ne laisse pas d'état incohérent.
+        self.pace
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     async fn wait(&self) {
-        let mut next_request_at = self.next_request_at.lock().await;
-        if *next_request_at > Instant::now() {
-            sleep_until(*next_request_at).await;
+        loop {
+            let slot = self.pace().reserve(Instant::now());
+            sleep_until(slot).await;
+            // Une pause a pu être décidée pendant l'attente : on reprend un créneau après elle.
+            if !self.pace().is_paused(Instant::now()) {
+                return;
+            }
         }
-        *next_request_at = Instant::now() + REQUEST_INTERVAL;
+    }
+
+    /// Ajuste le rythme selon la réponse ; après un nouveau refus (hors pause), renvoie le
+    /// nombre de refus d'affilée.
+    fn observe(&self, status: Result<(), Option<StatusCode>>) -> Option<u32> {
+        let now = Instant::now();
+        let mut pace = self.pace();
+        match status {
+            Ok(()) => {
+                pace.on_success(now);
+                None
+            }
+            Err(status) if is_block(status) => {
+                let blocks = pace.on_block(now)?;
+                warn!(
+                    refus_d_affilee = blocks,
+                    pause_s = pace.pause().as_secs(),
+                    intervalle_ms = pace.interval.as_millis(),
+                    "AlloCiné refuse des requêtes : pause, puis rythme divisé par deux"
+                );
+                Some(blocks)
+            }
+            Err(_) => None,
+        }
+    }
+
+    fn summary(&self) -> (usize, Duration) {
+        let pace = self.pace();
+        (pace.slowdowns, pace.interval)
     }
 }
 
 #[derive(Default)]
 struct CircuitBreaker {
-    consecutive_blocks: AtomicUsize,
     tripped: AtomicBool,
 }
 
@@ -68,31 +201,15 @@ impl CircuitBreaker {
     fn ensure_active(&self) -> anyhow::Result<()> {
         anyhow::ensure!(
             !self.tripped.load(Ordering::Acquire),
-            "Coupe-circuit déclenché après {MAX_CONSECUTIVE_BLOCKS} réponses 403/429 consécutives"
+            "Coupe-circuit déclenché après {MAX_CONSECUTIVE_BLOCKS} refus 403/429 consécutifs malgré les pauses"
         );
         Ok(())
     }
 
-    fn observe(&self, result: &Result<Bytes, reqwest::Error>) {
-        match result {
-            Ok(_) => self.observe_success(),
-            Err(error) => self.observe_status(error.status()),
-        }
-    }
-
-    fn observe_success(&self) {
-        self.consecutive_blocks.store(0, Ordering::Release);
-    }
-
-    fn observe_status(&self, status: Option<StatusCode>) {
-        if !matches!(
-            status,
-            Some(StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS)
-        ) {
-            return;
-        }
-        let count = self.consecutive_blocks.fetch_add(1, Ordering::AcqRel) + 1;
-        if count >= MAX_CONSECUTIVE_BLOCKS {
+    /// `consecutive_blocks` : compté par `Pace`, qui sait quels refus et quelles réponses
+    /// correctes comptent (ceux reçus pendant une pause, non).
+    fn observe_blocks(&self, consecutive_blocks: u32) {
+        if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS {
             self.tripped.store(true, Ordering::Release);
         }
     }
@@ -102,12 +219,29 @@ impl CircuitBreaker {
     }
 }
 
+/// Branche la réponse d'une requête AlloCiné sur le limiteur et le coupe-circuit.
+fn observe_response(
+    result: &Result<Bytes, reqwest::Error>,
+    rate_limiter: &SharedRateLimiter,
+    circuit_breaker: &CircuitBreaker,
+) {
+    let status = match result {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.status()),
+    };
+    if let Some(blocks) = rate_limiter.observe(status) {
+        circuit_breaker.observe_blocks(blocks);
+    }
+}
+
 /// Résultat d'un cinéma : les dates non terminées (erreur ou coupe-circuit) se déduisent
 /// de `dates.len() - completed_dates`.
 #[derive(Debug, Default)]
 struct CinemaReport {
     completed_dates: usize,
     showtimes: usize,
+    /// Dates vidées sans requête : AlloCiné avait déjà dit qu'il n'y aurait rien.
+    skipped_dates: usize,
 }
 
 /// Compteurs du run. `ok_dates` / `error_dates` sont des couples (cinéma, date), comme
@@ -120,8 +254,11 @@ struct RunReport {
     ok_dates: usize,
     error_dates: usize,
     showtimes: usize,
+    skipped_dates: usize,
     panicked_tasks: usize,
     circuit_breaker_tripped: bool,
+    slowdowns: usize,
+    final_interval: Duration,
 }
 
 impl RunReport {
@@ -135,6 +272,7 @@ impl RunReport {
         self.ok_dates += cinema.completed_dates;
         self.error_dates += failed_dates;
         self.showtimes += cinema.showtimes;
+        self.skipped_dates += cinema.skipped_dates;
     }
 }
 
@@ -160,33 +298,45 @@ async fn scrape_cinema(
     circuit_breaker: Arc<CircuitBreaker>,
 ) -> CinemaReport {
     let mut report = CinemaReport::default();
+    // Jour vide annoncé par AlloCiné : rien avant `empty_until` (exclu), inutile de demander.
+    let mut empty_until: Option<NaiveDate> = None;
     for date in &dates {
         if circuit_breaker.is_tripped() {
             break;
         }
         let date_string = date.format(DATE_FORMAT).to_string();
-        let result = allocine::fetch_showtimes(
-            &client,
-            &cinema_id,
-            &date_string,
-            &rate_limiter,
-            &circuit_breaker,
-        )
-        .await;
-        match result {
-            Ok(movies) => {
-                match db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await {
-                    Ok(written) => {
-                        report.completed_dates += 1;
-                        report.showtimes += written;
-                    }
-                    Err(error) => {
-                        warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
-                    }
+        let movies = if empty_until.is_some_and(|until| *date < until) {
+            report.skipped_dates += 1;
+            Vec::new()
+        } else {
+            let result = allocine::fetch_showtimes(
+                &client,
+                &cinema_id,
+                &date_string,
+                &rate_limiter,
+                &circuit_breaker,
+            )
+            .await;
+            match result {
+                Ok(allocine::Day::Showtimes(movies)) => movies,
+                Ok(allocine::Day::Empty { empty_until: until }) => {
+                    empty_until = until;
+                    Vec::new()
+                }
+                Err(error) => {
+                    warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Scraping de ce cinéma/date en échec");
+                    continue;
                 }
             }
+        };
+        // Même vide, on enregistre : ça efface les séances d'un ancien run pour ce jour.
+        match db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await {
+            Ok(written) => {
+                report.completed_dates += 1;
+                report.showtimes += written;
+            }
             Err(error) => {
-                warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Scraping de ce cinéma/date en échec");
+                warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
             }
         }
     }
@@ -268,6 +418,7 @@ async fn scrape_cinemas(
     report.not_started_cinemas = remaining.len();
     report.error_dates += remaining.len() * dates.len();
     report.circuit_breaker_tripped = circuit_breaker.is_tripped();
+    (report.slowdowns, report.final_interval) = rate_limiter.summary();
     report
 }
 
@@ -284,6 +435,9 @@ fn log_run_report(
         couples_ok = report.ok_dates,
         couples_en_erreur = report.error_dates,
         seances_ecrites = report.showtimes,
+        dates_sautees = report.skipped_dates,
+        ralentissements = report.slowdowns,
+        intervalle_final_ms = report.final_interval.as_millis(),
         taches_interrompues = report.panicked_tasks,
         coupe_circuit = report.circuit_breaker_tripped,
         seances_passees_purgees = purged,
@@ -347,7 +501,7 @@ pub async fn scrape(
     // Code de sortie non nul pour le cron : coupe-circuit ou run entièrement raté.
     if report.circuit_breaker_tripped {
         bail!(
-            "Coupe-circuit déclenché ({MAX_CONSECUTIVE_BLOCKS} réponses 403/429 consécutives) : AlloCiné nous bloque peut-être"
+            "Coupe-circuit déclenché ({MAX_CONSECUTIVE_BLOCKS} refus 403/429 consécutifs malgré les pauses) : AlloCiné nous bloque peut-être"
         );
     }
     if report.ok_dates == 0 {
@@ -407,10 +561,12 @@ mod tests {
         let complete = CinemaReport {
             completed_dates: 3,
             showtimes: 10,
+            skipped_dates: 2,
         };
         let partial = CinemaReport {
             completed_dates: 1,
             showtimes: 2,
+            skipped_dates: 0,
         };
         report.add_cinema(&complete, 3);
         report.add_cinema(&partial, 3);
@@ -420,27 +576,122 @@ mod tests {
                 report.failed_cinemas,
                 report.ok_dates,
                 report.error_dates,
-                report.showtimes
+                report.showtimes,
+                report.skipped_dates
             ),
-            (1, 1, 4, 2, 12)
+            (1, 1, 4, 2, 12, 2)
         );
     }
 
     #[test]
-    fn circuit_breaker_trips_on_five_consecutive_403_or_429_responses() {
+    fn circuit_breaker_trips_on_five_consecutive_blocks() {
         let breaker = CircuitBreaker::default();
-        for _ in 0..4 {
-            breaker.observe_status(Some(StatusCode::TOO_MANY_REQUESTS));
-        }
+        breaker.observe_blocks(4);
         assert!(!breaker.is_tripped());
-        breaker.observe_success();
-        for _ in 0..4 {
-            breaker.observe_status(Some(StatusCode::FORBIDDEN));
-        }
-        assert!(!breaker.is_tripped());
-        breaker.observe_status(Some(StatusCode::TOO_MANY_REQUESTS));
+        breaker.observe_blocks(5);
         assert!(breaker.is_tripped());
         assert!(breaker.ensure_active().is_err());
+    }
+
+    #[test]
+    fn pace_spaces_requests_by_the_interval() {
+        let t0 = Instant::now();
+        let mut pace = Pace::new(t0);
+        assert_eq!(pace.reserve(t0), t0);
+        assert_eq!(pace.reserve(t0), t0 + MIN_INTERVAL);
+        assert_eq!(pace.reserve(t0), t0 + MIN_INTERVAL * 2);
+        // Après un long silence, pas de rafale pour « rattraper » : on part de maintenant.
+        let later = t0 + Duration::from_secs(60);
+        assert_eq!(pace.reserve(later), later);
+    }
+
+    #[test]
+    fn block_pauses_and_halves_the_rate_once_per_pause() {
+        let t0 = Instant::now();
+        let mut pace = Pace::new(t0);
+        pace.reserve(t0);
+        assert_eq!(pace.on_block(t0), Some(1));
+        assert_eq!(pace.interval, MIN_INTERVAL * 2);
+        assert!(pace.is_paused(t0 + BLOCK_PAUSE - Duration::from_millis(1)));
+        assert_eq!(pace.reserve(t0), t0 + BLOCK_PAUSE);
+        // Réponses des requêtes parties avant la pause : déjà comptées.
+        assert_eq!(pace.on_block(t0 + Duration::from_secs(1)), None);
+        assert_eq!(pace.interval, MIN_INTERVAL * 2);
+        assert_eq!(pace.slowdowns, 1);
+        // Après la pause, un nouveau refus ralentit encore, et la pause double.
+        let t1 = t0 + BLOCK_PAUSE;
+        assert_eq!(pace.on_block(t1), Some(2));
+        assert_eq!(pace.interval, MIN_INTERVAL * 4);
+        assert_eq!(pace.reserve(t1), t1 + BLOCK_PAUSE * 2);
+        assert_eq!(pace.slowdowns, 2);
+    }
+
+    #[test]
+    fn pauses_grow_to_cover_a_several_minute_block() {
+        let mut now = Instant::now();
+        let mut pace = Pace::new(now);
+        let mut paused = Duration::ZERO;
+        for _ in 1..MAX_CONSECUTIVE_BLOCKS {
+            pace.on_block(now);
+            paused += pace.pause();
+            now = pace.paused_until;
+        }
+        // 30 s + 1 min + 2 min + 4 min avant le 5e refus (et le coupe-circuit).
+        assert_eq!(paused, Duration::from_secs(450));
+        for _ in 0..10 {
+            pace.on_block(now);
+            now = pace.paused_until;
+        }
+        assert_eq!(pace.pause(), MAX_BLOCK_PAUSE);
+        assert_eq!(pace.interval, MAX_INTERVAL);
+    }
+
+    #[test]
+    fn success_during_a_pause_does_not_reset_the_block_count() {
+        let t0 = Instant::now();
+        let mut pace = Pace::new(t0);
+        pace.on_block(t0);
+        pace.on_success(t0 + Duration::from_secs(1));
+        assert_eq!(pace.on_block(t0 + BLOCK_PAUSE), Some(2));
+        // Hors pause, une réponse correcte remet le compteur à zéro.
+        let after = pace.paused_until;
+        pace.on_success(after);
+        assert_eq!(pace.on_block(after), Some(1));
+    }
+
+    #[test]
+    fn pace_speeds_up_gradually_after_successes() {
+        let t0 = Instant::now();
+        let mut pace = Pace::new(t0);
+        pace.on_block(t0);
+        let slow = pace.interval;
+        let now = pace.paused_until;
+        for _ in 0..SPEEDUP_AFTER - 1 {
+            pace.on_success(now);
+        }
+        assert_eq!(pace.interval, slow);
+        pace.on_success(now);
+        assert_eq!(pace.interval, slow * 4 / 5);
+        // Jamais plus vite que le rythme de départ.
+        for _ in 0..SPEEDUP_AFTER * 50 {
+            pace.on_success(now);
+        }
+        assert_eq!(pace.interval, MIN_INTERVAL);
+    }
+
+    #[test]
+    fn a_block_resets_the_success_streak() {
+        let t0 = Instant::now();
+        let mut pace = Pace::new(t0);
+        pace.on_block(t0);
+        let now = pace.paused_until;
+        for _ in 0..SPEEDUP_AFTER - 1 {
+            pace.on_success(now);
+        }
+        pace.on_block(now);
+        let slow = pace.interval;
+        pace.on_success(pace.paused_until);
+        assert_eq!(pace.interval, slow);
     }
 
     #[tokio::test]

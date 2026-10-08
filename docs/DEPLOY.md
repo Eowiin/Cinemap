@@ -14,8 +14,8 @@ timers systemd (heure de Paris) :
   chaque nuit 4 h   cinemap-nightly : cinemap scrape, puis cinemap tmdb
   le mardi 2 h      cinemap-weekly  : cinemap import-cinemas (+ géocodage + CNC)
 
-push sur main ──► GitHub Actions : fmt, clippy, tests, build release (Rust)
-                                   test, check, lint, build (front)
+push ──► GitHub Actions : fmt, clippy, tests (Rust) ; test, check, lint, build (front)
+  sur main, en parallèle : build release (Rust), puis
                                    └─ tar par SSH → /opt/cinemap/releases/<sha>/
                                       activate.sh : bascule `current`, restart, /api/meta
                                       (échec → retour à la release précédente)
@@ -220,7 +220,7 @@ ln -sfn /opt/cinemap/releases/<sha> /opt/cinemap/current && systemctl restart ci
 - **Timer hebdomadaire** : une seule commande, `import-cinemas`, qui enchaîne déjà le géocodage des nouvelles adresses et le CNC. `geocode` et `enrich-cnc` restent disponibles à la main.
 - **Merge avant la migration** : le premier déploiement passe par la CI (c'est elle qui construit le binaire), donc `main` est mergée avant que la base de prod soit remplie. Le site est vide pendant ~1 h, accepté car il n'est pas encore utilisé.
 - **Releases versionnées** (`releases/<sha>` + lien `current`) au lieu d'écraser les fichiers : retour arrière automatique si `/api/meta` ne répond pas après le restart.
-- **CI** : un seul workflow (`ci.yml`) remplace `deploy.yml` ; plus d'`appleboy/ssh-action`, un simple `ssh` + `tar`. La clé d'hôte du VPS est relevée par `ssh-keyscan` à chaque run (confiance au premier usage, pas d'épinglage).
+- **CI** : un seul workflow (`ci.yml`) remplace `deploy.yml`, déclenché par `push` seulement (les checks apparaissent sur les PR sans double run) ; build release dans un job parallèle aux tests ; tests sans infos de debug ; cache Rust enregistré par `main` seulement, relu par les autres branches ; plus d'`appleboy/ssh-action`, un simple `ssh` + `tar`. La clé d'hôte du VPS est relevée par `ssh-keyscan` à chaque run (confiance au premier usage, pas d'épinglage).
 - **Backend** : `serve` gère SIGTERM (`shutdown_signal`), et les logs n'ont plus de couleurs ANSI hors terminal (sinon journald affiche des `\e[32m`).
 - **Port 11174** au lieu de 3000 : 3000 est un port très demandé sur un VPS qui héberge déjà d'autres sites.
 - Pas de sauvegarde de la base : tout se régénère avec `cinemap-weekly` puis `cinemap-nightly` (~1 h 15).

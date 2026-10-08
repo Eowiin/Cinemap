@@ -184,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn refuses_to_retry_client_errors() {
         let client = test_client();
-        for status in [403, 404, 429] {
+        for status in [403, 404] {
             let (url, count, server) = mock_server(vec![response(status), response(200)]).await;
             let error = fetch_with_retries(&url, &[Duration::ZERO; 3], || {
                 allocine_request(&client, &url)
@@ -203,6 +203,19 @@ mod tests {
             assert_eq!(count.load(Ordering::SeqCst), 1);
             server.abort();
         }
+    }
+
+    #[tokio::test]
+    async fn retries_too_many_requests() {
+        let client = test_client();
+        let (url, count, server) = mock_server(vec![response(429), response(200)]).await;
+        fetch_with_retries(&url, &[Duration::ZERO; 3], || {
+            allocine_request(&client, &url)
+        })
+        .await
+        .unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+        server.await.unwrap();
     }
 
     #[tokio::test]

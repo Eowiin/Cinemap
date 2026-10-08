@@ -42,6 +42,23 @@ Cette estimation dépasse les 30–40 min prévues dans `PLAN.md`. Atteindre 30�
 
 107 cinémas, 321 couples (cinéma, date), 5 464 séances écrites, **117 s**, sans erreur ni coupe-circuit. Soit ≈ 1,1 s par cinéma (3 dates). Extrapolé aux ~3 100 cinémas visibles : ≈ **57 min**, cohérent avec l'estimation de 62–65 min au plafond de 3 req/s (beaucoup de petits cinémas n'ont qu'une page, certains répondent « aucune séance »). Mémoire et CPU : à mesurer sur le run complet avec `/usr/bin/time -l`.
 
+### En prod : AlloCiné limite l'IP du VPS, rythme adaptatif (2026-10-08)
+
+| Run | Depuis | Durée | Couples ok / erreur | Requêtes évitées | Mémoire max | CPU |
+|---|---|---|---|---|---|---|
+| France, 3 req/s fixes | VPS | 75 s puis coupe-circuit | 206 / 9 157 | – | – | 1,1 s |
+| Paris, 3 req/s fixes | VPS | 108 s | 291 / **30 (9 %)** | – | 5,5 Mo | 1,85 s |
+| Paris, 3 req/s fixes | Mac | 116 s | 321 / 0 | – | 24 Mo | 1,6 s |
+| Paris, rythme adaptatif + jours vides sautés | Mac | **97 s** | 321 / 0 | **56** (dates sautées) | 24 Mo | 1,6 s |
+
+Ce que disent ces chiffres :
+- **Le scraper ne coûte presque rien à la machine** : 1,85 s de CPU pour 108 s de run (le processus attend le réseau 98 % du temps), 5,5 Mo de mémoire. Optimiser son CPU ou sa mémoire n'a aucun intérêt.
+- **La seule ressource qui compte est le nombre de requêtes** : c'est elle qui fixe la durée (au rythme qu'AlloCiné tolère) et le risque de blocage. D'où les deux changements : ne plus demander un jour qu'AlloCiné a déjà annoncé vide (`nextDate`, −17 % de requêtes sur Paris), et adapter le rythme aux refus.
+- **Même débit, deux IP, deux résultats** : depuis le VPS (IP de datacenter), 1 requête sur 10 est refusée (429) à 3 req/s ; depuis une IP résidentielle, aucune. Après une rafale d'environ 300 requêtes, l'IP du VPS reste bloquée 4 à 6 min (boucle Île-de-France : 94 et 77 passent sans erreur après ce délai). Le rythme ne peut pas être fixé une fois pour toutes : il s'adapte, avec des pauses croissantes (voir `ETAPE2.md`, « Après le déploiement »).
+- 24 Mo sur Mac contre 5,5 Mo sur le VPS : `/usr/bin/time -l` (macOS) et le `Memory peak` de systemd ne mesurent pas la même chose (le second compte la mémoire du cgroup, sans les bibliothèques partagées) ; comparer seulement des mesures du même outil.
+
+À mesurer sur le VPS au premier run complet : durée, nombre de ralentissements (`ralentissements`, `intervalle_final_ms` dans le log de fin), `dates_sautees`.
+
 ### API : premières mesures (2026-10-08, base Paris seulement)
 
 `serve` en `--release`, base après `scrape --department 75` (3 121 cinémas visibles, 5 465 séances). Médiane de 5 `curl` en local, avec `Accept-Encoding: gzip` :
@@ -91,7 +108,7 @@ Cette estimation dépasse les 30–40 min prévues dans `PLAN.md`. Atteindre 30�
 
 ## Où ça compte vraiment dans Cinemap
 
-1. **Réseau** (le plus gros poste) : un seul `reqwest::Client` réutilisé (pool de connexions), concurrence limitée (~3 req/s), ne pas retélécharger ce qui n'a pas changé, s'arrêter tout de suite sur 403/429.
+1. **Réseau** (le plus gros poste) : un seul `reqwest::Client` réutilisé (pool de connexions), rythme adaptatif (3 req/s au mieux, ralenti à chaque refus), ne pas redemander ce qu'on sait déjà (jours annoncés vides), s'arrêter si les refus continuent malgré les pauses.
 2. **SQLite** : écrire dans **une transaction groupée** (1 000 `INSERT` dans une transaction, c'est des centaines de fois plus rapide que 1 000 transactions). Index adaptés aux requêtes de l'API. Requêtes préparées (sqlx le fait).
 3. **Parsing** (milliers de cinémas, dizaines de milliers de séances chaque nuit) : sélecteurs créés une fois, emprunter le texte du HTML plutôt que tout copier, ne garder que les champs utiles.
 4. **API** : filtrer en SQL (bounding box) plutôt que charger toute la table pour filtrer en Rust, réponses gzip, pas de `SELECT *`.
