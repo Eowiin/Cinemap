@@ -84,22 +84,16 @@ pub(super) fn formats(showtime: &Showtime) -> Vec<&'static str> {
     formats
 }
 
-// Prefer the cinema's desktop booking link; use the relay link only when no default link exists.
+/// Lien de réservation : le premier lien `DESKTOP` d'un fournisseur autre que `relay`
+/// (le site du cinéma : `default` pour UGC, `en` pour Pathé, vu sur C0189), sinon le lien
+/// `relay` (intermédiaire `relay.mvtx.us`), sinon `None`.
 pub(super) fn booking_url(showtime: &Showtime) -> Option<&str> {
-    showtime
-        .data
-        .ticketing
+    let ticketing = &showtime.data.ticketing;
+    ticketing
         .iter()
-        .find(|ticket| ticket.provider == "default" && ticket.kind == "DESKTOP")
+        .find(|ticket| ticket.provider != "relay" && ticket.kind == "DESKTOP")
+        .or_else(|| ticketing.iter().find(|ticket| ticket.provider == "relay"))
         .and_then(|ticket| ticket.urls.first())
-        .or_else(|| {
-            showtime
-                .data
-                .ticketing
-                .iter()
-                .find(|ticket| ticket.provider == "relay")
-                .and_then(|ticket| ticket.urls.first())
-        })
         .map(String::as_str)
 }
 
@@ -322,6 +316,24 @@ mod tests {
             },
         ];
         assert_eq!(booking_url(&screening), Some("https://cinema.example/"));
+    }
+
+    #[test]
+    fn booking_url_accepts_cinema_provider_other_than_default() {
+        let mut screening = showtime(&[]);
+        screening.data.ticketing = vec![
+            Ticketing {
+                urls: vec!["https://s.pathe.fr/booking".into()],
+                kind: "DESKTOP".into(),
+                provider: "en".into(),
+            },
+            Ticketing {
+                urls: vec!["https://relay.example/".into()],
+                kind: "DESKTOP".into(),
+                provider: "relay".into(),
+            },
+        ];
+        assert_eq!(booking_url(&screening), Some("https://s.pathe.fr/booking"));
     }
 
     #[test]

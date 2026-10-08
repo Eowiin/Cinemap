@@ -9,12 +9,20 @@ use super::{
     mapping::{booking_url, formats, full_name, runtime_minutes, version},
 };
 
+/// Avant cette heure, une séance appartient au jour ciné **précédent** (`API.md`,
+/// « jour ciné »). AlloCiné renvoie les séances d'après minuit deux fois, avec le même ID :
+/// en fin de programme de J-1 (`starts_at` = J à 00:15) et en début de programme de J.
+/// On ne la garde qu'en J-1 (vu sur G02BG le 2026-10-08 : contrainte UNIQUE sur `showtimes.id`).
+const CINE_DAY_STARTS_AT: &str = "05:00:00";
+
+/// Remplace les séances du couple (cinéma, date) et renvoie le nombre de séances écrites.
 pub(super) async fn save_showtimes(
     pool: &SqlitePool,
     cinema_id: &str,
     date: &str,
     movies: &[MovieResult],
-) -> Result<()> {
+) -> Result<usize> {
+    let day_start = format!("{date}T{CINE_DAY_STARTS_AT}");
     let mut tx = pool.begin().await?;
 
     for entry in movies {
@@ -27,14 +35,20 @@ pub(super) async fn save_showtimes(
         .execute(&mut *tx)
         .await?;
 
+    let mut written = 0;
     for entry in movies {
         for showtime in entry.showtimes.values().flatten() {
-            insert_showtime(&mut tx, cinema_id, date, entry, showtime).await?;
+            if showtime.starts_at < day_start {
+                continue; // déjà enregistrée avec le jour ciné précédent
+            }
+            if insert_showtime(&mut tx, cinema_id, date, entry, showtime).await? {
+                written += 1;
+            }
         }
     }
 
     tx.commit().await?;
-    Ok(())
+    Ok(written)
 }
 
 /// Ouvre une ligne `scrape_runs` et renvoie son `id`. Tant que `finish_run` n'a pas été
@@ -253,7 +267,7 @@ async fn insert_showtime(
     date: &str,
     entry: &MovieResult,
     showtime: &super::allocine::Showtime,
-) -> Result<()> {
+) -> Result<bool> {
     let Some(mapped_version) = version(showtime, &entry.movie.languages) else {
         tracing::warn!(
             cinema_id,
@@ -262,7 +276,7 @@ async fn insert_showtime(
             diffusion_version = %showtime.diffusion_version,
             "Séance ignorée : version AlloCiné inconnue"
         );
-        return Ok(());
+        return Ok(false);
     };
 
     let formats = serde_json::to_string(&formats(showtime))?;
@@ -279,7 +293,7 @@ async fn insert_showtime(
     .bind(booking_url(showtime))
     .execute(&mut **tx)
     .await?;
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -330,6 +344,44 @@ mod tests {
         .await
         .unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn after_midnight_showtime_stays_on_previous_cine_day() {
+        let pool = memory_pool().await;
+        sqlx::query(
+            "INSERT INTO cinemas (id, name, name_search, updated_at) VALUES ('C1', 'C', 'c', datetime('now'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        // Même séance (même ID) renvoyée pour le 9 et pour le 10, comme sur G02BG.
+        let movies = serde_json::from_str::<Response>(
+            r#"{"error":false,"results":[{"movie":{"internalId":1,"title":"Film"},
+                "showtimes":{"multiple":[{"internalId":42,"startsAt":"2026-10-10T00:15:00",
+                "tags":["Localization.Version.French"]}]}}]}"#,
+        )
+        .unwrap()
+        .results;
+
+        assert_eq!(
+            save_showtimes(&pool, "C1", "2026-10-09", &movies)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            save_showtimes(&pool, "C1", "2026-10-10", &movies)
+                .await
+                .unwrap(),
+            0
+        );
+
+        let date: String = sqlx::query_scalar("SELECT date FROM showtimes WHERE id = '42'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(date, "2026-10-09");
     }
 
     #[tokio::test]

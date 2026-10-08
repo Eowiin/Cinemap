@@ -123,6 +123,9 @@ Pièges de format vus sur `scrape --department 75` (2026-10-08) :
 - **`error: true` sans séance** : deux messages, aucun n'est une vraie erreur.
   - `next.showtime.on` : rien ce jour-là, `nextDate` donne la prochaine séance ;
   - `no.showtime.error` : aucune séance programmée du tout (`nextDate: null`, C0030, C0056, C0059, C0127).
+- **`"movie": null`** dans `results` (La Géode, C0189 ; C2954) : séance sans film rattaché (documentaire IMAX absent de la base AlloCiné ?). Sans film, pas de `movie_id` : l'entrée est écartée à la désérialisation (`results_with_movie`). À la Géode, 2 séances sur 8.
+- **Séances d'après minuit en double** : une séance à 00h15 le 10 est renvoyée en fin de programme du 9 **et** en début de programme du 10, avec le même `internalId` (G02BG, W7502 → contrainte UNIQUE). Règle : en écrivant le jour J, on saute les séances dont `starts_at` < `J T05:00:00` ; elles restent au jour ciné J-1 (`API.md`, « jour ciné »).
+- **Fournisseur de billetterie** : le lien du cinéma n'est pas toujours `provider: "default"` (Pathé : `"en"`, lien `s.pathe.fr`). Règle : premier lien `DESKTOP` dont le fournisseur n'est pas `relay`, sinon `relay`.
 
 Les formats persistés sont limités à `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema` et `Dolby Atmos`. Les valeurs `DIGITAL`, `ANALOG` et `DOLBY_71` observées dans les fixtures ne sont pas des formats retenus.
 

@@ -5,7 +5,7 @@ use anyhow::{Context, bail};
 use reqwest::{Client, header::ACCEPT};
 use serde::Deserialize;
 
-use super::{CircuitBreaker, SharedRateLimiter, mapping};
+use super::{CircuitBreaker, SharedRateLimiter};
 
 const BASE_URL: &str = "https://www.allocine.fr";
 
@@ -30,7 +30,7 @@ pub(super) struct Response {
     pub(super) next_date: Option<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pagination: Pagination,
-    #[serde(default, deserialize_with = "null_as_default")]
+    #[serde(default, deserialize_with = "results_with_movie")]
     pub(super) results: Vec<MovieResult>,
 }
 
@@ -40,11 +40,40 @@ struct Pagination {
     total_pages: u32,
 }
 
+/// Entrée brute de `results` : AlloCiné envoie parfois `"movie": null` (séance IMAX sans
+/// film rattaché, vue sur C0189 le 2026-10-08). Sans film, pas de `movie_id` : on l'écarte.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
+struct RawMovieResult {
+    movie: Option<Movie>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    showtimes: BTreeMap<String, Vec<Showtime>>,
+}
+
+fn results_with_movie<'de, D>(deserializer: D) -> Result<Vec<MovieResult>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Vec<RawMovieResult> = null_as_default(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|entry| {
+            let Some(movie) = entry.movie else {
+                tracing::debug!(
+                    seances = entry.showtimes.values().map(Vec::len).sum::<usize>(),
+                    "Entrée AlloCiné sans film ignorée"
+                );
+                return None;
+            };
+            Some(MovieResult {
+                movie,
+                showtimes: entry.showtimes,
+            })
+        })
+        .collect())
+}
+
 pub(super) struct MovieResult {
     pub(super) movie: Movie,
-    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) showtimes: BTreeMap<String, Vec<Showtime>>,
 }
 
@@ -282,19 +311,6 @@ pub(super) async fn fetch_showtimes(
     Ok(results)
 }
 
-pub(super) fn count_showtimes(movies: &[MovieResult]) -> usize {
-    movies
-        .iter()
-        .flat_map(|entry| {
-            entry
-                .showtimes
-                .values()
-                .flatten()
-                .filter(|showtime| mapping::version(showtime, &entry.movie.languages).is_some())
-        })
-        .count()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,5 +414,17 @@ mod tests {
         assert!(response.error);
         assert_eq!(response.message.as_deref(), Some("no.showtime.error"));
         assert!(response.results.is_empty());
+    }
+
+    #[test]
+    fn entries_without_movie_are_skipped() {
+        // Vu sur C0189 le 2026-10-08 : `"movie": null` avec une séance IMAX.
+        let json = r#"{"error":false,"results":[
+            {"movie":null,"showtimes":{"multiple":[{"internalId":1,"startsAt":"2026-10-09T10:00:00"}]}},
+            {"movie":{"internalId":2,"title":"Film"},"showtimes":{}}
+        ]}"#;
+        let response = serde_json::from_str::<Response>(json).unwrap();
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].movie.internal_id, 2);
     }
 }

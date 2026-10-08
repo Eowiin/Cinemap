@@ -174,14 +174,14 @@ async fn scrape_cinema(
         .await;
         match result {
             Ok(movies) => {
-                let count = allocine::count_showtimes(&movies);
-                if let Err(error) =
-                    db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await
-                {
-                    warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
-                } else {
-                    report.completed_dates += 1;
-                    report.showtimes += count;
+                match db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await {
+                    Ok(written) => {
+                        report.completed_dates += 1;
+                        report.showtimes += written;
+                    }
+                    Err(error) => {
+                        warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
+                    }
                 }
             }
             Err(error) => {
