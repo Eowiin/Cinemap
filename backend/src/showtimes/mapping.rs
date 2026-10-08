@@ -22,7 +22,9 @@ impl Version {
 /// 2. `Localization.Version.Original` : film dont la première langue est le français → VF,
 ///    sinon sous-titré (`Localization.Subtitle.French` ou `Showtime.Accessibility.Subtitled`,
 ///    vu dans les groupes `*_st`) → VOST, sinon VO ;
-/// 3. autre cas → `None` : l'appelant saute la séance plutôt que d'inventer une version.
+/// 3. aucun tag `Localization.*` : `diffusionVersion` `DUBBED` (doublé en français, vu sur
+///    C0014 le 2026-10-08 pour un film norvégien) ou `LOCAL` (langue locale) → VF ;
+/// 4. autre cas → `None` : l'appelant saute la séance plutôt que d'inventer une version.
 pub(super) fn version(showtime: &Showtime, languages: &[Option<String>]) -> Option<Version> {
     let has_tag = |wanted: &str| showtime.tags.iter().any(|tag| tag == wanted);
 
@@ -38,6 +40,10 @@ pub(super) fn version(showtime: &Showtime, languages: &[Option<String>]) -> Opti
             return Some(Version::Vost);
         }
         return Some(Version::Vo);
+    }
+
+    if matches!(showtime.diffusion_version.as_str(), "DUBBED" | "LOCAL") {
+        return Some(Version::Vf);
     }
 
     None
@@ -273,6 +279,14 @@ mod tests {
             &languages(&[Some("TURKISH")]),
         );
         assert!(matches!(&result, Some(Version::Vost)));
+    }
+
+    #[test]
+    fn version_falls_back_to_dubbed_diffusion_version_without_localization_tags() {
+        let mut screening = showtime(&["Format.Projection.Digital"]);
+        screening.diffusion_version = "DUBBED".into();
+        let result = version(&screening, &languages(&[Some("NORWEGIAN")]));
+        assert!(matches!(&result, Some(Version::Vf)));
     }
 
     #[test]

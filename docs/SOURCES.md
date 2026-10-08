@@ -115,6 +115,14 @@ Les clés `*_st` indiquent des sous-titres (VOST). À vérifier empiriquement su
 | `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | `VO` selon la règle actuelle : seule la première langue est prise en compte |
 | `multiple_sme` | `LOCAL` | `Language.French` (+ `Accessibility.Subtitled`) | `FRENCH` | `VF` (vu sur P0095 le 2026-10-08 : film français avec sous-titres SME) |
 | `original_st` | `ORIGINAL` | `Version.Original` + `Accessibility.Subtitled` (pas de `Subtitle.French`) | `TURKISH` | `VOST` (vu sur P0095 le 2026-10-08) |
+| `multiple` | `DUBBED` | aucun tag `Localization.*` | `NORWEGIAN` | `VF` (repli sur `diffusionVersion`, vu sur C0014 le 2026-10-08) |
+
+Pièges de format vus sur `scrape --department 75` (2026-10-08) :
+
+- **Listes à `null`** : `"languages": null` (C0020, C0065, C0119…). `#[serde(default)]` ne couvre que le champ absent ; les listes et sous-objets passent par `null_as_default`, qui accepte aussi `null`.
+- **`error: true` sans séance** : deux messages, aucun n'est une vraie erreur.
+  - `next.showtime.on` : rien ce jour-là, `nextDate` donne la prochaine séance ;
+  - `no.showtime.error` : aucune séance programmée du tout (`nextDate: null`, C0030, C0056, C0059, C0127).
 
 Les formats persistés sont limités à `3D`, `IMAX`, `4DX`, `ScreenX`, `Dolby Cinema` et `Dolby Atmos`. Les valeurs `DIGITAL`, `ANALOG` et `DOLBY_71` observées dans les fixtures ne sont pas des formats retenus.
 

@@ -9,6 +9,17 @@ use super::{CircuitBreaker, SharedRateLimiter, mapping};
 
 const BASE_URL: &str = "https://www.allocine.fr";
 
+/// `#[serde(default)]` ne couvre que le champ **absent** ; AlloCiné envoie parfois `null`
+/// à la place d'une liste (`"languages": null` vu sur C0020 le 2026-10-08). Avec ce
+/// `deserialize_with`, `null` donne aussi la valeur par défaut (liste vide, struct vide).
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Response {
@@ -17,9 +28,9 @@ pub(super) struct Response {
     message: Option<String>,
     #[serde(default)]
     pub(super) next_date: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pagination: Pagination,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) results: Vec<MovieResult>,
 }
 
@@ -33,6 +44,7 @@ struct Pagination {
 #[serde(rename_all = "camelCase")]
 pub(super) struct MovieResult {
     pub(super) movie: Movie,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) showtimes: BTreeMap<String, Vec<Showtime>>,
 }
 
@@ -45,21 +57,21 @@ pub(super) struct Movie {
     pub(super) poster: Option<Poster>,
     pub(super) synopsis: Option<String>,
     pub(super) runtime: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) languages: Vec<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) genres: Vec<Genre>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) countries: Vec<Country>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) credits: Vec<Credit>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) cast: Cast,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) releases: Vec<Release>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) data: MovieData,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) stats: MovieStats,
 }
 
@@ -100,7 +112,7 @@ pub(super) struct Position {
 
 #[derive(Default, Deserialize)]
 pub(super) struct Cast {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) edges: Vec<CastEdge>,
 }
 
@@ -154,9 +166,9 @@ pub(super) struct UserRating {
 pub(super) struct Showtime {
     pub(super) internal_id: i64,
     pub(super) starts_at: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) diffusion_version: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) tags: Vec<String>,
     #[serde(default)]
     pub(super) projection: Option<Vec<String>>,
@@ -166,18 +178,19 @@ pub(super) struct Showtime {
     pub(super) picture: Option<Vec<String>>,
     #[serde(default)]
     pub(super) experience: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) data: ShowtimeData,
 }
 
 #[derive(Default, Deserialize)]
 pub(super) struct ShowtimeData {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) ticketing: Vec<Ticketing>,
 }
 
 #[derive(Deserialize)]
 pub(super) struct Ticketing {
+    #[serde(default, deserialize_with = "null_as_default")]
     pub(super) urls: Vec<String>,
     #[serde(rename = "type")]
     pub(super) kind: String,
@@ -234,7 +247,12 @@ pub(super) async fn fetch_showtimes(
 ) -> anyhow::Result<Vec<MovieResult>> {
     let first_page = fetch_page(client, cinema_id, date, 1, rate_limiter, circuit_breaker).await?;
     if first_page.error {
-        if first_page.message.as_deref() == Some("next.showtime.on") {
+        // `next.showtime.on` : rien ce jour-là, prochaine séance le `nextDate`.
+        // `no.showtime.error` : aucune séance programmée du tout (`nextDate: null`).
+        if matches!(
+            first_page.message.as_deref(),
+            Some("next.showtime.on" | "no.showtime.error")
+        ) {
             tracing::info!(
                 cinema_id,
                 date,
@@ -343,5 +361,42 @@ mod tests {
         assert!(response.results.is_empty());
         // nextDate is irrelevant to scraping logic; serde ignores this extra property.
         assert_eq!(response.message.as_deref(), Some("next.showtime.on"));
+    }
+
+    #[test]
+    fn null_lists_deserialize_as_empty() {
+        // Vu sur C0020 le 2026-10-08 : `"languages": null`.
+        let json = r#"{
+            "error": false,
+            "pagination": { "totalPages": 1 },
+            "results": [{
+                "movie": {
+                    "internalId": 1, "title": "Splendor", "originalTitle": null, "poster": null,
+                    "synopsis": null, "runtime": null, "languages": null, "genres": null,
+                    "countries": null, "credits": null, "cast": null, "releases": null,
+                    "data": null, "stats": null
+                },
+                "showtimes": { "original": [{
+                    "internalId": 2, "startsAt": "2026-10-08T20:00:00",
+                    "diffusionVersion": "ORIGINAL", "tags": null,
+                    "data": { "ticketing": [{ "urls": null, "type": "DESKTOP", "provider": "default" }] }
+                }] }
+            }]
+        }"#;
+        let response = serde_json::from_str::<Response>(json).unwrap();
+        let entry = &response.results[0];
+        assert!(entry.movie.languages.is_empty());
+        assert!(entry.movie.cast.edges.is_empty());
+        assert!(entry.showtimes["original"][0].tags.is_empty());
+    }
+
+    #[test]
+    fn no_showtime_error_deserializes_as_empty_response() {
+        // Vu sur C0030 le 2026-10-08 : cinéma sans aucune séance programmée.
+        let json = r#"{"error":true,"message":"no.showtime.error","nextDate":null,"results":[]}"#;
+        let response = serde_json::from_str::<Response>(json).unwrap();
+        assert!(response.error);
+        assert_eq!(response.message.as_deref(), Some("no.showtime.error"));
+        assert!(response.results.is_empty());
     }
 }

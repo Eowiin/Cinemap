@@ -46,6 +46,7 @@ Trois pièges à retenir :
 1. **Jour sans séance = `error: true`**. Ce n'est pas une vraie erreur : le message `next.showtime.on` dit juste « prochaine séance le `nextDate` ». Il faudra le distinguer d'une vraie erreur (lot C).
 2. **`pagination.page` change de type** (nombre ou chaîne). Solution simple : ne pas mettre `page` dans ta struct, tu n'en as pas besoin (seul `totalPages` sert).
 3. **`movie.languages` peut contenir `null`** (`[null]` vu dans C0015).
+4. *(ajouté le 2026-10-08, après `--department 75`)* Une liste entière peut valoir `null` (`"languages": null`), et `no.showtime.error` (aucune séance programmée) est un autre « jour vide », pas une erreur. Voir `SOURCES.md` §4.
 
 ---
 
