@@ -2,7 +2,9 @@ use super::allocine::Showtime;
 
 pub(super) enum Version {
     Vf,
+    /// Version originale non française, sous-titrage non précisé par AlloCiné.
     Vo,
+    /// Version originale non française, sous-titres français confirmés.
     Vost,
 }
 
@@ -21,7 +23,8 @@ impl Version {
 ///    langue française, souvent avec sous-titres SME) → VF ;
 /// 2. `Localization.Version.Original` : film dont la première langue est le français → VF,
 ///    sinon sous-titré (`Localization.Subtitle.French` ou `Showtime.Accessibility.Subtitled`,
-///    vu dans les groupes `*_st`) → VOST, sinon VO ;
+///    vu dans les groupes `*_st`) → VOST, sinon VO (= sous-titrage non précisé, pas
+///    « sans sous-titres » : `API.md`) ;
 /// 3. aucun tag `Localization.*` : `diffusionVersion` `DUBBED` (doublé en français, vu sur
 ///    C0014 le 2026-10-08 pour un film norvégien) ou `LOCAL` (langue locale) → VF ;
 /// 4. autre cas → `None` : l'appelant saute la séance plutôt que d'inventer une version.

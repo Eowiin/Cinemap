@@ -110,7 +110,7 @@ Les clés `*_st` indiquent des sous-titres (VOST). À vérifier empiriquement su
 | `multiple` | `DUBBED` | `Version.French` | `FRENCH` | `VF` (pour un film français, `DUBBED` seul ne signifie pas doublage) |
 | `multiple` | `DUBBED` | `Version.French` + `Subtitle.French` | `FRENCH` | `VF` (sous-titres français liés à l'accessibilité) |
 | `original` | `ORIGINAL` | `Version.Original` + `Subtitle.French` | `ENGLISH`, `JAPANESE`… | `VOST` |
-| `original` | `ORIGINAL` | `Version.Original` | `ENGLISH`… | `VO` |
+| `original` | `ORIGINAL` | `Version.Original` | `ENGLISH`… | `VO` (= sous-titrage non précisé par AlloCiné, pas « sans sous-titres » ; voir `API.md`) |
 | `original` | `ORIGINAL` | `Version.Original` | `FRENCH` | `VF` (film français en version originale) |
 | `original` | `ORIGINAL` | `Version.Original` | `CANTONESE`, `FRENCH` | `VO` selon la règle actuelle : seule la première langue est prise en compte |
 | `multiple_sme` | `LOCAL` | `Language.French` (+ `Accessibility.Subtitled`) | `FRENCH` | `VF` (vu sur P0095 le 2026-10-08 : film français avec sous-titres SME) |

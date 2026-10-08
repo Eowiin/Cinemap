@@ -29,7 +29,7 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
   Codes : `bad_request` (400), `not_found` (404), `internal` (500).
 - `version` d'une séance : `"VF"` | `"VO"` | `"VOST"`.
   - `VF` = diffusé en français, **y compris un film français en version originale**. Le mapping s'appuie sur la langue du film (`movie.languages` d'AlloCiné), à vérifier empiriquement à l'étape 2.
-  - `VO` = version originale non française, sans sous-titres ; `VOST` = version originale non française, sous-titrée.
+  - `VOST` = version originale non française, **sous-titres français confirmés** par AlloCiné (tag `Localization.Subtitle.French` ou `Showtime.Accessibility.Subtitled`). `VO` = version originale non française **dont AlloCiné ne précise pas le sous-titrage** (décidé le 2026-10-08). En pratique, la plupart des `VO` en France sont sous-titrées ; le front affiche « VO » sans promettre l'absence de sous-titres.
   - Paramètre de query `version` : `VF` ou `VO`. `version=VO` renvoie `VO` + `VOST` (« pas doublé en français »).
 - `formats` d'une séance : sous-ensemble de `"3D"`, `"IMAX"`, `"4DX"`, `"ScreenX"`, `"Dolby Cinema"`, `"Dolby Atmos"`. Toute autre valeur AlloCiné est ignorée (et loggée par le scraper).
 
@@ -252,7 +252,7 @@ CREATE TABLE showtimes (
     movie_id    INTEGER NOT NULL REFERENCES movies(id),
     date        TEXT    NOT NULL,          -- jour ciné (jour demandé à AlloCiné), peut différer de la date de starts_at
     starts_at   TEXT    NOT NULL,
-    version     TEXT    NOT NULL,          -- VF | VO | VOST
+    version     TEXT    NOT NULL,          -- VF | VO (sous-titrage non précisé) | VOST (sous-titres confirmés)
     formats     TEXT    NOT NULL DEFAULT '[]',  -- JSON
     booking_url TEXT
 );
