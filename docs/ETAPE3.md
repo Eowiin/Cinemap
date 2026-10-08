@@ -16,7 +16,7 @@ navigateur / front Svelte
                          ├─ handler : 1 à 3 requêtes SQL (jamais une requête par ligne)
                          ├─ regroupement / distance / tri en Rust
                          └─ Json(...) ou AppError → { "error": { code, message } }
-                       couches : trace → compression gzip → Cache-Control → CORS (dev seulement)
+                       couches : trace → compression gzip → Cache-Control
 ```
 
 | Lot | En une phrase | Fichiers principaux | Base ? |
@@ -31,7 +31,7 @@ navigateur / front Svelte
 | G | `GET /api/movies/{id}` et `GET /api/movies/{id}/showtimes` | `src/api/movies.rs` | oui |
 | H | `GET /api/movies` (à l'affiche) | `src/api/movies.rs` | oui |
 | I | `GET /api/search` | `src/api/search.rs` | oui |
-| J | Couches HTTP : gzip, cache, CORS, logs ; mesures | `src/api/mod.rs` | – |
+| J | Couches HTTP : gzip, cache, logs ; mesures | `src/api/mod.rs` | – |
 | K | Tests d'intégration du contrat (base de test + requêtes HTTP en mémoire) | `tests/api.rs`, `tests/fixtures/api_seed.sql` | oui |
 
 Ordre conseillé : 0 → A → B → C → D → E → F → G → H → I → J → K. Les tests de K peuvent s'écrire **au fil de l'eau** (un test par endpoint dès qu'il marche) : c'est même mieux.
@@ -40,11 +40,11 @@ Estimation : A à C ≈ une soirée ; D à I ≈ un endpoint par séance de trav
 
 ---
 
-## Décisions à valider avant de coder
+## Décisions validées (2026-10-08)
 
-Ces points ne sont pas tranchés par `API.md`. Mes recommandations sont en gras ; dis-moi si tu en changes une, et on reporte la décision dans `API.md` (section concernée) avant le lot qui l'utilise.
+Toutes reportées dans `API.md` (le contrat fait foi). Le tableau garde le « pourquoi » pour mémoire.
 
-| # | Question | Recommandation | Lot |
+| # | Question | Décision | Lot |
 |---|---|---|---|
 | 1 | `Cinema.department` : `API.md` montre `"Paris"` (un nom), la base stocke `"75"` (un code) | **Renvoyer le nom**, via `docs/data/departements.csv` (déjà lu par `get_departments()`), chargé une fois au démarrage dans une `HashMap<String, String>` de l'état. Alternative : changer le contrat en `department: { code, name }` | D |
 | 2 | Ordre de `GET /api/cinemas` (le contrat ne dit rien) | **Par distance si `lat`/`lng` fournis, sinon par nom** (`name_search`) | D |
@@ -53,6 +53,11 @@ Ces points ne sont pas tranchés par `API.md`. Mes recommandations sont en gras 
 | 5 | `limit` de `/api/movies` : borne haute ? | **Défaut 50, max 200**, au-delà → 400 | H |
 | 6 | Adresse d'écoute de `serve` | **`127.0.0.1:3000` par défaut** (en prod, nginx est devant : inutile d'exposer le port), modifiable par `--addr` ou `BIND_ADDR` | A |
 | 7 | Colonnes JSON (`genres`, `directors`…) | **`sqlx::types::Json<Vec<String>>`** dans les structs de lecture (décodage automatique, une erreur de format = 500). Bonus sobriété en J.5 | D |
+| 8 | `Cache-Control` sur les erreurs ? | **2xx seulement** (`public, max-age=300`) ; erreurs en `no-store` (un 500 en cache prolongerait la panne chez le visiteur) | J |
+| 9 | `version=vf` en minuscules ? | **Refusé (400)** : c'est le front qui construit les URL, la tolérance ne servirait à rien | B |
+| 10 | `after=9:05` sans le zéro ? | **Accepté** (ce que chrono accepte avec `%H:%M`), fixé par un test | B |
+| 11 | `/api/movies/abc` | **`Path<String>` + notre parsing** → 400 au format JSON du contrat, pas le texte d'axum | G |
+| 12 | CORS en dev ? | **Aucun** : proxy Vite (`/api` → `localhost:3000`), fait par Claude côté front. Le lot J.4 disparaît | J |
 
 ---
 
@@ -113,7 +118,7 @@ L'API a besoin du « jour ciné d'aujourd'hui » (date par défaut, `/api/meta`)
 **Fichier** : `Cargo.toml`.
 
 ```toml
-tower-http = { version = "0.6", features = ["compression-gzip", "cors", "set-header", "trace"] }
+tower-http = { version = "0.6", features = ["compression-gzip", "set-header", "trace"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }      # ServiceExt::oneshot, pour les tests (lot K)
@@ -248,12 +253,12 @@ Dans les handlers : `Query(raw): Query<RawQuery>`. Avec des `Option<String>`, `Q
   - `today` est un **paramètre** : la fonction ne lit pas l'horloge, donc elle se teste (même idée que `cine_dates`).
   - Indice : `NaiveDate::parse_from_str(s, DATE_FORMAT)`.
 - [ ] `parse_after(raw: Option<&str>) -> ApiResult<Option<NaiveTime>>`
-  - `"20:00"` → `Some(20:00)` ; `"9:05"` → à toi de décider (accepter ou non, mais teste-le) ; `"25:00"`, `"20h"` → `BadRequest`.
+  - `"20:00"` → `Some(20:00)` ; `"9:05"` → accepté (décision 10, un test le fixe) ; `"25:00"`, `"20h"` → `BadRequest`.
   - Indice : `NaiveTime::parse_from_str(s, "%H:%M")`.
 - [ ] `after_bound(date: NaiveDate, after: Option<NaiveTime>) -> Option<String>`
   - → `Some("2026-10-08T20:00:00")`, la chaîne à comparer à `starts_at` (convention `after` de `API.md` : on compare le `starts_at` **complet**, donc la séance de 00h15 le lendemain reste incluse avec `after=22:00`).
 - [ ] `enum VersionFilter { Vf, Vo }` + `parse_version(raw) -> ApiResult<Option<VersionFilter>>`
-  - `"VF"` → `Vf`, `"VO"` → `Vo` ; `"VOST"`, `"vf"`, `"xx"` → `BadRequest` (le contrat dit `VF` ou `VO` ; décide si tu acceptes la casse minuscule, et teste-le).
+  - `"VF"` → `Vf`, `"VO"` → `Vo` ; `"VOST"`, `"vf"`, `"xx"` → `BadRequest` (décision 9 : `"vf"` → 400, teste-le).
   - Méthode utile : `fn as_sql(&self) -> &'static str` qui renvoie `"VF"` / `"VO"`, pour la requête (voir B.4).
 - [ ] `parse_bool(raw) -> ApiResult<Option<bool>>` : `"true"` / `"false"` seulement.
 - [ ] `struct Position { lat: f64, lng: f64 }` + `parse_position(lat, lng) -> ApiResult<Option<Position>>`
@@ -518,7 +523,7 @@ Et compare à l'œil avec la page AlloCiné du cinéma : mêmes films, mêmes ho
 - [ ] `Person { name: String, role: Option<String> }` avec `#[derive(Serialize, Deserialize)]` : `Deserialize` parce qu'on la lit depuis la colonne JSON `cast_members` (`Json<Vec<Person>>`), `Serialize` parce qu'on la renvoie.
 - [ ] ⚠️ Nom : la colonne s'appelle `cast_members`, le champ du contrat s'appelle `cast`.
 - [ ] Un film existe en base mais n'a plus de séance → on le renvoie quand même (200) : un lien partagé hier doit encore afficher la fiche. Seul un `id` inconnu donne 404 (`"Film introuvable"`).
-- [ ] `id` : `Path(id): Path<i64>`. Un `id` non numérique (`/api/movies/abc`) : axum répond lui-même un 400 en texte. Pour garder notre format JSON, prends `Path(id): Path<String>` et parse avec `parse_number`… ou accepte cette petite entorse et note-la. **Recommandation** : `String` + parse, pour être cohérent avec le reste.
+- [ ] `id` : `Path(id): Path<i64>`. Un `id` non numérique (`/api/movies/abc`) : axum répond lui-même un 400 en texte. Pour garder notre format JSON, prends `Path(id): Path<String>` et parse avec `parse_number`… (décision 11).
 
 ### G.2 Les cinémas dans un rayon (fonction partagée avec H)
 
@@ -687,11 +692,11 @@ Une couche (`layer`) enveloppe tous les handlers : c'est là qu'on met ce qui va
 
 ```bash
 curl -s localhost:3000/api/cinemas | wc -c                                   # taille brute
-curl -s -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas | wc -c        # taille compressée (API.md annonce ≈ 60 Ko pour ~2 000 cinémas)
+curl -s -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas | wc -c        # taille compressée (API.md annonce ≈ 90 Ko pour ~3 100 cinémas)
 ```
 
-- [ ] **J.3 Cache** : `Cache-Control: public, max-age=300` sur les réponses (contrat). `SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300"))`. Question : faut-il aussi mettre ce cache sur les **erreurs** ? (Un 500 mis en cache 5 min par le service worker, c'est 5 min de panne prolongée chez le visiteur.) Décide et teste. Indice : `SetResponseHeaderLayer::overriding` / `if_not_present` acceptent aussi une closure qui reçoit la réponse.
-- [ ] **J.4 CORS en développement seulement** : le front Vite tourne sur `localhost:5173`, l'API sur `3000` ; le navigateur bloque sans CORS. En prod, nginx sert les deux sur le même domaine : pas de CORS. Donc : `CorsLayer` avec `allow_origin("http://localhost:5173".parse::<HeaderValue>()?)` et `allow_methods([Method::GET])`, ajoutée seulement si une variable `CORS_DEV=1` (ou `cfg!(debug_assertions)`) est présente. Une alternative encore plus simple : un proxy dans `vite.config.ts` (`server.proxy['/api']`), et pas de CORS du tout. **Je recommande le proxy Vite** (c'est moi qui fais le front, je m'en occupe) : tu peux sauter J.4.
+- [ ] **J.3 Cache** : `Cache-Control: public, max-age=300` sur les réponses (contrat). `SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300"))`. Décision 8 : seulement sur les **2xx**, et `no-store` sur les erreurs. Indice : `SetResponseHeaderLayer::overriding` accepte aussi une closure qui reçoit la réponse (`|res: &Response<_>| …` → `Option<HeaderValue>`) : regarde `res.status().is_success()`. Autre option : mettre `no-store` directement dans `AppError::into_response`, et `if_not_present(public, max-age=300)` en couche. Teste les deux cas (200 et 404).
+- ~~**J.4 CORS**~~ : supprimé (décision 12). En dev, le front passe par le proxy Vite ; en prod, même domaine.
 - [ ] **J.5 Bonus sobriété** (optionnel) : les colonnes `genres`, `formats`… sont déjà du JSON en base. Les décoder en `Vec<String>` puis les ré-encoder en JSON, c'est un aller-retour inutile. `Box<serde_json::value::RawValue>` permet de les recopier telles quelles dans la réponse. Mesure d'abord (J.6) : si le gain n'est pas visible, garde `Json<Vec<String>>`, plus simple et qui valide le format.
 - [ ] **J.6 Mesures** → `SOBRIETE.md` (toujours en `--release`) :
   - mémoire au repos du processus `serve` : `ps -o rss= -p $(pgrep -f 'backend serve')` (en Ko) ;
@@ -699,7 +704,7 @@ curl -s -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas | wc -c        # t
   - débit sous charge, si tu installes `oha` (`brew install oha`) : `oha -z 10s -c 20 "localhost:3000/api/movies?date=$D"` → requêtes/s et latence p99.
   - Ordre de grandeur attendu : quelques Mo de RSS au repos, quelques ms par requête. Si `/api/movies` dépasse ~50 ms, regarde `EXPLAIN QUERY PLAN`.
 
-**C'est fini quand** : `curl -sI -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas` montre `content-encoding: gzip` et `cache-control: public, max-age=300`, et les mesures sont dans `SOBRIETE.md`.
+**C'est fini quand** : `curl -sI -H 'Accept-Encoding: gzip' localhost:3000/api/cinemas` montre `content-encoding: gzip` et `cache-control: public, max-age=300`, `curl -sI localhost:3000/api/cinemas/XXXX` montre `cache-control: no-store`, et les mesures sont dans `SOBRIETE.md`.
 
 ---
 
@@ -756,14 +761,14 @@ let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 - [ ] `/api/movies/{C}` → 200 ; `/api/movies/999` → 404.
 - [ ] `/api/movies/{A}/showtimes` sans `lat` → 400 ; avec Paris et `radius_km=5` → seulement `PARIS1`.
 - [ ] `/api/search?q=cine cite` et `?q=montreuil` trouvent le bon cinéma ; `?q=a` → 400.
-- [ ] Paramètres invalides (`date=2026-13-01`, `after=25:00`, `version=VOST`, `art_et_essai=oui`, `limit=0`) → 400 `bad_request`.
+- [ ] Paramètres invalides (`date=2026-13-01`, `after=25:00`, `version=VOST`, `version=vf`, `art_et_essai=oui`, `limit=0`, `/api/movies/abc`) → 400 `bad_request` au format JSON.
+- [ ] Une erreur porte `cache-control: no-store`, une réponse 200 `public, max-age=300`.
 - [ ] `/api/meta` : `dates_available` ne contient que des dates ≥ `today` (attention, `today` dépend de l'horloge dans ce test : vérifie la forme, pas les valeurs exactes).
 
 **C'est fini quand (fin de l'étape 3, à cocher dans `PLAN.md`)** :
 
 - `cargo test` vert, `cargo clippy --all-targets` sans warning, `cargo fmt --check` propre ;
 - les 8 endpoints de `API.md` répondent sur une base réelle (après un `scrape` complet lancé par toi), avec les `curl` des lots D à I ;
-- les décisions du tableau du début sont reportées dans `API.md` ;
 - mesures (RSS au repos, temps de réponse des 8 endpoints, débit de `/api/movies`) notées dans `SOBRIETE.md`.
 
 Ensuite : étape 4 (TMDB) côté backend, et je branche le front sur la vraie API (étape 5) dès que D et F marchent.

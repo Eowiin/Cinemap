@@ -11,12 +11,17 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
 - **Horaires** : `starts_at` = `YYYY-MM-DDTHH:MM:SS`, heure locale Paris, sans fuseau (tel que fourni par AlloCiné).
 - **`after`** (`HH:MM`) : garde les séances dont `starts_at >= "{date}T{after}:00"`. On compare le `starts_at` **complet**, pour que les séances après minuit restent incluses (`after=22:00` garde celle de 00h15).
 - **IDs** : cinéma = ID AlloCiné (`"C0159"`, string) ; film = ID AlloCiné (`1000032855`, entier).
-- **Position** : paramètres `lat` et `lng` (floats). `distance_km` vaut `null` si `lat`/`lng` ne sont pas fournis.
+- **Position** : paramètres `lat` et `lng` (floats). `distance_km` vaut `null` si `lat`/`lng` ne sont pas fournis. Les distances sont arrondies à 0,1 km.
 - Champs inconnus = `null` (jamais absents). Listes vides = `[]`.
 - **Booléens en query** : `true` / `false`. Un paramètre mal formé (date, heure, booléen, nombre, `version` inconnue) → 400 `bad_request`.
+  - `version` : exactement `VF` ou `VO` (majuscules ; `vf`, `VOST` → 400).
+  - `after` : `HH:MM` (le zéro initial est facultatif : `9:05` est accepté).
+  - `limit` : de 1 à 200 ; `radius_km` : strictement positif, 100 au plus.
+  - ID de film non numérique dans le chemin (`/api/movies/abc`) → 400 `bad_request` au format JSON ci-dessous, comme toute autre erreur.
 - **Cinémas non géocodés** (`lat`/`lng` NULL en base) : exclus de **tous** les endpoints, `/api/cinemas/{id}` compris (404).
 - **Cinémas plus listés par AlloCiné** : un cinéma dont `updated_at` (dernière fois qu'`import-cinemas` l'a vu) date de **plus de 14 jours** est exclu de **tous** les endpoints, comme un cinéma non géocodé (404 sur `/api/cinemas/{id}`, ses séances n'apparaissent plus). Il réapparaît dès qu'un import le revoit. Voir « Cycle de vie des cinémas » plus bas.
-- **Cache** : réponses avec `Cache-Control: public, max-age=300` (utile au service worker de la PWA).
+- **Cache** : réponses **2xx** avec `Cache-Control: public, max-age=300` (utile au service worker de la PWA). Les erreurs portent `Cache-Control: no-store` : une panne ne doit pas rester en cache chez le visiteur après le retour du serveur.
+- **CORS** : aucun. En prod, nginx sert le front et `/api` sur le même domaine ; en dev, le serveur Vite relaie `/api` vers `localhost:3000` (`server.proxy`).
 - **Erreurs** : code HTTP approprié + corps
   ```json
   { "error": { "code": "not_found", "message": "Cinéma introuvable" } }
@@ -44,7 +49,7 @@ type CinemaSummary = {
 type Cinema = CinemaSummary & {
   address: string | null;      // "7 Place de la Rotonde"
   postal_code: string | null;  // "75001"
-  department: string | null;   // "Paris"
+  department: string | null;   // nom du département ("Paris"), déduit du code INSEE stocké en base via docs/data/departements.csv
   screens: number | null;
   seats: number | null;
   allocine_url: string;        // https://www.allocine.fr/seance/salle_gen_csalle=C0159.html
@@ -106,7 +111,7 @@ type Showtime = {
 
 ### `GET /api/cinemas`
 
-Tous les cinémas géolocalisés, pour la carte (~2 000 éléments, gzip ≈ 60 Ko).
+Tous les cinémas visibles, pour la carte (~3 100 éléments, gzip ≈ 90 Ko). Tri par `distance_km` si `lat`/`lng` sont fournis, sinon par nom.
 
 Query : `art_et_essai?: bool`, `lat?`, `lng?`.
 
@@ -137,7 +142,7 @@ Films triés par titre, séances par heure.
 
 Les films « à l'affiche » un jour donné (page d'accueil).
 
-Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50).
+Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50, max 200).
 
 ```json
 {
@@ -183,6 +188,8 @@ Tri par `distance_km`.
 Query : `q` (≥ 2 caractères, sinon 400).
 
 Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès).
+
+Limite connue : les films sont cherchés sur leur titre français seulement (`original_title` n'a pas de colonne normalisée).
 
 ```json
 {
@@ -276,6 +283,7 @@ avec leurs séances (`ON DELETE CASCADE`).
 - `import-cinemas` met `updated_at` à jour pour chaque cinéma listé ; le géocodage et
   l'enrichissement CNC ne le modifient pas.
 - **Masqué** : `updated_at` plus vieux que 14 jours → exclu de l'API (filtre dans
+  La règle « visible » (géocodé + vu depuis moins de 14 jours) est définie **une seule fois**, dans la vue SQL `visible_cinemas`, utilisée par le scraper et par toutes les requêtes de l'API.
   les requêtes de `serve`, pas de colonne dédiée).
 - **Supprimé** : `updated_at` plus vieux que 60 jours, à la fin d'un import
   **complet et réussi** (un import qui échoue s'arrête avant). Les séances suivent

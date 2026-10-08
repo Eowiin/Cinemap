@@ -93,7 +93,7 @@ Suivi détaillé : [`ETAPE2.md`](ETAPE2.md).
 
 ### 3. API (backend, propriétaire)
 Suivi détaillé : [`ETAPE3.md`](ETAPE3.md).
-- [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), CORS en dev
+- [ ] axum : les 8 endpoints de `API.md`, erreurs JSON, gzip (`tower-http`), pas de CORS (proxy Vite en dev)
 - [ ] Recherche insensible aux accents (colonnes `*_search` normalisées)
 - [ ] Distance : bounding box en SQL, puis haversine en Rust
 - [ ] Tests d'intégration sur une base de test
