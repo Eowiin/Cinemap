@@ -1,0 +1,30 @@
+# Séances de toute la France (J, J+1, J+2, et J+6 le mercredi) puis TMDB.
+# Lancé par cinemap-nightly.timer ; à la main : systemctl start cinemap-nightly
+[Unit]
+Description=Cinemap : scrape des séances puis enrichissement TMDB
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cinemap
+Group=cinemap
+EnvironmentFile=/etc/cinemap/cinemap.env
+StateDirectory=cinemap
+WorkingDirectory=/var/lib/cinemap
+# Les ExecStart d'un oneshot s'enchaînent ; si le scrape échoue, tmdb n'est pas lancé.
+ExecStart=/opt/cinemap/current/cinemap scrape
+ExecStart=/opt/cinemap/current/cinemap tmdb
+# Laisse la priorité CPU / disque à l'API.
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

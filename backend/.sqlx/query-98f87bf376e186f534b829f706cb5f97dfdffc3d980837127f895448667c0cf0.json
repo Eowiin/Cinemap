@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n            count(*) AS \"total!: i64\",\n            count(*) - count(lat) AS \"without_position!: i64\",\n            coalesce(sum(geocode_type = 'municipality'), 0) AS \"approximate!: i64\",\n            coalesce(sum(geocode_score < 0.5), 0) AS \"low_score!: i64\",\n            count(cnc_id) AS \"with_cnc!: i64\",\n            coalesce(sum(updated_at < ?), 0) AS \"not_seen!: i64\"\n           FROM cinemas",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "without_position!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "approximate!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "low_score!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "with_cnc!: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "not_seen!: i64",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "98f87bf376e186f534b829f706cb5f97dfdffc3d980837127f895448667c0cf0"
+}

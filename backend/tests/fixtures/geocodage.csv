@@ -1,0 +1,4 @@
+id,adresse,longitude,latitude,result_score,result_label,result_postcode,result_city,result_citycode,result_status,result_type
+C0159,7 Place de la Rotonde 75001 Paris,2.346912345,48.862712345,0.91,7 Place de la Rotonde 75001 Paris,75001,Paris,75101,ok,housenumber
+UNKNOWN,Adresse introuvable,,,,,,,,skipped,
+TOULOUSE,31300 Toulouse,1.433805,43.604082,0.94,Toulouse,31000,Toulouse,31555,ok,municipality

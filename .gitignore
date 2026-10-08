@@ -1,10 +1,19 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
+# Rust
+backend/target/
+
+# Node
+frontend/node_modules/
+frontend/dist/
 
 # Base de données (se régénère avec les scrapers)
-data/cinemas.db
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets
+.env
 
 # macOS
 .DS_Store
+frontend/dev-dist/

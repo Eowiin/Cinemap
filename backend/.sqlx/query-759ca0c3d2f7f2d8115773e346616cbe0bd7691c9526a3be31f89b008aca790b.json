@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT date AS \"date!: String\"\n           FROM showtimes\n           WHERE cinema_id = ?1 AND date >= ?2\n           ORDER BY date",
+  "describe": {
+    "columns": [
+      {
+        "name": "date!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "759ca0c3d2f7f2d8115773e346616cbe0bd7691c9526a3be31f89b008aca790b"
+}

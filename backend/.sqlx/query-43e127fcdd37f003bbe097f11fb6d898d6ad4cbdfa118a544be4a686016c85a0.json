@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cinemas SET cnc_id = ?, screens = ?, seats = ?, art_et_essai = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "43e127fcdd37f003bbe097f11fb6d898d6ad4cbdfa118a544be4a686016c85a0"
+}

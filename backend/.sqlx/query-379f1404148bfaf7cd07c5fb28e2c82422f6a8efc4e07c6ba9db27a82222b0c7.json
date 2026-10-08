@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT s.cinema_id AS \"cinema_id!: String\", s.id AS \"showtime_id!: String\",\n                  s.starts_at AS \"starts_at!: String\", s.version AS \"version!: String\",\n                  s.formats AS \"formats!: SqlJson<Vec<String>>\",\n                  s.booking_url AS \"booking_url?: String\"\n           FROM showtimes s\n           WHERE s.movie_id = ?1\n             AND s.date = ?2\n             AND s.cinema_id IN (SELECT value FROM json_each(?3))\n             AND (?4 IS NULL OR s.version = ?4 OR (?4 = 'VO' AND s.version = 'VOST'))\n             AND (?5 IS NULL OR s.starts_at >= ?5)\n           ORDER BY s.cinema_id, s.starts_at",
+  "describe": {
+    "columns": [
+      {
+        "name": "cinema_id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "cinema_id"
+          }
+        }
+      },
+      {
+        "name": "showtime_id!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "starts_at!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "starts_at"
+          }
+        }
+      },
+      {
+        "name": "version!: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "name": "formats!: SqlJson<Vec<String>>",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "formats"
+          }
+        }
+      },
+      {
+        "name": "booking_url?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "booking_url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "379f1404148bfaf7cd07c5fb28e2c82422f6a8efc4e07c6ba9db27a82222b0c7"
+}

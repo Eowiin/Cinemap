@@ -1,0 +1,33 @@
+# API Cinemap (axum). Le front statique est servi directement par nginx.
+# Installé dans /etc/systemd/system/ (voir docs/DEPLOY.md).
+[Unit]
+Description=Cinemap API
+After=network.target
+
+[Service]
+User=cinemap
+Group=cinemap
+# DATABASE_URL, TMDB_API_KEY, BIND_ADDR, RUST_LOG
+EnvironmentFile=/etc/cinemap/cinemap.env
+# Crée /var/lib/cinemap (propriétaire cinemap) : la base y vit.
+StateDirectory=cinemap
+WorkingDirectory=/var/lib/cinemap
+ExecStart=/opt/cinemap/current/cinemap serve
+Restart=on-failure
+RestartSec=2
+# SIGTERM → fin des requêtes en cours (shutdown_signal) ; au-delà, SIGKILL.
+TimeoutStopSec=15
+
+# Durcissement : le processus ne peut écrire que dans /var/lib/cinemap.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT strftime('%Y-%m-%dT%H:%M:%SZ', finished_at) AS \"at!: String\"\n           FROM scrape_runs\n           WHERE kind = 'showtimes' AND finished_at IS NOT NULL\n           ORDER BY finished_at DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "at!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "e481bd4c4655e01dec7cfcbc210ebdcaf6991f2db6ee03df2aa97d1b974652b0"
+}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Cinemap : import des cinémas le mardi à 2 h (avant le scrape de 4 h et les sorties du mercredi)
+
+[Timer]
+OnCalendar=Tue *-*-* 02:00:00 Europe/Paris
+Persistent=true
+
+[Install]
+WantedBy=timers.target

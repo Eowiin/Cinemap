@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT count(DISTINCT s.movie_id) AS \"n!: i64\"\n           FROM showtimes s\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           WHERE s.date >= ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "n!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "12af316b415f14095d595f2ba82b837d4b165bda3df09552c146f7a92813a660"
+}

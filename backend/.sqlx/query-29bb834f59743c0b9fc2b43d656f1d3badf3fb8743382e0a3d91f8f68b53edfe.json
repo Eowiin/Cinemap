@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO cinemas (\n                id, name, name_search, address, updated_at\n            )\n            VALUES (?1, ?2, ?3, ?4, datetime('now'))\n\n            ON CONFLICT(id) DO UPDATE SET\n                name = excluded.name,\n                name_search = excluded.name_search,\n\n                lat = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.lat\n                END,\n\n                lng = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.lng\n                END,\n\n                geocode_score = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.geocode_score\n                END,\n\n                insee_code = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.insee_code\n                END,\n\n                geocode_type = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.geocode_type\n                END,\n\n                department = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.department\n                END,\n\n                postal_code = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.postal_code\n                END,\n\n                city = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.city\n                END,\n\n                city_search = CASE\n                    WHEN cinemas.address IS NOT excluded.address\n                    THEN NULL ELSE cinemas.city_search\n                END,\n\n                address = excluded.address,\n                updated_at = excluded.updated_at\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "29bb834f59743c0b9fc2b43d656f1d3badf3fb8743382e0a3d91f8f68b53edfe"
+}

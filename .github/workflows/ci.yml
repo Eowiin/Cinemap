@@ -1,0 +1,116 @@
+name: CI
+
+# Sur toutes les branches : vérifications. Sur main seulement : déploiement
+# (à chaque push, ou à la main depuis l'onglet Actions : « Run workflow »).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Un déploiement en cours n'est jamais interrompu par le push suivant.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  backend:
+    # Même Ubuntu que le VPS (24.04, glibc 2.39) : le binaire y tourne tel quel.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Les macros sqlx::query! lisent le SQL vérifié dans backend/.sqlx/ au lieu d'une base.
+      SQLX_OFFLINE: "true"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - name: Build release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: backend
+          path: backend/target/release/backend
+          retention-days: 7
+
+  frontend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run lint
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: frontend
+          path: frontend/dist/
+          retention-days: 7
+
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: deploy
+      - uses: actions/download-artifact@v5
+        with:
+          name: backend
+          path: release
+      - uses: actions/download-artifact@v5
+        with:
+          name: frontend
+          path: release/www
+      - name: Prepare release
+        run: |
+          mv release/backend release/cinemap
+          chmod +x release/cinemap
+          cp deploy/activate.sh release/
+          du -sh release release/www
+      - name: SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Clé d'hôte relevée à la connexion (confiance au premier usage).
+          ssh-keyscan -T 10 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Upload and activate
+        env:
+          SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          ssh_vps() { ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$SSH_TARGET" "$@"; }
+          # Dossier neuf par release : la release active n'est jamais modifiée en place.
+          tar -C release -czf - . | ssh_vps "mkdir -p /opt/cinemap/releases/$SHA && tar -xzf - -C /opt/cinemap/releases/$SHA"
+          ssh_vps "bash /opt/cinemap/releases/$SHA/activate.sh $SHA"
+      - name: Public health check
+        run: |
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 https://cinemap.ethansaux.fr/api/meta
+          # Route du front rechargée directement : nginx doit renvoyer index.html.
+          curl -fsS -o /dev/null https://cinemap.ethansaux.fr/film/1

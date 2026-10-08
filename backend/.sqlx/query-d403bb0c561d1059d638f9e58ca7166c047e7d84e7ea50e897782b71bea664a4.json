@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cinemas SET lat = ?, lng = ?, geocode_score = ?, postal_code = ?,\n                city = ?, city_search = ?, insee_code = ?, department = ?, geocode_type = ?\n             WHERE id = ? AND address IS ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "d403bb0c561d1059d638f9e58ca7166c047e7d84e7ea50e897782b71bea664a4"
+}

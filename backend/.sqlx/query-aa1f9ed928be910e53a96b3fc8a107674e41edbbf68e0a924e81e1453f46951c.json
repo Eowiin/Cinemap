@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT date AS \"date!: String\"\n           FROM showtimes\n           WHERE movie_id = ?1\n             AND date >= ?2\n             AND cinema_id IN (SELECT value FROM json_each(?3))\n           ORDER BY date",
+  "describe": {
+    "columns": [
+      {
+        "name": "date!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "showtimes",
+            "name": "date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aa1f9ed928be910e53a96b3fc8a107674e41edbbf68e0a924e81e1453f46951c"
+}

@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  m.poster_url AS \"poster_url?: String\",\n                  m.genres AS \"genres!: SqlJson<Vec<String>>\",\n                  m.runtime_min AS \"runtime_min?: i64\", m.release_date AS \"release_date?: String\"\n           FROM movies m\n           JOIN showtimes s ON s.movie_id = m.id\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           WHERE s.date >= ?1\n             AND m.title_search LIKE ?2 ESCAPE '\\'\n           GROUP BY m.id\n           ORDER BY count(*) DESC, m.title_search\n           LIMIT 8",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "poster_url?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "poster_url"
+          }
+        }
+      },
+      {
+        "name": "genres!: SqlJson<Vec<String>>",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "genres"
+          }
+        }
+      },
+      {
+        "name": "runtime_min?: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "runtime_min"
+          }
+        }
+      },
+      {
+        "name": "release_date?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "release_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6f57dc1d76fec8061b129230666a16fa6c2ecca6f4afe34f9463dddb3e88396f"
+}
