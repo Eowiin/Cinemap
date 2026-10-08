@@ -284,7 +284,7 @@ donnent des nombres cohérents avec la page AlloCiné.
 - [x] **E.7 Écritures** : chaque cinéma/date écrit dans sa transaction courte; le pool garde son `busy_timeout`.
 - [x] **E.8 Option `--department 75`** pour lancer un département ciblé.
 
-**C'est fini quand** : `scrape --department 75` passe sans erreur, puis toute la France lancée par toi avec `caffeinate -i` et `/usr/bin/time -l` (durée, mémoire max, CPU → `SOBRIETE.md`).
+**C'est fini quand** : ✅ (2026-10-08) `scrape --department 75` passe sans erreur (107/107 cinémas, 321 couples, 5 464 séances, 117 s), puis toute la France lancée par toi avec `caffeinate -i` et `/usr/bin/time -l` (durée, mémoire max, CPU → `SOBRIETE.md`).
 
 ---
 

@@ -38,6 +38,10 @@ Ordre de grandeur du lot E, pas une mesure : 3 100 cinémas × 3 dates × 1,2 pa
 
 Cette estimation dépasse les 30–40 min prévues dans `PLAN.md`. Atteindre 30–40 min demanderait environ 4,7–6,5 requêtes/s, au-dessus du plafond de 3 req/s retenu pour l'instant. Il faudra mesurer un run de département avant de revoir ce budget.
 
+### Première mesure : `scrape --department 75` (2026-10-08)
+
+107 cinémas, 321 couples (cinéma, date), 5 464 séances écrites, **117 s**, sans erreur ni coupe-circuit. Soit ≈ 1,1 s par cinéma (3 dates). Extrapolé aux ~3 100 cinémas visibles : ≈ **57 min**, cohérent avec l'estimation de 62–65 min au plafond de 3 req/s (beaucoup de petits cinémas n'ont qu'une page, certains répondent « aucune séance »). Mémoire et CPU : à mesurer sur le run complet avec `/usr/bin/time -l`.
+
 ### Outils de mesure
 
 - **Toujours en `--release`** : le mode debug est 10 à 100 fois plus lent, ses chiffres ne veulent rien dire.

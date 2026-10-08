@@ -5,7 +5,7 @@ Le **quoi** et le **pourquoi** sont écrits en entier. Le SQL est donné presque
 
 Références : `API.md` (le contrat, **fait foi** : toute modification se fait d'abord là-bas), `SOBRIETE.md`, `ETAPE2.md` (pour le style des tests sur base en mémoire).
 
-Dernière mise à jour : 2026-10-08. **Où tu en es : rien de commencé.** `serve` répond encore « Hello, World! » sur `0.0.0.0:3000`.
+Dernière mise à jour : 2026-10-08. **Où tu en es : lot 0.1 fait (données de Paris en base), 0.2 et 0.3 à faire.** `serve` répond encore « Hello, World! » sur `0.0.0.0:3000`.
 
 ## Vue d'ensemble
 
@@ -65,15 +65,15 @@ Toutes reportées dans `API.md` (le contrat fait foi). Le tableau garde le « po
 
 ### 0.1 Des données réelles pour tester à la main
 
-- [ ] Lance `cargo run --release -- scrape --department 75` (≈ 107 cinémas × 3-4 dates ≈ 400 requêtes ≈ 3 min à 3 req/s). C'est aussi la vérification du lot E de l'étape 2.
-- [ ] Vérifie :
+- [x] Lance `cargo run --release -- scrape --department 75` (≈ 107 cinémas × 3-4 dates ≈ 400 requêtes ≈ 3 min à 3 req/s). C'est aussi la vérification du lot E de l'étape 2.
+- [x] Vérifie :
 
 ```sql
 select count(distinct cinema_id), count(distinct movie_id), count(*) from showtimes;
 select * from scrape_runs order by id desc limit 1;   -- kind = showtimes_partial, finished_at rempli
 ```
 
-Note les trois nombres ici, ils serviront de référence pour les `curl` des lots D à I : `cinémas = …, films = …, séances = …`.
+Référence (2026-10-08, après `--department 75` sans aucun `WARN`) : **cinémas avec séances = 81** (sur 107 visibles : les autres n'ont pas de programme), **films = 344**, **séances = 5 465** (VF 3 054, VO 457, VOST 1 954, 4 sans lien). Ces nombres servent de référence pour les `curl` des lots D à I ; ils bougent à chaque scrape.
 
 ### 0.2 La vue `visible_cinemas` (décision 4)
 
