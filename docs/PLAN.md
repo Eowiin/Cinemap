@@ -25,7 +25,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 | Frontend | **Svelte + Vite + MapLibre GL** (tuiles OpenFreeMap), PWA via `vite-plugin-pwa` | Léger, réactif, carte vectorielle fluide sur mobile. **Écrit par Claude** |
 | Référentiel cinémas | **AlloCiné** (liste par département) + géocodage **API Adresse** + enrichissement **CNC** | Plus aucun rapprochement de noms pour les séances (cause n°1 des bugs de l'ancien site). OSM abandonné |
 | Infos films | AlloCiné (déjà dans la réponse des séances) + **TMDB** en complément (bande-annonce, image de fond, note) | TMDB gratuit pour usage non commercial, en français. OMDb écarté (anglais seulement, 1 000 req/jour) |
-| Rafraîchissement | Scrap de toute la France chaque nuit, J → J+2 (J+6 le mercredi), concurrent avec limite de débit (~3 req/s) | ~30-40 min au lieu de ~6 h. Passage à 7 jours (IDF chaque nuit, hors IDF une fois par semaine) envisagé, voir « Idées pour plus tard » |
+| Rafraîchissement | Scrap de toute la France chaque nuit, J → J+2 (J+6 le mercredi), concurrent, 1 req/s (`--interval-ms 1000`, limite mesurée le 2026-10-09) | ~2 h à 2 h 30 depuis le VPS. Passage à 7 jours (IDF chaque nuit, hors IDF une fois par semaine) envisagé, voir « Idées pour plus tard » |
 | Base | SQLite en mode WAL | Un seul serveur, lecture majoritaire |
 | Déploiement | **Binaire + systemd + nginx**, pas de Docker. Scrapers via un timer systemd. Build dans GitHub Actions, envoi par SSH | Un binaire Rust n'a pas de dépendances à embarquer, le VPS n'a besoin ni de Rust ni de Node |
 | Outillage | Rust : `cargo fmt`, `clippy`, `cargo test`. Front : prettier, eslint, vitest. CI GitHub Actions | Minimum raisonnable |
@@ -138,8 +138,8 @@ Tri fait le 2026-10-08 avec le propriétaire, pendant le déploiement de la v1. 
 1. **Finir le déploiement**, puis **mesurer 2 ou 3 nuits de scrape en prod** (durée, `ralentissements` dans le log) avant de toucher au rafraîchissement.
 2. **Cartes illimitées** : UGC Illimité d'abord, puis Pathé CinéPass, puis d'autres cartes si on trouve des listes (pour tous les visiteurs, pas seulement nous). Feuille de route : [`CARTES.md`](CARTES.md). Sources revérifiées le 2026-10-08 : page HTML UGC (145 cinémas avec code postal), JSON Pathé (78 cinémas Pathé avec GPS), PDF Pathé (partenaires sans adresse → CSV à la main).
 3. **Favoris** (cinémas, films) stockés dans le navigateur (`localStorage`), sans compte. Front seulement (Claude), peut se faire en parallèle.
-4. **Séances sur 7 jours** : aujourd'hui J → J+2 (J+6 le mercredi), car une requête AlloCiné = un cinéma × un jour (~3 100 cinémas : ~9 400 requêtes par nuit pour 3 jours, ~22 000 pour 7, avec des 429 dès 3 req/s depuis le VPS). Piste, à décider sur les mesures du point 1 :
-   - IDF (362 cinémas) : J → J+6 chaque nuit (~2 500 requêtes, ~15 min) ;
+4. **Séances sur 7 jours** : aujourd'hui J → J+2 (J+6 le mercredi), car une requête AlloCiné = un cinéma × un jour (~3 100 cinémas : ~9 400 couples par nuit pour 3 jours, dont ~2 900 sautés car annoncés vides). Mesuré le 2026-10-09 (`ETAPE2.md`) : AlloCiné tolère ~1 req/s depuis le VPS, soit ~2 h à 2 h 30 par nuit pour la France sur 3 jours. 7 jours pour toute la France (~5 h) n'est pas raisonnable. Piste :
+   - IDF (362 cinémas) : J → J+6 chaque nuit (~1 500 requêtes de plus, ~25 min à 1 req/s) ;
    - hors IDF : J → J+2 chaque nuit, plus la semaine complète la nuit de mardi à mercredi (publication des programmes de la semaine ciné) ;
    - le saut des jours annoncés vides (commit `f39affa`) réduit encore le total.
 5. **« Ce soir près de moi »** : prochaines séances de tous les cinémas proches, tous films confondus, triées par heure de début (nouvel endpoint + vue).

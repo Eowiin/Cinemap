@@ -13,7 +13,9 @@ EnvironmentFile=/etc/cinemap/cinemap.env
 StateDirectory=cinemap
 WorkingDirectory=/var/lib/cinemap
 # Les ExecStart d'un oneshot s'enchaînent ; si le scrape échoue, tmdb n'est pas lancé.
-ExecStart=/opt/cinemap/current/cinemap scrape
+# 1 req/s : test IDF du 2026-10-09, ~1 000 requêtes pour un seul blocage (contre un toutes
+# les ~300 requêtes à 3 req/s). Voir docs/ETAPE2.md.
+ExecStart=/opt/cinemap/current/cinemap scrape --interval-ms 1000
 ExecStart=/opt/cinemap/current/cinemap tmdb
 # Laisse la priorité CPU / disque à l'API.
 Nice=10
