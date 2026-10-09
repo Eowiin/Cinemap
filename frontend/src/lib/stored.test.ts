@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cardBadges, cardListDate, toggledCard } from './cards';
 import { isCoveredPosition, isCoveredPostalCode } from './coverage';
-import { isFavoriteCinema, isFavoriteMovie } from './favorites';
+import { isFavoriteCinema } from './favorites';
 import { markedFirst, parseStored, refreshed, serializeStored, toggled } from './stored';
 
 const rex = { id: 'C0065', name: 'Le Grand Rex', city: 'Paris' };
@@ -26,12 +26,6 @@ describe('parseStored', () => {
       items: [rex, { id: 42, name: 'mauvais type' }, null, { ...rex, name: 'doublon' }, balzac],
     });
     expect(parseStored(raw, isFavoriteCinema)).toEqual([rex, balzac]);
-  });
-
-  it('vérifie les films', () => {
-    expect(isFavoriteMovie({ id: 1000, title: 'Dune', poster_url: null })).toBe(true);
-    expect(isFavoriteMovie({ id: '1000', title: 'Dune', poster_url: null })).toBe(false);
-    expect(isFavoriteMovie({ id: 1.5, title: 'Dune', poster_url: null })).toBe(false);
   });
 });
 

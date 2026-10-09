@@ -29,11 +29,11 @@ Toute page est rechargeable : nginx doit renvoyer `index.html` pour les chemins 
 
 ## Favoris (2026-10-09)
 
-Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni backend.
+Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'usage clair ; l'ancienne clé `cinemap:favorites:movies` est effacée au chargement), gardés dans le navigateur (`localStorage`), sans compte ni backend.
 
 - `lib/stored.ts` (pur, testé) + `lib/stored.svelte.ts` : `StoredList<T>`, une liste réactive sous une clé `localStorage`, au format versionné `{ "v": 1, "items": [...] }`. Lecture tolérante (JSON abîmé, autre version, élément invalide ou en double → écarté, jamais d'erreur), stockage indisponible → liste valable pour la session, synchronisée entre onglets (événement `storage`).
-- `lib/favorites.ts` / `favorites.svelte.ts` : `cinemap:favorites:cinemas` (`{ id, name, city }`) et `cinemap:favorites:movies` (`{ id, title, poster_url }`). Chaque favori garde de quoi s'afficher **sans appel à l'API** ; son nom est remis à jour quand on ouvre sa fiche (`refresh`).
-- Écran : bouton « Ajouter aux favoris » sur les fiches cinéma et film ; étoile à côté de chaque cinéma dans les séances d'un film, **mes cinémas affichés en premier** (puis par distance) ; à l'accueil, rangées « mes cinémas » et « mes films » (lien + retrait), étoile sur les films favoris à l'affiche.
+- `lib/favorites.ts` / `favorites.svelte.ts` : `cinemap:favorites:cinemas` (`{ id, name, city }`). Chaque favori garde de quoi s'afficher **sans appel à l'API** ; son nom est remis à jour quand on ouvre sa fiche (`refresh`).
+- Écran : bouton « Ajouter aux favoris » sur la fiche cinéma ; étoile à côté de chaque cinéma dans les séances d'un film, **mes cinémas affichés en premier** (puis par distance) ; à l'accueil, rangée « Mes cinémas » (lien + retrait) ; filtre « seulement mes cinémas favoris » ; points dorés sur la carte.
 
 ## Cartes d'abonnement (2026-10-09)
 

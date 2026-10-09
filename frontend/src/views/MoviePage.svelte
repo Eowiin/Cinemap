@@ -10,7 +10,7 @@
   import { api } from '../lib/api/client';
   import { app, map, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
   import { isCoveredPosition } from '../lib/coverage';
-  import { favoriteCinema, favoriteMovie } from '../lib/favorites';
+  import { favoriteCinema } from '../lib/favorites';
   import { favorites } from '../lib/favorites.svelte';
   import { formatDistance, formatRuntime, year } from '../lib/format';
   import { resource } from '../lib/resource.svelte';
@@ -38,10 +38,6 @@
   const usesTmdb = $derived(!!m && (!!m.backdrop_url || !!m.trailer_url || m.rating !== null));
   const nextRadius = $derived(RADIUS_CHOICES.find((km) => km > app.radiusKm));
 
-  const favorite = $derived(m ? favoriteMovie(m) : null);
-  $effect(() => {
-    if (favorite) favorites.movies.refresh(favorite);
-  });
   // Mes cinémas d'abord, puis les autres, chaque groupe par distance.
   const cinemas = $derived(
     markedFirst(showtimes.data?.cinemas ?? [], ({ cinema }) => favorites.cinemas.has(cinema.id)),
@@ -96,16 +92,13 @@
       </div>
     </header>
 
-    <p class="actions">
-      {#if m.trailer_url}
+    {#if m.trailer_url}
+      <p class="actions">
         <a class="button primary" href={m.trailer_url} target="_blank" rel="noopener">
           <Icon name="play" size={16} /> Bande-annonce
         </a>
-      {/if}
-      {#if favorite}
-        <FavoriteButton list={favorites.movies} item={favorite} name={favorite.title} />
-      {/if}
-    </p>
+      </p>
+    {/if}
 
     {#if m.directors.length}
       <p class="people"><span class="muted">De</span> {m.directors.join(', ')}</p>

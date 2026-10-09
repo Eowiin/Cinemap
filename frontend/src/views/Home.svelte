@@ -56,41 +56,23 @@
   <CoverageNotice what="les séances autour de vous" />
 {/if}
 
-{#if favorites.cinemas.items.length || favorites.movies.items.length}
+{#if favorites.cinemas.items.length}
   <section class="favorites" aria-labelledby="favorites-title">
-    <h2 id="favorites-title" class="label">Mes favoris</h2>
-    {#if favorites.cinemas.items.length}
-      <ul class="scroll-row" aria-label="Mes cinémas">
-        {#each favorites.cinemas.items as cinema (cinema.id)}
-          <li class="chip fav">
-            <Icon name="star" size={14} filled />
-            <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
-            <button
-              aria-label="Retirer {cinema.name} des favoris"
-              onclick={() => favorites.cinemas.remove(cinema.id)}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-    {#if favorites.movies.items.length}
-      <ul class="scroll-row" aria-label="Mes films">
-        {#each favorites.movies.items as movie (movie.id)}
-          <li class="chip fav">
-            <Icon name="star" size={14} filled />
-            <a href={href({ name: 'movie', id: movie.id }, router.filters)}>{movie.title}</a>
-            <button
-              aria-label="Retirer {movie.title} des favoris"
-              onclick={() => favorites.movies.remove(movie.id)}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    <h2 id="favorites-title" class="label">Mes cinémas</h2>
+    <ul class="scroll-row">
+      {#each favorites.cinemas.items as cinema (cinema.id)}
+        <li class="chip fav">
+          <Icon name="star" size={14} filled />
+          <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
+          <button
+            aria-label="Retirer {cinema.name} des favoris"
+            onclick={() => favorites.cinemas.remove(cinema.id)}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </li>
+      {/each}
+    </ul>
   </section>
 {/if}
 
@@ -122,12 +104,7 @@
           <a class="movie" href={href({ name: 'movie', id: item.movie.id }, router.filters)}>
             <Poster url={item.movie.poster_url} title={item.movie.title} width={72} height={96} />
             <div class="info">
-              <h2>
-                {#if favorites.movies.has(item.movie.id)}<span class="star" title="Favori"
-                    ><Icon name="star" size={15} filled /></span
-                  >{/if}
-                {item.movie.title}
-              </h2>
+              <h2>{item.movie.title}</h2>
               <p class="muted small">
                 {[item.movie.genres.slice(0, 2).join(', '), formatRuntime(item.movie.runtime_min)]
                   .filter(Boolean)
@@ -214,8 +191,7 @@
     padding-right: 0.3em;
   }
 
-  .fav :global(svg),
-  .star :global(svg) {
+  .fav :global(svg) {
     color: #e0a526;
     vertical-align: -1px;
   }
