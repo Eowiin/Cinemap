@@ -113,6 +113,12 @@ class MapState {
   focus = $state<Position | null>(null);
   /** Mobile : carte plein écran ouverte. */
   open = $state(false);
+  /**
+   * Dernier cadrage libre (accueil), restauré quand on revient d'un cinéma ou d'un film.
+   * Ici et pas dans `MapView` : sur mobile, la carte est détruite quand on la ferme.
+   * `key` : position et rayon de l'époque (s'ils changent, on recadre sur le rayon).
+   */
+  camera: { center: [number, number]; zoom: number; key: string } | null = null;
 
   async loadAll() {
     try {

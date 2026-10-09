@@ -11,6 +11,7 @@
   import type { CinemaSummary } from '../lib/api/types';
   import { app, map } from '../lib/app.svelte';
   import { cardBadges } from '../lib/cards';
+  import { favorites } from '../lib/favorites.svelte';
   import { router } from '../lib/router.svelte';
 
   const STYLES = {
@@ -18,6 +19,8 @@
     dark: 'https://tiles.openfreemap.org/styles/dark',
   };
   const KM_PER_LAT_DEGREE = 111.32;
+  /** Doré, comme l'étoile des favoris. */
+  const FAVORITE = '#e0a526';
 
   let container: HTMLDivElement;
   let instance = $state<MlMap | null>(null);
@@ -69,12 +72,46 @@
     };
   }
 
-  /** Nom du cinéma suivi des cartes qu'il accepte (« UGC Les Halles · UGC Illimité »). */
-  function popupText(id: string, name: string): string {
-    const cinema = map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
-    const badges = cardBadges(cinema?.cards ?? [], app.meta?.cards ?? [], null);
-    return [name, ...badges.map((badge) => badge.card.name)].join(' · ');
+  const findCinema = (id: string) =>
+    map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
+
+  /** Cartes acceptées par le cinéma, par leur nom. */
+  function cardNames(id: string): string[] {
+    const badges = cardBadges(findCinema(id)?.cards ?? [], app.meta?.cards ?? [], null);
+    return badges.map((badge) => badge.card.name);
   }
+
+  /** Survol (souris) : nom du cinéma suivi des cartes qu'il accepte. */
+  function popupText(id: string, name: string): string {
+    return [name, ...cardNames(id)].join(' · ');
+  }
+
+  function openCinema(id: string) {
+    map.open = false;
+    router.go({ name: 'cinema', id });
+  }
+
+  /**
+   * Écran tactile (pas de survol) : un appui montre une fiche (nom, ville, cartes) avec
+   * « Voir les séances », au lieu d'ouvrir un cinéma qu'on n'a pas pu identifier.
+   */
+  function tapCard(id: string, name: string): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'tap-card';
+    const title = document.createElement('strong');
+    title.textContent = name;
+    const details = document.createElement('span');
+    details.textContent = [findCinema(id)?.city, ...cardNames(id)].filter(Boolean).join(' · ');
+    const open = document.createElement('button');
+    open.className = 'button primary';
+    open.textContent = 'Voir les séances';
+    open.addEventListener('click', () => openCinema(id));
+    card.append(title, details, open);
+    return card;
+  }
+
+  /** Position et rayon : si l'un change, le cadrage retenu ne vaut plus. */
+  const cameraKey = () => `${app.position.lat},${app.position.lng},${app.radiusKm}`;
 
   function point(p: Position): FeatureCollection<Point> {
     return {
@@ -113,6 +150,8 @@
       clusterRadius: 42,
       clusterMaxZoom: 11,
     });
+    // Favoris à part et sans regroupement : toujours visibles, même dézoomé.
+    m.addSource('favorites', { type: 'geojson', data: features([]) });
     m.addSource('highlight', { type: 'geojson', data: features([]) });
     m.addSource('position', { type: 'geojson', data: point(app.position) });
 
@@ -147,6 +186,49 @@
         'circle-stroke-color': surface,
         'circle-stroke-width': 1.5,
       },
+    });
+    // Noms de tous les cinémas quand on a assez zoomé (pas de survol sur mobile).
+    m.addLayer({
+      id: 'cinema-label',
+      type: 'symbol',
+      source: 'cinemas',
+      filter: ['!', ['has', 'point_count']],
+      minzoom: 14,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': font,
+        'text-size': 11,
+        'text-offset': [0, 0.9],
+        'text-anchor': 'top',
+        'text-optional': true,
+      },
+      paint: { 'text-color': muted, 'text-halo-color': surface, 'text-halo-width': 1.5 },
+    });
+    m.addLayer({
+      id: 'favorite',
+      type: 'circle',
+      source: 'favorites',
+      paint: {
+        'circle-color': FAVORITE,
+        'circle-radius': 7,
+        'circle-stroke-color': surface,
+        'circle-stroke-width': 2,
+      },
+    });
+    m.addLayer({
+      id: 'favorite-label',
+      type: 'symbol',
+      source: 'favorites',
+      minzoom: 10,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': font,
+        'text-size': 12,
+        'text-offset': [0, 1],
+        'text-anchor': 'top',
+        'text-optional': true,
+      },
+      paint: { 'text-color': text, 'text-halo-color': surface, 'text-halo-width': 1.5 },
     });
     m.addLayer({
       id: 'highlight',
@@ -214,8 +296,8 @@
           m = new maplibregl.Map({
             container,
             style: dark.matches ? STYLES.dark : STYLES.light,
-            center: [app.position.lng, app.position.lat],
-            zoom: 11,
+            center: map.camera?.center ?? [app.position.lng, app.position.lat],
+            zoom: map.camera?.zoom ?? 11,
             attributionControl: { compact: true },
           });
         } catch (error) {
@@ -241,14 +323,34 @@
             fail("Le fond de carte (OpenFreeMap) n'a pas pu se charger.", event.error);
         });
 
+        // Cadrage libre (accueil) retenu à chaque déplacement, pour le retrouver au retour.
+        m.on('moveend', () => {
+          if (map.focus || map.highlighted.length) return;
+          const center = m.getCenter();
+          map.camera = { center: [center.lng, center.lat], zoom: m.getZoom(), key: cameraKey() };
+        });
+
+        const touch = matchMedia('(hover: none)');
         const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
-        for (const layer of ['cinema', 'highlight']) {
+        const tapPopup = new maplibregl.Popup({
+          closeButton: false,
+          offset: 12,
+          maxWidth: '260px',
+        });
+        for (const layer of ['cinema', 'favorite', 'highlight']) {
           m.on('click', layer, (e: MapLayerMouseEvent) => {
-            const id = e.features?.[0]?.properties?.id as string | undefined;
-            if (!id) return;
+            const f = e.features?.[0];
+            const id = f?.properties?.id as string | undefined;
+            if (!f || !id) return;
             popup.remove();
-            map.open = false;
-            router.go({ name: 'cinema', id });
+            if (touch.matches && f.geometry.type === 'Point') {
+              tapPopup
+                .setLngLat(f.geometry.coordinates as [number, number])
+                .setDOMContent(tapCard(id, String(f.properties?.name ?? '')))
+                .addTo(m);
+              return;
+            }
+            openCinema(id);
           });
           m.on('mouseenter', layer, (e: MapLayerMouseEvent) => {
             m.getCanvas().style.cursor = 'pointer';
@@ -293,9 +395,16 @@
     };
   });
 
+  // Les favoris quittent la source regroupée pour leur propre calque.
   $effect(() => {
     void styleVersion;
-    (instance?.getSource('cinemas') as GeoJSONSource | undefined)?.setData(features(map.all));
+    const ids = favorites.cinemas.items.map((c) => c.id);
+    (instance?.getSource('cinemas') as GeoJSONSource | undefined)?.setData(
+      features(map.all.filter((c) => !ids.includes(c.id))),
+    );
+    (instance?.getSource('favorites') as GeoJSONSource | undefined)?.setData(
+      features(map.all.filter((c) => ids.includes(c.id))),
+    );
   });
 
   $effect(() => {
@@ -332,6 +441,13 @@
         ],
         { padding: 50, maxZoom: 14 },
       );
+      return;
+    }
+    // Retour à l'accueil : le cadrage d'avant (zoom compris), tant que la position et le
+    // rayon n'ont pas changé.
+    const saved = map.camera;
+    if (saved && saved.key === `${position.lat},${position.lng},${radius}`) {
+      m.easeTo({ center: saved.center, zoom: saved.zoom });
       return;
     }
     m.fitBounds(radiusBounds(position, radius), { padding: 20 });
@@ -387,6 +503,26 @@
     padding: 0.35rem 0.6rem;
     border-radius: 8px;
     box-shadow: var(--shadow);
+  }
+
+  .map :global(.tap-card) {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 400;
+  }
+
+  .map :global(.tap-card strong) {
+    font-size: 0.95rem;
+  }
+
+  .map :global(.tap-card span) {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .map :global(.tap-card .button) {
+    justify-content: center;
+    margin-top: 0.2rem;
   }
 
   .map :global(.maplibregl-popup-tip) {

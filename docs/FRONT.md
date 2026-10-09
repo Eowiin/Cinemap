@@ -49,6 +49,12 @@ Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni b
 - Favoris : `favoris=1` dans l'URL ; les ids viennent du navigateur et partent en `cinemas=` (`API.md`), **sans rayon**. Sur la fiche d'un cinéma (`scope="cinema"`), seuls Version et Horaire.
 - Vérifié en build de prod piloté par Chrome sans interface (captures mobile 390 px et bureau 1280 px, mode sombre, pas de défilement horizontal).
 
+## Carte (2026-10-09)
+
+- **Cadrage retenu** : le dernier cadrage libre de l'accueil (`map.camera`, dans `app.svelte.ts` car la carte est détruite quand on la ferme sur mobile) est restauré au retour d'un cinéma ou d'un film, tant que la position et le rayon n'ont pas changé.
+- **Favoris** : calque à part, non regroupé, doré, avec leur nom dès le zoom 10.
+- **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, ville, cartes, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
+
 ## Couverture (2026-10-09)
 
 Séances mises à jour pour l'Île-de-France seulement (`lib/coverage.ts`). Message `CoverageNotice` : accueil et fiche film si la position est hors IDF, fiche d'un cinéma hors IDF.
