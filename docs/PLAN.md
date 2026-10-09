@@ -137,7 +137,7 @@ Tri fait le 2026-10-08 avec le propriétaire, pendant le déploiement de la v1. 
 
 1. **Finir le déploiement**, puis **mesurer 2 ou 3 nuits de scrape en prod** (durée, `ralentissements` dans le log) avant de toucher au rafraîchissement.
 2. **Cartes illimitées** : UGC Illimité d'abord, puis Pathé CinéPass, puis d'autres cartes si on trouve des listes (pour tous les visiteurs, pas seulement nous). Feuille de route : [`CARTES.md`](CARTES.md). Sources revérifiées le 2026-10-08 : page HTML UGC (145 cinémas avec code postal), JSON Pathé (78 cinémas Pathé avec GPS), PDF Pathé (partenaires sans adresse → CSV à la main).
-3. **Favoris** (cinémas, films) stockés dans le navigateur (`localStorage`), sans compte. Front seulement (Claude), peut se faire en parallèle.
+3. ~~**Favoris** (cinémas, films) stockés dans le navigateur (`localStorage`), sans compte~~ : fait le 2026-10-09 (`FRONT.md` « Favoris », `StoredList` réutilisable pour « mes cartes »).
 4. **Séances sur 7 jours** : aujourd'hui J → J+2 (J+6 le mercredi), car une requête AlloCiné = un cinéma × un jour (~3 100 cinémas : ~9 400 couples par nuit pour 3 jours, dont ~2 900 sautés car annoncés vides). Mesuré le 2026-10-09 (`ETAPE2.md`) : AlloCiné tolère ~1 req/s depuis le VPS, soit ~2 h à 2 h 30 par nuit pour la France sur 3 jours. 7 jours pour toute la France (~5 h) n'est pas raisonnable. Piste :
    - IDF (362 cinémas) : J → J+6 chaque nuit (~1 500 requêtes de plus, ~25 min à 1 req/s) ;
    - hors IDF : J → J+2 chaque nuit, plus la semaine complète la nuit de mardi à mercredi (publication des programmes de la semaine ciné) ;

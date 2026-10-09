@@ -19,14 +19,19 @@
 </script>
 
 <script lang="ts">
-  let { name, size = 18 }: { name: IconName; size?: number } = $props();
+  /** `filled` : forme pleine (étoile d'un favori). */
+  let {
+    name,
+    size = 18,
+    filled = false,
+  }: { name: IconName; size?: number; filled?: boolean } = $props();
 </script>
 
 <svg
   width={size}
   height={size}
   viewBox="0 0 24 24"
-  fill="none"
+  fill={filled ? 'currentColor' : 'none'}
   stroke="currentColor"
   stroke-width="2"
   stroke-linecap="round"

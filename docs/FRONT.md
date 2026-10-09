@@ -27,6 +27,15 @@ Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu
 
 Toute page est rechargeable : nginx doit renvoyer `index.html` pour les chemins inconnus (`try_files $uri $uri/ /index.html` dans `deploy/nginx/cinemap.conf`).
 
+## Favoris (2026-10-09)
+
+Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni backend.
+
+- `lib/stored.ts` (pur, testé) + `lib/stored.svelte.ts` : `StoredList<T>`, une liste réactive sous une clé `localStorage`, au format versionné `{ "v": 1, "items": [...] }`. Lecture tolérante (JSON abîmé, autre version, élément invalide ou en double → écarté, jamais d'erreur), stockage indisponible → liste valable pour la session, synchronisée entre onglets (événement `storage`).
+- `lib/favorites.ts` / `favorites.svelte.ts` : `cinemap:favorites:cinemas` (`{ id, name, city }`) et `cinemap:favorites:movies` (`{ id, title, poster_url }`). Chaque favori garde de quoi s'afficher **sans appel à l'API** ; son nom est remis à jour quand on ouvre sa fiche (`refresh`).
+- Écran : bouton « Ajouter aux favoris » sur les fiches cinéma et film ; étoile à côté de chaque cinéma dans les séances d'un film, **mes cinémas affichés en premier** (puis par distance) ; à l'accueil, rangées « mes cinémas » et « mes films » (lien + retrait), étoile sur les films favoris à l'affiche.
+- **Lot E des cartes** : « mes cartes » = une `StoredList<{ id: string }>` de plus (`cinemap:cards`), même lecture tolérante. Le filtre `cards` de l'URL restera prioritaire pour les liens partagés.
+
 ## Les bugs de l'ancien site, et ce qui les évite
 
 - **Date en UTC** : `parisNow()` passe par `Intl` avec `Europe/Paris` ; le jour de référence vient de `/api/meta` (`today`). Testé autour de minuit et du passage à l'heure d'hiver.

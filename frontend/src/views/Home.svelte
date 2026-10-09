@@ -5,6 +5,7 @@
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
   import { app, map, PARIS, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
+  import { favorites } from '../lib/favorites.svelte';
   import { formatRuntime, timeAgo, timeOf } from '../lib/format';
   import { router } from '../lib/router.svelte';
   import { resource } from '../lib/resource.svelte';
@@ -49,6 +50,44 @@
   {#if app.locateError}<p class="error">{app.locateError}</p>{/if}
 </section>
 
+{#if favorites.cinemas.items.length || favorites.movies.items.length}
+  <section class="favorites" aria-labelledby="favorites-title">
+    <h2 id="favorites-title" class="visually-hidden">Mes favoris</h2>
+    {#if favorites.cinemas.items.length}
+      <ul class="scroll-row" aria-label="Mes cinémas">
+        {#each favorites.cinemas.items as cinema (cinema.id)}
+          <li class="chip fav">
+            <Icon name="star" size={14} filled />
+            <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
+            <button
+              aria-label="Retirer {cinema.name} des favoris"
+              onclick={() => favorites.cinemas.remove(cinema.id)}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if favorites.movies.items.length}
+      <ul class="scroll-row" aria-label="Mes films">
+        {#each favorites.movies.items as movie (movie.id)}
+          <li class="chip fav">
+            <Icon name="star" size={14} filled />
+            <a href={href({ name: 'movie', id: movie.id }, router.filters)}>{movie.title}</a>
+            <button
+              aria-label="Retirer {movie.title} des favoris"
+              onclick={() => favorites.movies.remove(movie.id)}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+{/if}
+
 <FilterBar {dates} />
 
 <Status loading={movies.loading && !movies.data} error={movies.error} retry={movies.retry} />
@@ -70,7 +109,12 @@
           <a class="movie" href={href({ name: 'movie', id: item.movie.id }, router.filters)}>
             <Poster url={item.movie.poster_url} title={item.movie.title} width={72} height={96} />
             <div class="info">
-              <h2>{item.movie.title}</h2>
+              <h2>
+                {#if favorites.movies.has(item.movie.id)}<span class="star" title="Favori"
+                    ><Icon name="star" size={15} filled /></span
+                  >{/if}
+                {item.movie.title}
+              </h2>
               <p class="muted small">
                 {[item.movie.genres.slice(0, 2).join(', '), formatRuntime(item.movie.runtime_min)]
                   .filter(Boolean)
@@ -131,6 +175,49 @@
     margin: 0;
     color: var(--accent);
     font-size: 0.9rem;
+  }
+
+  .favorites {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .favorites ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .fav {
+    padding-right: 0.3em;
+  }
+
+  .fav :global(svg),
+  .star :global(svg) {
+    color: #e0a526;
+    vertical-align: -1px;
+  }
+
+  .fav a {
+    text-decoration: none;
+  }
+
+  .fav button {
+    display: inline-flex;
+    padding: 0.15em;
+    border: none;
+    background: none;
+    border-radius: 999px;
+    color: var(--muted);
+  }
+
+  .fav button :global(svg) {
+    color: inherit;
+  }
+
+  .fav button:hover {
+    background: var(--surface-2);
   }
 
   .movies {

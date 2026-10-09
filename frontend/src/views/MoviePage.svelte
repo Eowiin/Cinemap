@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
   import Poster from '../components/Poster.svelte';
@@ -6,10 +7,13 @@
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
   import { app, map, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
+  import { favoriteCinema, favoriteMovie } from '../lib/favorites';
+  import { favorites } from '../lib/favorites.svelte';
   import { formatDistance, formatRuntime, year } from '../lib/format';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
   import { href } from '../lib/routes';
+  import { markedFirst } from '../lib/stored';
 
   let { id }: { id: number } = $props();
 
@@ -30,6 +34,15 @@
   const m = $derived(movie.data?.id === id ? movie.data : null);
   const usesTmdb = $derived(!!m && (!!m.backdrop_url || !!m.trailer_url || m.rating !== null));
   const nextRadius = $derived(RADIUS_CHOICES.find((km) => km > app.radiusKm));
+
+  const favorite = $derived(m ? favoriteMovie(m) : null);
+  $effect(() => {
+    if (favorite) favorites.movies.refresh(favorite);
+  });
+  // Mes cinémas d'abord, puis les autres, chaque groupe par distance.
+  const cinemas = $derived(
+    markedFirst(showtimes.data?.cinemas ?? [], ({ cinema }) => favorites.cinemas.has(cinema.id)),
+  );
 </script>
 
 <svelte:head><title>{m ? `${m.title} · Cinemap` : 'Cinemap'}</title></svelte:head>
@@ -80,11 +93,16 @@
       </div>
     </header>
 
-    {#if m.trailer_url}
-      <a class="button primary trailer" href={m.trailer_url} target="_blank" rel="noopener">
-        <Icon name="play" size={16} /> Bande-annonce
-      </a>
-    {/if}
+    <p class="actions">
+      {#if m.trailer_url}
+        <a class="button primary" href={m.trailer_url} target="_blank" rel="noopener">
+          <Icon name="play" size={16} /> Bande-annonce
+        </a>
+      {/if}
+      {#if favorite}
+        <FavoriteButton list={favorites.movies} item={favorite} name={favorite.title} />
+      {/if}
+    </p>
 
     {#if m.directors.length}
       <p class="people"><span class="muted">De</span> {m.directors.join(', ')}</p>
@@ -129,9 +147,15 @@
         </div>
       {:else}
         <ul class="cinemas" class:stale={showtimes.loading}>
-          {#each showtimes.data.cinemas as { cinema, showtimes: list } (cinema.id)}
+          {#each cinemas as { cinema, showtimes: list } (cinema.id)}
             <li class="cinema">
               <div class="cinema-head">
+                <FavoriteButton
+                  list={favorites.cinemas}
+                  item={favoriteCinema(cinema)}
+                  name={cinema.name}
+                  compact
+                />
                 <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
                 <span class="muted small"
                   >{[cinema.city, formatDistance(cinema.distance_km)]
@@ -229,8 +253,10 @@
     vertical-align: -2px;
   }
 
-  .trailer {
-    justify-self: start;
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
   }
 
   .people {
@@ -289,7 +315,7 @@
   .cinema-head {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     gap: 0.2rem 0.6rem;
   }
 

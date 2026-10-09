@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
   import Poster from '../components/Poster.svelte';
@@ -6,6 +7,8 @@
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
   import { map, showtimeFilters } from '../lib/app.svelte';
+  import { favoriteCinema } from '../lib/favorites';
+  import { favorites } from '../lib/favorites.svelte';
   import { formatRuntime } from '../lib/format';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
@@ -23,6 +26,11 @@
 
   $effect(() => {
     if (cinema) map.show([cinema], { lat: cinema.lat, lng: cinema.lng });
+  });
+
+  const favorite = $derived(cinema ? favoriteCinema(cinema) : null);
+  $effect(() => {
+    if (favorite) favorites.cinemas.refresh(favorite);
   });
 
   // Une adresse peut contenir des sauts de ligne (texte d'accès AlloCiné).
@@ -53,6 +61,9 @@
         >{/if}
     </p>
     <p class="links">
+      {#if favorite}
+        <FavoriteButton list={favorites.cinemas} item={favorite} name={favorite.name} />
+      {/if}
       {#if directions}
         <a class="button" href={directions} target="_blank" rel="noopener"
           ><Icon name="route" size={16} /> Itinéraire</a
