@@ -11,8 +11,12 @@ export type CinemaSummary = {
   lat: number;
   lng: number;
   art_et_essai: boolean;
+  /** Ids des cartes d'abonnement acceptées (`Card.id`). */
+  cards: string[];
   distance_km: number | null;
 };
+
+export type Card = { id: string; name: string; updated_at: string };
 
 export type Cinema = CinemaSummary & {
   address: string | null;
@@ -62,6 +66,7 @@ export type Meta = {
   dates_available: string[];
   cinema_count: number;
   movie_count: number;
+  cards: Card[];
 };
 
 export type CinemaShowtimes = {

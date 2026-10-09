@@ -21,23 +21,41 @@ describe('filters', () => {
       date: '2026-10-08',
       version: 'VO',
       after: '20:00',
+      cards: null,
     });
     expect(parseFilters('?date=demain&version=vost&after=25:00')).toEqual({
       date: null,
       version: null,
       after: null,
+      cards: null,
     });
   });
 
+  it('reads card ids, ignoring malformed and duplicate ones', () => {
+    expect(parseFilters('?cards=ugc_illimite,pathe_cinepass,ugc_illimite').cards).toEqual([
+      'ugc_illimite',
+      'pathe_cinepass',
+    ]);
+    expect(parseFilters('?cards=UGC%20!,').cards).toBeNull();
+  });
+
   it('round-trips through the query string', () => {
-    const filters = { date: '2026-10-09', version: 'VF' as const, after: null };
+    const filters = {
+      date: '2026-10-09',
+      version: 'VF' as const,
+      after: null,
+      cards: ['ugc_illimite', 'pathe_cinepass'],
+    };
     expect(parseFilters(filtersQuery(filters))).toEqual(filters);
-    expect(filtersQuery({ date: null, version: null, after: null })).toBe('');
+    expect(filtersQuery({ date: null, version: null, after: null, cards: null })).toBe('');
   });
 
   it('builds links that keep the filters', () => {
     expect(
-      href({ name: 'movie', id: 42 }, { date: '2026-10-09', version: null, after: null }),
+      href(
+        { name: 'movie', id: 42 },
+        { date: '2026-10-09', version: null, after: null, cards: null },
+      ),
     ).toBe('/film/42?date=2026-10-09');
   });
 });

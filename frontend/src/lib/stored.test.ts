@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardBadges, cardListDate } from './cards';
 import { isFavoriteCinema, isFavoriteMovie } from './favorites';
 import { markedFirst, parseStored, refreshed, serializeStored, toggled } from './stored';
 
@@ -56,5 +57,31 @@ describe('refreshed', () => {
 describe('markedFirst', () => {
   it('garde l’ordre d’origine dans chaque groupe', () => {
     expect(markedFirst([1, 2, 3, 4, 5], (n) => n % 2 === 0)).toEqual([2, 4, 1, 3, 5]);
+  });
+});
+
+describe('cardBadges', () => {
+  const known = [
+    { id: 'pathe_cinepass', name: 'Pathé CinéPass', updated_at: '2026-10-09T02:00:00Z' },
+    { id: 'ugc_illimite', name: 'UGC Illimité', updated_at: '2026-10-09T02:00:00Z' },
+  ];
+
+  it('montre les cartes du cinéma, les miennes marquées, ou seulement les miennes', () => {
+    const cinema = ['pathe_cinepass', 'ugc_illimite'];
+    expect(
+      cardBadges(cinema, known, ['ugc_illimite'], false).map((b) => [b.card.id, b.mine]),
+    ).toEqual([
+      ['pathe_cinepass', false],
+      ['ugc_illimite', true],
+    ]);
+    expect(cardBadges(cinema, known, ['ugc_illimite'], true).map((b) => b.card.id)).toEqual([
+      'ugc_illimite',
+    ]);
+    expect(cardBadges([], known, ['ugc_illimite'], false)).toEqual([]);
+  });
+
+  it('date la liste à Paris', () => {
+    // 23 h 30 UTC le 8 = 1 h 30 le 9 à Paris.
+    expect(cardListDate('2026-10-08T23:30:00Z')).toBe('09/10');
   });
 });

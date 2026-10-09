@@ -136,5 +136,6 @@ export function showtimeFilters() {
     date,
     version: router.filters.version,
     after: effectiveAfter(date, app.today, floorQuarter(app.now.time), router.filters.after),
+    cards: router.filters.cards,
   };
 }

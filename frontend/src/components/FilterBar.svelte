@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { VersionFilter } from '../lib/api/types';
   import { app } from '../lib/app.svelte';
+  import { myCards } from '../lib/cards.svelte';
   import { dateLabel } from '../lib/format';
   import { router } from '../lib/router.svelte';
 
@@ -18,6 +19,17 @@
     { value: 'VO', label: 'VO / VOST' },
   ];
   const afters = ['18:00', '20:00', '22:00'];
+
+  // Filtre « mes cartes » : proposé si j'ai choisi des cartes, ou si un lien partagé en filtre.
+  const mine = $derived(myCards.items.map((c) => c.id));
+  const cardFilter = $derived(router.filters.cards);
+  const cardLabel = $derived.by(() => {
+    const ids = cardFilter ?? mine;
+    const sameAsMine = ids.length === mine.length && ids.every((id) => mine.includes(id));
+    if (sameAsMine) return mine.length > 1 ? 'Mes cartes' : 'Ma carte';
+    const names = app.meta?.cards.filter((c) => ids.includes(c.id)).map((c) => c.name) ?? [];
+    return names.join(', ') || 'Cartes';
+  });
 
   function pickDate(date: string) {
     // `null` = aujourd'hui : un lien partagé sans date reste valable demain.
@@ -46,6 +58,14 @@
         >
       {/each}
     </div>
+    {#if mine.length || cardFilter}
+      <button
+        class="chip"
+        aria-pressed={cardFilter !== null}
+        title="Seulement les cinémas qui acceptent mes cartes d'abonnement"
+        onclick={() => router.setFilters({ cards: cardFilter ? null : mine })}>{cardLabel}</button
+      >
+    {/if}
     <label class="after">
       <span class="visually-hidden">Heure</span>
       <select

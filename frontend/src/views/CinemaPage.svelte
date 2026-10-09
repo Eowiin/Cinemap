@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardBadges from '../components/CardBadges.svelte';
   import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
@@ -6,7 +7,8 @@
   import ShowtimeChips from '../components/ShowtimeChips.svelte';
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
-  import { map, showtimeFilters } from '../lib/app.svelte';
+  import { app, map, showtimeFilters } from '../lib/app.svelte';
+  import { cardListDate } from '../lib/cards';
   import { favoriteCinema } from '../lib/favorites';
   import { favorites } from '../lib/favorites.svelte';
   import { formatRuntime } from '../lib/format';
@@ -27,6 +29,11 @@
   $effect(() => {
     if (cinema) map.show([cinema], { lat: cinema.lat, lng: cinema.lng });
   });
+
+  // « D'après la liste UGC Illimité du 09/10 » : la source et sa fraîcheur.
+  const cardSources = $derived(
+    (app.meta?.cards ?? []).filter((card) => cinema?.cards.includes(card.id)),
+  );
 
   const favorite = $derived(cinema ? favoriteCinema(cinema) : null);
   $effect(() => {
@@ -53,6 +60,7 @@
     <h1>{cinema.name}</h1>
     {#if address}<p class="muted">{address}</p>{/if}
     <p class="badges">
+      <CardBadges cards={cinema.cards} />
       {#if cinema.art_et_essai}<span class="badge accent">Art et Essai</span>{/if}
       {#if cinema.screens}<span class="badge"
           >{cinema.screens} salle{cinema.screens > 1 ? 's' : ''}</span
@@ -60,6 +68,13 @@
       {#if cinema.seats}<span class="badge">{cinema.seats.toLocaleString('fr-FR')} fauteuils</span
         >{/if}
     </p>
+    {#if cardSources.length}
+      <p class="muted small">
+        Cartes acceptées d'après les listes {cardSources
+          .map((card) => `${card.name} du ${cardListDate(card.updated_at)}`)
+          .join(', ')}
+      </p>
+    {/if}
     <p class="links">
       {#if favorite}
         <FavoriteButton list={favorites.cinemas} item={favorite} name={favorite.name} />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CardBadges from '../components/CardBadges.svelte';
   import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
@@ -162,6 +163,7 @@
                     .filter(Boolean)
                     .join(' · ')}</span
                 >
+                <CardBadges cards={cinema.cards} onlyMine />
               </div>
               <ShowtimeChips showtimes={list} date={showtimes.data.date} />
             </li>

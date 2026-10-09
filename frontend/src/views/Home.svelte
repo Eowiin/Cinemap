@@ -1,5 +1,6 @@
 <script lang="ts">
   import FilterBar from '../components/FilterBar.svelte';
+  import MyCards from '../components/MyCards.svelte';
   import Icon from '../components/Icon.svelte';
   import Poster from '../components/Poster.svelte';
   import Status from '../components/Status.svelte';
@@ -48,6 +49,7 @@
     {/if}
   </div>
   {#if app.locateError}<p class="error">{app.locateError}</p>{/if}
+  <MyCards />
 </section>
 
 {#if favorites.cinemas.items.length || favorites.movies.items.length}

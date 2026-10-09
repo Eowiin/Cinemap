@@ -13,6 +13,8 @@ export type UrlFilters = {
   date: string | null;
   version: VersionFilter | null;
   after: string | null;
+  /** Ids de cartes d'abonnement (`cards=ugc_illimite,pathe_cinepass`), null = toutes. */
+  cards: string[] | null;
 };
 
 export function parseRoute(pathname: string): Route {
@@ -30,10 +32,15 @@ export function parseFilters(search: string): UrlFilters {
   const date = params.get('date');
   const version = params.get('version');
   const after = params.get('after');
+  // Ids bien formés seulement ; un id inconnu du serveur donnera un 400 affiché par la page.
+  const cards = [
+    ...new Set((params.get('cards') ?? '').split(',').filter((id) => /^[a-z0-9_]+$/.test(id))),
+  ];
   return {
     date: date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
     version: version === 'VF' || version === 'VO' ? version : null,
     after: after && /^([01]\d|2[0-3]):[0-5]\d$/.test(after) ? after : null,
+    cards: cards.length ? cards : null,
   };
 }
 
@@ -42,6 +49,7 @@ export function filtersQuery(filters: UrlFilters): string {
   if (filters.date) params.set('date', filters.date);
   if (filters.version) params.set('version', filters.version);
   if (filters.after) params.set('after', filters.after);
+  if (filters.cards?.length) params.set('cards', filters.cards.join(','));
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }

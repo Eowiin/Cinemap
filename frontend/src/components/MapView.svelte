@@ -10,6 +10,8 @@
   import type { Position } from '../lib/api/client';
   import type { CinemaSummary } from '../lib/api/types';
   import { app, map } from '../lib/app.svelte';
+  import { cardBadges } from '../lib/cards';
+  import { myCards } from '../lib/cards.svelte';
   import { router } from '../lib/router.svelte';
 
   const STYLES = {
@@ -34,6 +36,18 @@
         properties: { id: c.id, name: c.name },
       })),
     };
+  }
+
+  /** Nom du cinéma suivi de mes cartes qu'il accepte (« UGC Les Halles · UGC Illimité »). */
+  function popupText(id: string, name: string): string {
+    const cinema = map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
+    const mine = cardBadges(
+      cinema?.cards ?? [],
+      app.meta?.cards ?? [],
+      myCards.items.map((c) => c.id),
+      true,
+    );
+    return [name, ...mine.map((badge) => badge.card.name)].join(' · ');
   }
 
   function point(p: Position): FeatureCollection<Point> {
@@ -185,7 +199,7 @@
           if (f?.geometry.type === 'Point') {
             popup
               .setLngLat(f.geometry.coordinates as [number, number])
-              .setText(String(f.properties?.name ?? ''))
+              .setText(popupText(String(f.properties?.id ?? ''), String(f.properties?.name ?? '')))
               .addTo(m);
           }
         });

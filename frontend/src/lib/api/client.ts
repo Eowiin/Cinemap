@@ -56,7 +56,11 @@ export type ShowtimeFilters = {
   date?: string;
   version?: VersionFilter | null;
   after?: string | null;
+  /** Ids de cartes : cinémas qui acceptent au moins l'une d'elles. */
+  cards?: string[] | null;
 };
+
+const cardsParam = (cards?: string[] | null) => (cards?.length ? cards.join(',') : undefined);
 
 const position = (p?: Position | null) => (p ? { lat: p.lat, lng: p.lng } : {});
 
@@ -66,7 +70,12 @@ export const api = {
   cinema: (id: string, signal?: AbortSignal) =>
     get<Cinema>(`/api/cinemas/${encodeURIComponent(id)}`, {}, signal),
   cinemaShowtimes: (id: string, filters: ShowtimeFilters, signal?: AbortSignal) =>
-    get<CinemaShowtimes>(`/api/cinemas/${encodeURIComponent(id)}/showtimes`, filters, signal),
+    get<CinemaShowtimes>(
+      `/api/cinemas/${encodeURIComponent(id)}/showtimes`,
+      // `cards` n'a pas de sens pour un seul cinéma : la fiche reste la même.
+      { date: filters.date, version: filters.version, after: filters.after },
+      signal,
+    ),
   nowShowing: (
     filters: ShowtimeFilters & { position?: Position | null; radius_km?: number; limit?: number },
     signal?: AbortSignal,
@@ -77,6 +86,7 @@ export const api = {
         date: filters.date,
         version: filters.version,
         after: filters.after,
+        cards: cardsParam(filters.cards),
         radius_km: filters.position ? filters.radius_km : undefined,
         limit: filters.limit,
         ...position(filters.position),
@@ -95,6 +105,7 @@ export const api = {
         date: filters.date,
         version: filters.version,
         after: filters.after,
+        cards: cardsParam(filters.cards),
         radius_km: filters.radius_km,
         ...position(filters.position),
       },
