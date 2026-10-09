@@ -22,6 +22,25 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// Liste de chaînes dont les éléments `null` sont écartés : `"projection": [null]` vu sur
+/// W5076 et P0535 le 2026-10-08 (le run échouait sur tout le couple cinéma/date).
+fn strings_without_nulls<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values: Vec<Option<String>> = null_as_default(deserializer)?;
+    Ok(values.into_iter().flatten().collect())
+}
+
+/// Comme `strings_without_nulls`, en gardant la distinction absent / `null` → `None`.
+fn optional_strings_without_nulls<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Option::<Vec<Option<String>>>::deserialize(deserializer)?;
+    Ok(values.map(|values| values.into_iter().flatten().collect()))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Response {
@@ -199,15 +218,15 @@ pub(super) struct Showtime {
     pub(super) starts_at: String,
     #[serde(default, deserialize_with = "null_as_default")]
     pub(super) diffusion_version: String,
-    #[serde(default, deserialize_with = "null_as_default")]
+    #[serde(default, deserialize_with = "strings_without_nulls")]
     pub(super) tags: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_strings_without_nulls")]
     pub(super) projection: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_strings_without_nulls")]
     pub(super) sound: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_strings_without_nulls")]
     pub(super) picture: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_strings_without_nulls")]
     pub(super) experience: Option<Vec<String>>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub(super) data: ShowtimeData,
@@ -221,7 +240,7 @@ pub(super) struct ShowtimeData {
 
 #[derive(Deserialize)]
 pub(super) struct Ticketing {
-    #[serde(default, deserialize_with = "null_as_default")]
+    #[serde(default, deserialize_with = "strings_without_nulls")]
     pub(super) urls: Vec<String>,
     #[serde(rename = "type")]
     pub(super) kind: String,
@@ -329,6 +348,20 @@ pub(super) async fn fetch_showtimes(
         let response =
             fetch_page(client, cinema_id, date, page, rate_limiter, circuit_breaker).await?;
         if response.error {
+            // La page 1 annonçait plus de pages, mais les séances ont changé entre-temps (vu
+            // le soir, quand les dernières séances du jour passent) : on garde ce qu'on a.
+            if matches!(
+                response.message.as_deref(),
+                Some("next.showtime.on" | "no.showtime.error")
+            ) {
+                tracing::info!(
+                    cinema_id,
+                    date,
+                    page,
+                    "Page suivante vide : pagination arrêtée"
+                );
+                break;
+            }
             bail!(
                 "Erreur AlloCiné pour le cinéma {cinema_id} le {date}, page {page} : {}",
                 response.message.as_deref().unwrap_or("message absent")
@@ -348,12 +381,15 @@ mod tests {
         include_str!("../../tests/fixtures/showtimes-C0159-2026-10-06-p1.json");
     const P0095_PAGE_1: &str =
         include_str!("../../tests/fixtures/showtimes-P0095-2026-10-06-p1.json");
-    const FIXTURES: [&str; 5] = [
+    const W5076_PAGE_1: &str =
+        include_str!("../../tests/fixtures/showtimes-W5076-2026-10-09-p1.json");
+    const FIXTURES: [&str; 6] = [
         C0159_PAGE_1,
         include_str!("../../tests/fixtures/showtimes-C0159-2026-10-06-p2.json"),
         include_str!("../../tests/fixtures/showtimes-C0015-2026-10-06-p1.json"),
         include_str!("../../tests/fixtures/showtimes-P1434-2026-10-06-p1.json"),
         P0095_PAGE_1,
+        W5076_PAGE_1,
     ];
 
     #[test]
@@ -447,6 +483,32 @@ mod tests {
         assert!(entry.movie.languages.is_empty());
         assert!(entry.movie.cast.edges.is_empty());
         assert!(entry.showtimes["original"][0].tags.is_empty());
+    }
+
+    #[test]
+    fn null_list_elements_are_dropped() {
+        // Vu sur W5076 le 2026-10-09 : `"projection": [null]`.
+        let response: Response = serde_json::from_str(W5076_PAGE_1).unwrap();
+        let showtimes: Vec<&Showtime> = response
+            .results
+            .iter()
+            .flat_map(|entry| entry.showtimes.values().flatten())
+            .collect();
+        assert!(
+            showtimes
+                .iter()
+                .any(|showtime| showtime.projection == Some(Vec::new()))
+        );
+
+        let json = r#"{"internalId": 1, "startsAt": "2026-10-09T20:00:00", "tags": [null, "Tag"],
+            "projection": [null, "3D"], "sound": null,
+            "data": {"ticketing": [{"urls": [null, "https://example.org"], "type": "DESKTOP", "provider": "default"}]}}"#;
+        let showtime: Showtime = serde_json::from_str(json).unwrap();
+        assert_eq!(showtime.tags, ["Tag"]);
+        assert_eq!(showtime.projection, Some(vec!["3D".to_owned()]));
+        assert_eq!(showtime.sound, None);
+        assert_eq!(showtime.picture, None);
+        assert_eq!(showtime.data.ticketing[0].urls, ["https://example.org"]);
     }
 
     #[test]

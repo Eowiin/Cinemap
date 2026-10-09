@@ -3,6 +3,7 @@ use backend::cli::{Cli, SubCommands};
 use backend::db;
 use clap::Parser;
 use std::io::IsTerminal;
+use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -35,12 +36,17 @@ async fn main() -> anyhow::Result<()> {
             cinema,
             date,
             department,
+            interval_ms,
         } => {
+            let min_interval = interval_ms
+                .map(Duration::from_millis)
+                .unwrap_or(backend::showtimes::MIN_INTERVAL);
             backend::showtimes::scrape(
                 &pool,
                 cinema.as_deref(),
                 date.as_deref(),
-                department.as_deref(),
+                &department,
+                min_interval,
             )
             .await
         }

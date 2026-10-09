@@ -19,9 +19,13 @@ pub enum SubCommands {
         /// Date cinéma au format YYYY-MM-DD (par défaut : J, J+1, J+2 et J+6 le mercredi).
         #[arg(long)]
         date: Option<String>,
-        /// Limite le scraping aux cinémas de ce département (ex. 75).
-        #[arg(long, conflicts_with = "cinema")]
-        department: Option<String>,
+        /// Limite le scraping aux cinémas de ces départements (ex. 75 ou 75,92,93).
+        #[arg(long, conflicts_with = "cinema", value_delimiter = ',')]
+        department: Vec<String>,
+        /// Intervalle minimal entre deux requêtes AlloCiné, en millisecondes (défaut : 333,
+        /// soit 3 req/s). Sert de rythme de départ et de plancher.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(333..))]
+        interval_ms: Option<u64>,
     },
     /// Enrichit les films à l'affiche avec TMDB (image de fond, bande-annonce, note).
     Tmdb {

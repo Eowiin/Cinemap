@@ -335,3 +335,46 @@ Fait le 2026-10-08 :
 2. Dans `SharedRateLimiter::wait`, pourquoi faut-il une boucle, au lieu de réserver un créneau et de dormir une seule fois ?
 3. `Pace::on_block` reçoit `now: Instant` au lieu d'appeler `Instant::now()` lui-même. Qu'est-ce que ça change pour les tests ?
 
+
+---
+
+## Premier run France sur le VPS et réglages (2026-10-09, écrit par Claude à ta demande)
+
+**Constat** (run lancé à la main le 2026-10-08 à 20:33 UTC) : 9 356 couples sur 9 363, 52 155 séances, 2 870 jours sautés, mais **5 h 06** (`duree_s=18378`) et `ralentissements=76`. Les refus dessinent **19 cycles identiques de ~16 min** :
+
+```text
+20:34:39  refus → pause 30 s   20:35:09  refus → 1 min   20:36:09  refus → 2 min   20:38:09  refus → 4 min
+20:42:09  ça passe : remontée de 5 s à 0,33 s (~180 requêtes en ~7 min), ~1,5 min à 3 req/s
+20:50:52  refus : cycle suivant
+```
+
+- Le blocage dure **plus de 3 min 30 et moins de 7 min 30** : les essais à 30 s, 1 et 2 min ne servaient à rien.
+- ~300 requêtes passent par cycle (comme le 2026-10-08), soit ~0,3 req/s en moyenne.
+- Question ouverte : **limite de débit** (un rythme constant plus bas ne serait jamais bloqué) ou **quota** (~300 requêtes par fenêtre de ~15 min, quel que soit le rythme) ?
+
+**Ce qui a changé** :
+
+1. **Pause unique de 5 min** (`BLOCK_PAUSE`) au lieu de 30 s doublée, et **coupe-circuit à 3 refus** d'affilée (`MAX_CONSECUTIVE_BLOCKS`, soit 10 min de pauses avant le 3e refus).
+2. **`scrape --interval-ms <ms>`** : rythme de départ **et** plancher de `Pace` (champ `min_interval`), 333 ms par défaut, refusé en dessous. Après un refus, l'intervalle double toujours, sans dépasser `max(MAX_INTERVAL, min_interval)`.
+3. **`scrape --department 75,77,78`** : plusieurs départements (clap `value_delimiter`, liste passée à SQLite en JSON et dépliée par `json_each`).
+4. **Bug `"projection": [null]`** (P0535, W5076) : les éléments `null` des listes de chaînes (`tags`, `projection`, `sound`, `picture`, `experience`, `urls`) sont écartés (`strings_without_nulls`). Fixture `showtimes-W5076-2026-10-09-p1.json`.
+5. **Bug page 2 vide** (P0620, P0926, P0963, le soir) : la page 1 annonce 2 pages, la page 2 répond `no.showtime.error` / `next.showtime.on` parce que les dernières séances du jour sont passées entre-temps. On arrête la pagination et on garde les pages déjà lues, au lieu de faire échouer le couple.
+
+**Vérifié** : 163 tests, clippy, fmt. W5076 du 2026-10-09 depuis le Mac : 1/1 couple, 2 séances (échouait avant).
+
+**Test à faire sur le VPS** (hors de la plage du timer, 02:00 à ~07:00 UTC) : l'IDF à 1 req/s, ~800 à 900 requêtes en ~15 min, soit 3 fois les ~300 qui passaient avant un blocage.
+
+```bash
+systemd-run --pty --wait --collect --uid=cinemap --gid=cinemap \
+  -p EnvironmentFile=/etc/cinemap/cinemap.env -p WorkingDirectory=/var/lib/cinemap \
+  /opt/cinemap/current/cinemap scrape --department 75,77,78,91,92,93,94,95 --interval-ms 1000
+```
+
+- Aucun refus → limite de débit : 1 req/s tient, la France entière passerait en ~2 h (`--interval-ms` à mettre dans `cinemap-nightly.service`).
+- Refus vers la 300e requête (~5 min) → quota : seul un nombre de requêtes plus faible fera gagner du temps (cinémas sans programmation revérifiés moins souvent, voir `PLAN.md` « Idées pour plus tard », point 4).
+
+**Questions pour toi** :
+
+1. Dans `cli.rs`, `department` est passé de `Option<String>` à `Vec<String>`, et `main.rs` passe `&department` à une fonction qui attend `&[String]`. Pourquoi ça compile sans `.as_slice()` ? Quel est le nom de ce mécanisme ?
+2. `optional_strings_without_nulls` désérialise un `Option<Vec<Option<String>>>`, puis fait `.into_iter().flatten()`. Que fait `flatten` sur un itérateur d'`Option<String>`, et pourquoi le même mot sert-il aussi pour un itérateur de `Vec` ?
+3. Le champ s'appelle `projection` avec `#[serde(default, deserialize_with = …)]`. Pourquoi `default` reste-t-il nécessaire alors que la fonction gère déjà `null` ? (Indice : la différence entre « champ absent » et « champ à `null` ».)
