@@ -58,11 +58,14 @@ pub async fn search(
 
     let cinemas = sqlx::query_as!(
         CinemaRow,
-        r#"SELECT id AS "id!: String", name AS "name!: String", city AS "city?: String",
-                  lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool"
-           FROM visible_cinemas
-           WHERE name_search LIKE ?1 ESCAPE '\' OR city_search LIKE ?1 ESCAPE '\'
-           ORDER BY name_search
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.lat AS "lat!: f64", c.lng AS "lng!: f64",
+                  c.art_et_essai AS "art_et_essai!: bool",
+                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)
+                    AS "cards!: SqlJson<Vec<String>>"
+           FROM visible_cinemas c
+           WHERE c.name_search LIKE ?1 ESCAPE '\' OR c.city_search LIKE ?1 ESCAPE '\'
+           ORDER BY c.name_search
            LIMIT 8"#,
         pattern,
     )

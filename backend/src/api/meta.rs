@@ -2,7 +2,7 @@ use axum::{Json, extract::State};
 
 use super::AppState;
 use super::error::ApiResult;
-use super::types::Meta;
+use super::types::{Card, Meta};
 use crate::time::{DATE_FORMAT, paris_today};
 
 /// État des données. Sert aussi de health check : quelques requêtes légères.
@@ -45,11 +45,22 @@ pub async fn meta(State(state): State<AppState>) -> ApiResult<Json<Meta>> {
     .fetch_one(&state.pool)
     .await?;
 
+    let cards = sqlx::query_as!(
+        Card,
+        r#"SELECT id AS "id!: String", name,
+                  strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) AS "updated_at!: String"
+           FROM cards
+           ORDER BY name"#
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
     Ok(Json(Meta {
         today,
         last_scrape_at,
         dates_available,
         cinema_count,
         movie_count,
+        cards,
     }))
 }

@@ -11,8 +11,8 @@ use super::cinemas::CinemaRow;
 use super::error::{ApiResult, AppError};
 use super::geo::{Position, bounding_box, haversine_km, round_km};
 use super::params::{
-    RawQuery, after_bound, parse_after, parse_date, parse_limit, parse_movie_id, parse_position,
-    parse_radius, parse_version,
+    RawQuery, after_bound, parse_after, parse_cards, parse_date, parse_limit, parse_movie_id,
+    parse_position, parse_radius, parse_version,
 };
 use super::types::{
     CinemaSummary, CinemaWithShowtimes, Movie, MovieShowtimesResponse, MovieSummary, NowShowing,
@@ -92,22 +92,32 @@ pub(super) struct NearbyCinema {
 }
 
 /// Cinémas visibles à `radius_km` au plus de `center`, du plus proche au plus loin.
+/// `cards` : liste JSON d'ids de cartes (`parse_cards`), au moins une acceptée.
 pub(super) async fn cinemas_within(
     pool: &SqlitePool,
     center: Position,
     radius_km: f64,
+    cards: Option<&str>,
 ) -> ApiResult<Vec<NearbyCinema>> {
     let bbox = bounding_box(center, radius_km);
     let rows = sqlx::query_as!(
         CinemaRow,
-        r#"SELECT id AS "id!: String", name AS "name!: String", city AS "city?: String",
-                  lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool"
-           FROM visible_cinemas
-           WHERE lat BETWEEN ?1 AND ?2 AND lng BETWEEN ?3 AND ?4"#,
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.lat AS "lat!: f64", c.lng AS "lng!: f64",
+                  c.art_et_essai AS "art_et_essai!: bool",
+                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)
+                    AS "cards!: SqlJson<Vec<String>>"
+           FROM visible_cinemas c
+           WHERE c.lat BETWEEN ?1 AND ?2 AND c.lng BETWEEN ?3 AND ?4
+             AND (?5 IS NULL OR EXISTS (
+                   SELECT 1 FROM cinema_cards cc
+                   WHERE cc.cinema_id = c.id
+                     AND cc.card_id IN (SELECT value FROM json_each(?5))))"#,
         bbox.min_lat,
         bbox.max_lat,
         bbox.min_lng,
         bbox.max_lng,
+        cards,
     )
     .fetch_all(pool)
     .await?;
@@ -188,6 +198,7 @@ pub async fn showtimes(
     let date = parse_date(raw.date.as_deref(), today)?;
     let version = parse_version(raw.version.as_deref())?.map(|v| v.as_sql());
     let after = after_bound(date, parse_after(raw.after.as_deref())?);
+    let cards = parse_cards(raw.cards.as_deref(), &state.pool).await?;
     let date = date.format(DATE_FORMAT).to_string();
     let today = today.format(DATE_FORMAT).to_string();
 
@@ -205,7 +216,7 @@ pub async fn showtimes(
     .ok_or(AppError::NotFound("Film introuvable"))?
     .into();
 
-    let nearby = cinemas_within(&state.pool, center, radius_km).await?;
+    let nearby = cinemas_within(&state.pool, center, radius_km, cards.as_deref()).await?;
     if nearby.is_empty() {
         return Ok(Json(MovieShowtimesResponse {
             movie,
@@ -297,12 +308,13 @@ pub async fn list(
     let version = parse_version(raw.version.as_deref())?.map(|v| v.as_sql());
     let after = after_bound(date, parse_after(raw.after.as_deref())?);
     let limit = i64::from(parse_limit(raw.limit.as_deref())?);
+    let cards = parse_cards(raw.cards.as_deref(), &state.pool).await?;
     let date = date.format(DATE_FORMAT).to_string();
 
     let cinema_ids = match position {
         None => None,
         Some(center) => {
-            let nearby = cinemas_within(&state.pool, center, radius_km).await?;
+            let nearby = cinemas_within(&state.pool, center, radius_km, cards.as_deref()).await?;
             if nearby.is_empty() {
                 // Rien dans le rayon : inutile d'interroger les séances.
                 return Ok(Json(NowShowingResponse {
@@ -333,6 +345,10 @@ pub async fn list(
              AND (?2 IS NULL OR s.cinema_id IN (SELECT value FROM json_each(?2)))
              AND (?3 IS NULL OR s.version = ?3 OR (?3 = 'VO' AND s.version = 'VOST'))
              AND (?4 IS NULL OR s.starts_at >= ?4)
+             AND (?6 IS NULL OR EXISTS (
+                   SELECT 1 FROM cinema_cards cc
+                   WHERE cc.cinema_id = c.id
+                     AND cc.card_id IN (SELECT value FROM json_each(?6))))
            GROUP BY m.id
            ORDER BY count(DISTINCT s.cinema_id) DESC, count(*) DESC, m.title_search
            LIMIT ?5"#,
@@ -341,6 +357,7 @@ pub async fn list(
         version,
         after,
         limit,
+        cards,
     )
     .fetch_all(&state.pool)
     .await?;
@@ -397,7 +414,7 @@ mod tests {
             lat: 48.8566,
             lng: 2.3522,
         };
-        let nearby = cinemas_within(&pool, center, 15.0).await.unwrap();
+        let nearby = cinemas_within(&pool, center, 15.0, None).await.unwrap();
         let ids: Vec<&str> = nearby.iter().map(|c| c.summary.id.as_str()).collect();
         assert_eq!(ids, ["NEAR", "MID"]);
         assert_eq!(nearby[0].summary.distance_km, Some(1.0));

@@ -29,3 +29,14 @@ INSERT INTO showtimes (id, cinema_id, movie_id, date, starts_at, version, format
     ('B1', 'NOGEO', 1002, '2099-01-01', '2099-01-01T11:00:00', 'VO', '[]', NULL),
     -- Film B (1002) : une seule séance visible, en VO.
     ('B2', 'PARIS1', 1002, '2099-01-01', '2099-01-01T16:00:00', 'VO', '[]', NULL);
+
+INSERT INTO cards (id, name, source_url, updated_at) VALUES
+    ('ugc_illimite', 'UGC Illimité', 'https://www.ugc.fr/cinemas-acceptant-ui.html', '2099-01-01 02:14:00'),
+    ('pathe_cinepass', 'Pathé CinéPass', 'https://www.pathe.fr/api/cinemas', '2099-01-01 02:14:00');
+
+INSERT INTO cinema_cards (cinema_id, card_id, manual) VALUES
+    ('PARIS1', 'ugc_illimite', 0),
+    ('PARIS1', 'pathe_cinepass', 1),
+    ('LYON', 'pathe_cinepass', 0),
+    -- Cinéma masqué : son lien ne doit apparaître nulle part.
+    ('OLD', 'ugc_illimite', 0);

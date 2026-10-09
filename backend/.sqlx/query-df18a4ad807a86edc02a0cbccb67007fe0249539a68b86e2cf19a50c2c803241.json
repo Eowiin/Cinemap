@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  m.poster_url AS \"poster_url?: String\",\n                  m.genres AS \"genres!: SqlJson<Vec<String>>\",\n                  m.runtime_min AS \"runtime_min?: i64\", m.release_date AS \"release_date?: String\",\n                  count(DISTINCT s.cinema_id) AS \"cinema_count!: i64\",\n                  count(*) AS \"showtime_count!: i64\",\n                  min(s.starts_at) AS \"next_showtime!: String\"\n           FROM showtimes s\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           JOIN movies m ON m.id = s.movie_id\n           WHERE s.date = ?1\n             AND (?2 IS NULL OR s.cinema_id IN (SELECT value FROM json_each(?2)))\n             AND (?3 IS NULL OR s.version = ?3 OR (?3 = 'VO' AND s.version = 'VOST'))\n             AND (?4 IS NULL OR s.starts_at >= ?4)\n           GROUP BY m.id\n           ORDER BY count(DISTINCT s.cinema_id) DESC, count(*) DESC, m.title_search\n           LIMIT ?5",
+  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  m.poster_url AS \"poster_url?: String\",\n                  m.genres AS \"genres!: SqlJson<Vec<String>>\",\n                  m.runtime_min AS \"runtime_min?: i64\", m.release_date AS \"release_date?: String\",\n                  count(DISTINCT s.cinema_id) AS \"cinema_count!: i64\",\n                  count(*) AS \"showtime_count!: i64\",\n                  min(s.starts_at) AS \"next_showtime!: String\"\n           FROM showtimes s\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           JOIN movies m ON m.id = s.movie_id\n           WHERE s.date = ?1\n             AND (?2 IS NULL OR s.cinema_id IN (SELECT value FROM json_each(?2)))\n             AND (?3 IS NULL OR s.version = ?3 OR (?3 = 'VO' AND s.version = 'VOST'))\n             AND (?4 IS NULL OR s.starts_at >= ?4)\n             AND (?6 IS NULL OR EXISTS (\n                   SELECT 1 FROM cinema_cards cc\n                   WHERE cc.cinema_id = c.id\n                     AND cc.card_id IN (SELECT value FROM json_each(?6))))\n           GROUP BY m.id\n           ORDER BY count(DISTINCT s.cinema_id) DESC, count(*) DESC, m.title_search\n           LIMIT ?5",
   "describe": {
     "columns": [
       {
@@ -89,7 +89,7 @@
       }
     ],
     "parameters": {
-      "Right": 5
+      "Right": 6
     },
     "nullable": [
       true,
@@ -103,5 +103,5 @@
       false
     ]
   },
-  "hash": "ce0dc7a9d72b15f4a0cf98a8688eceae1e3acc5183dbed7effde83b19936288c"
+  "hash": "df18a4ad807a86edc02a0cbccb67007fe0249539a68b86e2cf19a50c2c803241"
 }

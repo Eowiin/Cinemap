@@ -8,7 +8,8 @@ use super::AppState;
 use super::error::{ApiResult, AppError};
 use super::geo::{Position, haversine_km, round_km};
 use super::params::{
-    RawQuery, after_bound, parse_after, parse_bool, parse_date, parse_position, parse_version,
+    RawQuery, after_bound, parse_after, parse_bool, parse_cards, parse_date, parse_position,
+    parse_version,
 };
 use super::types::{
     Cinema, CinemaShowtimesResponse, CinemaSummary, MovieShowtimes, MovieSummary, Showtime,
@@ -23,6 +24,8 @@ pub(super) struct CinemaRow {
     pub lat: f64,
     pub lng: f64,
     pub art_et_essai: bool,
+    /// Ids des cartes, triés (ordre de la clé primaire `(cinema_id, card_id)`).
+    pub cards: SqlJson<Vec<String>>,
 }
 
 impl CinemaRow {
@@ -41,6 +44,7 @@ impl CinemaRow {
             lat: self.lat,
             lng: self.lng,
             art_et_essai: self.art_et_essai,
+            cards: self.cards.0,
             distance_km,
         }
     }
@@ -53,6 +57,7 @@ struct CinemaDetailRow {
     lat: f64,
     lng: f64,
     art_et_essai: bool,
+    cards: SqlJson<Vec<String>>,
     address: Option<String>,
     postal_code: Option<String>,
     department: Option<String>,
@@ -81,15 +86,24 @@ pub async fn list(
 ) -> ApiResult<Json<Vec<CinemaSummary>>> {
     let art_et_essai = parse_bool(raw.art_et_essai.as_deref(), "art_et_essai")?;
     let position = parse_position(raw.lat.as_deref(), raw.lng.as_deref())?;
+    let cards = parse_cards(raw.cards.as_deref(), &state.pool).await?;
 
     let rows = sqlx::query_as!(
         CinemaRow,
-        r#"SELECT id AS "id!: String", name AS "name!: String", city AS "city?: String",
-                  lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool"
-           FROM visible_cinemas
-           WHERE (?1 IS NULL OR art_et_essai = ?1)
-           ORDER BY name_search"#,
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.lat AS "lat!: f64", c.lng AS "lng!: f64",
+                  c.art_et_essai AS "art_et_essai!: bool",
+                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)
+                    AS "cards!: SqlJson<Vec<String>>"
+           FROM visible_cinemas c
+           WHERE (?1 IS NULL OR c.art_et_essai = ?1)
+             AND (?2 IS NULL OR EXISTS (
+                   SELECT 1 FROM cinema_cards cc
+                   WHERE cc.cinema_id = c.id
+                     AND cc.card_id IN (SELECT value FROM json_each(?2))))
+           ORDER BY c.name_search"#,
         art_et_essai,
+        cards,
     )
     .fetch_all(&state.pool)
     .await?;
@@ -126,12 +140,16 @@ pub async fn get_one(
 async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema> {
     let row = sqlx::query_as!(
         CinemaDetailRow,
-        r#"SELECT id AS "id!: String", name AS "name!: String", city AS "city?: String",
-                  lat AS "lat!: f64", lng AS "lng!: f64", art_et_essai AS "art_et_essai!: bool",
-                  address AS "address?: String", postal_code AS "postal_code?: String",
-                  department AS "department?: String", screens AS "screens?: i64", seats AS "seats?: i64"
-           FROM visible_cinemas
-           WHERE id = ?1"#,
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.lat AS "lat!: f64", c.lng AS "lng!: f64",
+                  c.art_et_essai AS "art_et_essai!: bool",
+                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)
+                    AS "cards!: SqlJson<Vec<String>>",
+                  c.address AS "address?: String", c.postal_code AS "postal_code?: String",
+                  c.department AS "department?: String", c.screens AS "screens?: i64",
+                  c.seats AS "seats?: i64"
+           FROM visible_cinemas c
+           WHERE c.id = ?1"#,
         id,
     )
     .fetch_optional(&state.pool)
@@ -154,6 +172,7 @@ async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema> {
             lat: row.lat,
             lng: row.lng,
             art_et_essai: row.art_et_essai,
+            cards: row.cards.0,
             distance_km: None,
         },
         address: row.address,

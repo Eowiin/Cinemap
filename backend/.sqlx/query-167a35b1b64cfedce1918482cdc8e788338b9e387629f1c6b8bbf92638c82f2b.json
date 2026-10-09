@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM cinema_cards WHERE card_id = ? AND manual = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "167a35b1b64cfedce1918482cdc8e788338b9e387629f1c6b8bbf92638c82f2b"
+}

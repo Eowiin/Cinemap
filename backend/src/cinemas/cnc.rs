@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    io::Cursor,
-    time::Duration,
-};
+use std::{collections::HashMap, io::Cursor, time::Duration};
 
 use anyhow::{Context, anyhow};
 use calamine::{RangeDeserializerBuilder, Reader, Xlsx, open_workbook_from_rs};
@@ -14,8 +10,11 @@ use tracing::{debug, info};
 
 use crate::{
     client::{RETRY_DELAYS, fetch_with_retries},
-    text::normalize,
+    matching::{Scored, assign_best, comparable_name, similarity},
 };
+// Les tests construisent des cinémas avec un `name_search` normalisé.
+#[cfg(test)]
+use crate::text::normalize;
 
 const CNC_URL: &str =
     "https://www.data.gouv.fr/api/1/datasets/r/cdb918e7-7f1a-44fc-bf6f-c59d1614ed6d";
@@ -146,23 +145,26 @@ pub async fn enrich_cinemas(pool: &SqlitePool, client: &Client) -> anyhow::Resul
 /// inversement. Les paires sont traitées de la plus ressemblante à la moins
 /// ressemblante : si deux cinémas visent le même établissement, le plus proche gagne.
 pub fn match_cinemas<'a>(cinemas: &'a [LocatedCinema], cnc: &'a [CncCinema]) -> Vec<CncMatch<'a>> {
-    // Noms normalisés calculés une seule fois, regroupés par commune.
-    let mut by_commune: HashMap<&str, Vec<(&CncCinema, String)>> = HashMap::new();
-    for establishment in cnc {
+    // Noms normalisés calculés une seule fois, regroupés par commune. On garde l'indice
+    // de l'établissement : c'est la clé de `assign_best`.
+    let mut by_commune: HashMap<&str, Vec<(usize, String)>> = HashMap::new();
+    for (index, establishment) in cnc.iter().enumerate() {
         by_commune
             .entry(commune_code(&establishment.insee_code))
             .or_default()
-            .push((establishment, comparable_name(&establishment.name)));
+            .push((index, comparable_name(&establishment.name)));
     }
 
-    // Chaque paire garde aussi son `jaro_winkler` brut pour départager les égalités.
-    let mut pairs: Vec<(CncMatch, f64)> = Vec::new();
+    // Chaque paire garde aussi son `jaro_winkler` brut pour départager les égalités
+    // (inclusion complète des deux côtés, ex. « ugc cite » et « ugc cite part dieu »
+    // dans « ugc cite lyon part dieu ») : le nom le plus proche lettre à lettre gagne.
+    let mut pairs: Vec<Scored<&str, usize>> = Vec::new();
     for cinema in cinemas {
         let Some(candidates) = by_commune.get(commune_code(&cinema.insee_code)) else {
             continue;
         };
         let name = comparable_name(&cinema.name_search);
-        for (establishment, cnc_name) in candidates {
+        for (index, cnc_name) in candidates {
             let score = similarity(&name, cnc_name);
             debug!(
                 cinema = %cinema.id,
@@ -172,37 +174,22 @@ pub fn match_cinemas<'a>(cinemas: &'a [LocatedCinema], cnc: &'a [CncCinema]) -> 
                 "Paire candidate"
             );
             if score >= MIN_SIMILARITY {
-                let pair = CncMatch {
-                    cinema_id: &cinema.id,
-                    cnc: establishment,
+                pairs.push(Scored {
+                    a: &cinema.id,
+                    b: *index,
                     score,
-                };
-                pairs.push((pair, jaro_winkler(&name, cnc_name)));
+                    closeness: jaro_winkler(&name, cnc_name),
+                });
             }
         }
     }
 
-    // Meilleur score d'abord ; à égalité (inclusion complète des deux côtés, ex.
-    // « ugc cite » et « ugc cite part dieu » dans « ugc cite lyon part dieu »), le nom le
-    // plus proche lettre à lettre gagne. Tri stable : résultat reproductible.
-    pairs.sort_by(|(a, a_closeness), (b, b_closeness)| {
-        b.score
-            .total_cmp(&a.score)
-            .then(b_closeness.total_cmp(a_closeness))
-    });
-    let mut used_cinemas = HashSet::new();
-    let mut used_cnc = HashSet::new();
-    pairs
+    assign_best(pairs)
         .into_iter()
-        .map(|(pair, _)| pair)
-        .filter(|pair| {
-            let free =
-                !used_cinemas.contains(pair.cinema_id) && !used_cnc.contains(&pair.cnc.cnc_id);
-            if free {
-                used_cinemas.insert(pair.cinema_id);
-                used_cnc.insert(pair.cnc.cnc_id);
-            }
-            free
+        .map(|pair| CncMatch {
+            cinema_id: pair.a,
+            cnc: &cnc[pair.b],
+            score: pair.score,
         })
         .collect()
 }
@@ -218,58 +205,6 @@ fn commune_code(insee: &str) -> &str {
     } else {
         insee
     }
-}
-
-/// Nom normalisé sans ponctuation ni mots génériques (« cinéma », « le »…), qui
-/// diffèrent souvent entre AlloCiné et le CNC sans changer l'établissement.
-/// Si le nom ne contient que des mots génériques (« Cinéma »), on les garde.
-fn comparable_name(name: &str) -> String {
-    const GENERIC: &[&str] = &[
-        "cinema", "cinemas", "cine", "salle", "mega", "le", "la", "les", "l", "de", "du", "des",
-        "d",
-    ];
-    let normalized = normalize(name);
-    let words: Vec<&str> = normalized
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .map(|word| match word {
-            "st" => "saint",
-            "ste" => "sainte",
-            other => other,
-        })
-        .collect();
-    let specific: Vec<&str> = words
-        .iter()
-        .copied()
-        .filter(|word| !GENERIC.contains(word))
-        .collect();
-    if specific.is_empty() {
-        words.join(" ")
-    } else {
-        specific.join(" ")
-    }
-}
-
-/// Le meilleur de deux mesures : `jaro_winkler` tolère les fautes et abréviations
-/// (« st paul » / « saint paul ») ; l'inclusion des mots couvre les noms complétés
-/// d'un côté (« comoedia » / « sete comoedia », « champo » / « champo espace jacques tati »).
-fn similarity(a: &str, b: &str) -> f64 {
-    jaro_winkler(a, b).max(word_containment(a, b))
-}
-
-/// Part des mots du nom le plus court présents dans l'autre nom.
-fn word_containment(a: &str, b: &str) -> f64 {
-    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
-    let long_words: Vec<&str> = long.split(' ').collect();
-    let short_words: Vec<&str> = short.split(' ').filter(|w| !w.is_empty()).collect();
-    if short_words.is_empty() {
-        return 0.0;
-    }
-    let found = short_words
-        .iter()
-        .filter(|w| long_words.contains(w))
-        .count();
-    found as f64 / short_words.len() as f64
 }
 
 /// Remplace toutes les données CNC en une transaction : un cinéma qui n'est plus

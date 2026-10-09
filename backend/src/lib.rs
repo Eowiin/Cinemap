@@ -1,8 +1,10 @@
 pub mod api;
+pub mod cards;
 pub mod cinemas;
 pub mod cli;
 pub mod client;
 pub mod db;
+pub mod matching;
 pub mod showtimes;
 pub mod text;
 pub mod time;

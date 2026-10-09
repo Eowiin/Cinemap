@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\",\n                  lat AS \"lat!: f64\", lng AS \"lng!: f64\", art_et_essai AS \"art_et_essai!: bool\"\n           FROM visible_cinemas\n           WHERE name_search LIKE ?1 ESCAPE '\\' OR city_search LIKE ?1 ESCAPE '\\'\n           ORDER BY name_search\n           LIMIT 8",
+  "query": "SELECT id AS \"id!\", name, postal_code, city, department, lat, lng FROM cinemas",
   "describe": {
     "columns": [
       {
-        "name": "id!: String",
+        "name": "id!",
         "ordinal": 0,
         "type_info": "Text",
         "origin": {
@@ -15,7 +15,7 @@
         }
       },
       {
-        "name": "name!: String",
+        "name": "name",
         "ordinal": 1,
         "type_info": "Text",
         "origin": {
@@ -26,8 +26,19 @@
         }
       },
       {
-        "name": "city?: String",
+        "name": "postal_code",
         "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "postal_code"
+          }
+        }
+      },
+      {
+        "name": "city",
+        "ordinal": 3,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -37,8 +48,19 @@
         }
       },
       {
-        "name": "lat!: f64",
-        "ordinal": 3,
+        "name": "department",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "department"
+          }
+        }
+      },
+      {
+        "name": "lat",
+        "ordinal": 5,
         "type_info": "Float",
         "origin": {
           "Table": {
@@ -48,8 +70,8 @@
         }
       },
       {
-        "name": "lng!: f64",
-        "ordinal": 4,
+        "name": "lng",
+        "ordinal": 6,
         "type_info": "Float",
         "origin": {
           "Table": {
@@ -57,21 +79,10 @@
             "name": "lng"
           }
         }
-      },
-      {
-        "name": "art_et_essai!: bool",
-        "ordinal": 5,
-        "type_info": "Integer",
-        "origin": {
-          "Table": {
-            "table": "cinemas",
-            "name": "art_et_essai"
-          }
-        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       true,
@@ -79,8 +90,9 @@
       true,
       true,
       true,
-      false
+      true,
+      true
     ]
   },
-  "hash": "18ca43199f987d11f5d6239f2f8ea677157ec9ee26a446c49f9f3acab55b075b"
+  "hash": "e3e9ea60f92733e70aa6ebb80f4f4956018519c2d1c74be1ab83bb36e930c58d"
 }

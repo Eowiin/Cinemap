@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: String\", name,\n                  strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) AS \"updated_at!: String\"\n           FROM cards\n           ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cards",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cards",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "updated_at!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "64e9ef7381f93f74703943b9a599e7bc6f95caec190e11a29704bc02e8a7c613"
+}

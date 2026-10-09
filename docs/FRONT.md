@@ -34,7 +34,12 @@ Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni b
 - `lib/stored.ts` (pur, testé) + `lib/stored.svelte.ts` : `StoredList<T>`, une liste réactive sous une clé `localStorage`, au format versionné `{ "v": 1, "items": [...] }`. Lecture tolérante (JSON abîmé, autre version, élément invalide ou en double → écarté, jamais d'erreur), stockage indisponible → liste valable pour la session, synchronisée entre onglets (événement `storage`).
 - `lib/favorites.ts` / `favorites.svelte.ts` : `cinemap:favorites:cinemas` (`{ id, name, city }`) et `cinemap:favorites:movies` (`{ id, title, poster_url }`). Chaque favori garde de quoi s'afficher **sans appel à l'API** ; son nom est remis à jour quand on ouvre sa fiche (`refresh`).
 - Écran : bouton « Ajouter aux favoris » sur les fiches cinéma et film ; étoile à côté de chaque cinéma dans les séances d'un film, **mes cinémas affichés en premier** (puis par distance) ; à l'accueil, rangées « mes cinémas » et « mes films » (lien + retrait), étoile sur les films favoris à l'affiche.
-- **Lot E des cartes** : « mes cartes » = une `StoredList<{ id: string }>` de plus (`cinemap:cards`), même lecture tolérante. Le filtre `cards` de l'URL restera prioritaire pour les liens partagés.
+
+## Cartes d'abonnement (2026-10-09)
+
+- « Mes cartes » = une `StoredList<{ id }>` de plus (`cinemap:cards`, `lib/cards.svelte.ts`), choisies sur l'accueil (`MyCards.svelte`) parmi `meta.cards`.
+- Filtre : chip « Ma carte / Mes cartes » dans `FilterBar` → paramètre `cards` dans l'URL (lien partageable), envoyé à `/api/movies` et `/api/movies/{id}/showtimes`. Un lien partagé avec d'autres cartes affiche leur nom sur la chip. Changer mes cartes pendant que le filtre est actif le met à jour.
+- Badges (`CardBadges.svelte`) : fiche cinéma (toutes les cartes acceptées, les miennes en couleur, et « d'après les listes … du 09/10 »), séances d'un film et popup de la carte (les miennes seulement).
 
 ## Les bugs de l'ancien site, et ce qui les évite
 

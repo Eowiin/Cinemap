@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (SELECT 1 FROM cinemas WHERE id = ?) AS \"known!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "known!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c3839b23f599f042ccc416b3a5ca6cdf99e0b7b68cc4e649ec7c7e9a6661bb00"
+}

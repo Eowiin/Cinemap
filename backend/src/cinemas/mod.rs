@@ -61,7 +61,18 @@ pub async fn import_cinemas(pool: &SqlitePool) -> anyhow::Result<()> {
 
     // Placé après tous les départements : un import qui échoue s'arrête avant et ne purge rien.
     let purged = purge_unseen_cinemas(pool, &started_at).await?;
-    log_import_report(pool, &started_at, duplicates, purged).await
+    log_import_report(pool, &started_at, duplicates, purged).await?;
+
+    // Après la purge : les cinémas supprimés ont déjà perdu leurs liens (cascade). Comme
+    // pour le CNC, une liste de carte indisponible ne fait pas échouer l'import, et le
+    // garde-fou garde les anciens liens.
+    if let Err(error) = crate::cards::import_cards(pool, &client, false).await {
+        warn!(
+            error = format!("{error:#}"),
+            "Import des cartes incomplet, anciens liens gardés"
+        );
+    }
+    Ok(())
 }
 
 /// Au-delà, un cinéma absent des imports est supprimé avec ses séances (cascade).

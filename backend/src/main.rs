@@ -50,6 +50,10 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        SubCommands::ImportCards { force } => {
+            let client = backend::client::build_client()?;
+            backend::cards::import_cards(&pool, &client, force).await
+        }
         SubCommands::Tmdb { all } => backend::tmdb::sync(&pool, all).await,
         SubCommands::Serve { addr } => backend::api::serve(pool, &addr).await,
     }

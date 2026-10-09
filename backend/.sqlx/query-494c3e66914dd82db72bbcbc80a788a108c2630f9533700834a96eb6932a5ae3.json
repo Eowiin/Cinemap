@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\",\n                  lat AS \"lat!: f64\", lng AS \"lng!: f64\", art_et_essai AS \"art_et_essai!: bool\",\n                  address AS \"address?: String\", postal_code AS \"postal_code?: String\",\n                  department AS \"department?: String\", screens AS \"screens?: i64\", seats AS \"seats?: i64\"\n           FROM visible_cinemas\n           WHERE id = ?1",
+  "query": "SELECT c.id AS \"id!: String\", c.name AS \"name!: String\", c.city AS \"city?: String\",\n                  c.lat AS \"lat!: f64\", c.lng AS \"lng!: f64\",\n                  c.art_et_essai AS \"art_et_essai!: bool\",\n                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)\n                    AS \"cards!: SqlJson<Vec<String>>\",\n                  c.address AS \"address?: String\", c.postal_code AS \"postal_code?: String\",\n                  c.department AS \"department?: String\", c.screens AS \"screens?: i64\",\n                  c.seats AS \"seats?: i64\"\n           FROM visible_cinemas c\n           WHERE c.id = ?1",
   "describe": {
     "columns": [
       {
@@ -70,8 +70,14 @@
         }
       },
       {
-        "name": "address?: String",
+        "name": "cards!: SqlJson<Vec<String>>",
         "ordinal": 6,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "address?: String",
+        "ordinal": 7,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -82,7 +88,7 @@
       },
       {
         "name": "postal_code?: String",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -93,7 +99,7 @@
       },
       {
         "name": "department?: String",
-        "ordinal": 8,
+        "ordinal": 9,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -104,7 +110,7 @@
       },
       {
         "name": "screens?: i64",
-        "ordinal": 9,
+        "ordinal": 10,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -115,7 +121,7 @@
       },
       {
         "name": "seats?: i64",
-        "ordinal": 10,
+        "ordinal": 11,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -139,8 +145,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "3622a9e5aed6b5e0abe65b41395d53ca014870b19f85ab0d68b600043bb9ed47"
+  "hash": "494c3e66914dd82db72bbcbc80a788a108c2630f9533700834a96eb6932a5ae3"
 }

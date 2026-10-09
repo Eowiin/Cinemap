@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cards (id, name, source_url, updated_at) VALUES (?, ?, ?, datetime('now'))\n         ON CONFLICT (id) DO UPDATE SET name = excluded.name, source_url = excluded.source_url",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "77505ad6f739af009cde79020f358d0003b4179a03191d02dd3ab94cc7fa8733"
+}

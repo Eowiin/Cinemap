@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use chrono::{NaiveDate, NaiveTime};
 use serde::Deserialize;
+use sqlx::SqlitePool;
 
 use super::error::{ApiResult, AppError};
 use super::geo::Position;
@@ -28,6 +29,7 @@ pub struct RawQuery {
     pub limit: Option<String>,
     pub art_et_essai: Option<String>,
     pub q: Option<String>,
+    pub cards: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +146,32 @@ pub fn parse_limit(raw: Option<&str>) -> ApiResult<u32> {
             "limit doit être compris entre 1 et {MAX_LIMIT}"
         )))
     }
+}
+
+/// Paramètre `cards` (ids séparés par des virgules), vérifié contre la table `cards` :
+/// la liste en JSON, prête pour `json_each` en SQL, ou `None` sans filtre.
+pub async fn parse_cards(raw: Option<&str>, pool: &SqlitePool) -> ApiResult<Option<String>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let ids: Vec<&str> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .collect();
+    if ids.is_empty() {
+        return Err(AppError::BadRequest("cards ne peut pas être vide".into()));
+    }
+    let known = sqlx::query_scalar!(r#"SELECT id AS "id!: String" FROM cards"#)
+        .fetch_all(pool)
+        .await?;
+    if let Some(unknown) = ids.iter().find(|id| !known.iter().any(|k| k == *id)) {
+        return Err(AppError::BadRequest(format!(
+            "Carte inconnue : {unknown}. Valeurs possibles : {}",
+            known.join(", ")
+        )));
+    }
+    Ok(Some(serde_json::to_string(&ids)?))
 }
 
 /// Texte de recherche normalisé (minuscules, sans accents), au moins 2 caractères.

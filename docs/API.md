@@ -43,7 +43,14 @@ type CinemaSummary = {
   lat: number;
   lng: number;
   art_et_essai: boolean;
+  cards: string[];             // ids des cartes d'abonnement acceptées (voir Card), [] si aucune
   distance_km: number | null;  // null si lat/lng non fournis
+};
+
+type Card = {
+  id: string;                  // "ugc_illimite", "pathe_cinepass"
+  name: string;                // "UGC Illimité"
+  updated_at: string;          // "2026-10-09T02:14:00Z", dernier import réussi de la liste
 };
 
 type Cinema = CinemaSummary & {
@@ -103,9 +110,12 @@ type Showtime = {
   "last_scrape_at": "2026-09-25T04:12:00Z",
   "dates_available": ["2026-09-25", "2026-09-26", "2026-09-27"],
   "cinema_count": 2051,
-  "movie_count": 342
+  "movie_count": 342,
+  "cards": [{ "id": "ugc_illimite", "name": "UGC Illimité", "updated_at": "2026-10-09T02:14:00Z" }]
 }
 ```
+
+`cards` : toutes les cartes connues, triées par nom (écran « mes cartes » du front).
 
 `last_scrape_at` = `finished_at` du dernier run `kind = 'showtimes'` terminé (`finished_at IS NOT NULL`). Les runs `showtimes_partial` (`--cinema`, `--department`) sont ignorés. Les compteurs `ok_count` / `error_count` d'un run de séances comptent des couples (cinéma, date).
 
@@ -113,7 +123,9 @@ type Showtime = {
 
 Tous les cinémas visibles, pour la carte (~3 100 éléments, gzip ≈ 90 Ko). Tri par `distance_km` si `lat`/`lng` sont fournis, sinon par nom.
 
-Query : `art_et_essai?: bool`, `lat?`, `lng?`.
+Query : `art_et_essai?: bool`, `lat?`, `lng?`, `cards?`.
+
+**`cards`** (aussi sur `/api/movies` et `/api/movies/{id}/showtimes`) : ids de cartes séparés par des virgules (`cards=ugc_illimite,pathe_cinepass`). Ne garde que les cinémas qui acceptent **au moins une** de ces cartes. Id inconnu → 400 `bad_request`. Le badge est au niveau du cinéma : les restrictions par séance (avant-premières, suppléments 3D / IMAX) sont ignorées.
 
 Réponse : `CinemaSummary[]`.
 
@@ -142,7 +154,7 @@ Films triés par titre, séances par heure.
 
 Les films « à l'affiche » un jour donné (page d'accueil).
 
-Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50, max 200).
+Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50, max 200), `cards?` (les compteurs ne portent alors que sur ces cinémas).
 
 ```json
 {
@@ -168,7 +180,7 @@ Réponse : `Movie`. 404 si inconnu.
 
 Où et quand voir un film.
 
-Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours une position, Paris par défaut), `radius_km?` (défaut 15, max 100), `version?`, `after?`.
+Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours une position, Paris par défaut), `radius_km?` (défaut 15, max 100), `version?`, `after?`, `cards?`.
 
 ```json
 {
@@ -268,6 +280,21 @@ CREATE TABLE scrape_runs (
     ok_count    INTEGER NOT NULL DEFAULT 0,
     error_count INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE cards (
+    id          TEXT PRIMARY KEY,   -- 'ugc_illimite', 'pathe_cinepass'
+    name        TEXT NOT NULL,      -- 'UGC Illimité'
+    source_url  TEXT,
+    updated_at  TEXT NOT NULL       -- dernier import automatique accepté
+);
+
+CREATE TABLE cinema_cards (
+    cinema_id   TEXT NOT NULL REFERENCES cinemas(id) ON DELETE CASCADE,
+    card_id     TEXT NOT NULL REFERENCES cards(id),
+    manual      INTEGER NOT NULL DEFAULT 0,  -- 1 : ligne de docs/data/cartes.csv
+    PRIMARY KEY (cinema_id, card_id)
+) WITHOUT ROWID;
+CREATE INDEX idx_cinema_cards_card ON cinema_cards(card_id);
 ```
 
 Au démarrage : `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`.
@@ -337,91 +364,12 @@ postal extrait de l’adresse. Une erreur réseau, CSV ou SQL laisse le lot inta
 Toutes les écritures ont lieu dans une seule transaction après les appels HTTP.
 Un changement d’adresse pendant les appels annule l’enregistrement du lot.
 
-## Proposition : cartes illimitées (à valider, pas encore dans le contrat)
+## Cartes d'abonnement
 
-> Rédigé le 2026-10-06. Feuille de route : [`CARTES.md`](CARTES.md). Rien de ce qui suit n'est implémenté ni figé. Une fois validé,
-> chaque élément sera reporté dans la section concernée (types, endpoints, schéma) et
-> ce bloc sera supprimé.
+Feuille de route et décisions : [`CARTES.md`](CARTES.md). `import-cards` (aussi en fin d'`import-cinemas`) :
 
-**Besoin** : savoir dans quels cinémas une carte d'abonnement est acceptée (UGC
-Illimité, Pathé CinéPass, plus tard d'autres), et filtrer cinémas, films et séances
-selon **mes** cartes.
-
-### Sources (vérifiées le 2026-10-06)
-
-- **UGC Illimité** : `https://www.ugc.fr/cinemas-acceptant-ui.html`, page HTML
-  statique, toutes régions sur une seule page (sections `region-N`) : cinémas UGC,
-  mk2 et partenaires, chacun avec nom, adresse et `code postal + VILLE`. ~145 entrées
-  avec code postal (59 à Paris).
-- **Pathé CinéPass** : « 76 cinémas Pathé et plus de 59 partenaires ». La liste du
-  réseau est un **PDF** (`https://www.pathe.fr/media/files/conditions/Reseau%20CinePass-CineCartes.pdf`) ;
-  pathe.fr a aussi une API JSON `https://www.pathe.fr/api/cinemas` (cinémas Pathé
-  seulement ?). Format et contenu à examiner avant de choisir.
-- **Repli manuel** : `docs/data/cartes.csv` (`card_id,cinema_id`) pour les ajouts ou
-  corrections à la main (une carte locale, un partenaire mal croisé). Toujours
-  appliqué après les sources automatiques.
-
-### Croisement
-
-Même problème que le CNC (`cnc.rs`) : candidats AlloCiné de **même code postal**
-(Paris : arrondissement), puis similarité de nom. Le code de similarité du CNC
-(mots génériques, inclusion des mots, `jaro_winkler`, attribution du meilleur score
-d'abord) est sorti dans un module commun plutôt que copié. Un nom non croisé est
-loggé (`warn!`) : la liste est courte, on peut tous les relire.
-
-### Schéma
-
-```sql
-CREATE TABLE cards (
-    id          TEXT PRIMARY KEY,   -- 'ugc_illimite', 'pathe_cinepass'
-    name        TEXT NOT NULL,      -- 'UGC Illimité'
-    source_url  TEXT,
-    updated_at  TEXT NOT NULL       -- dernier import réussi de la liste
-);
-
-CREATE TABLE cinema_cards (
-    cinema_id   TEXT NOT NULL REFERENCES cinemas(id) ON DELETE CASCADE,
-    card_id     TEXT NOT NULL REFERENCES cards(id),
-    PRIMARY KEY (cinema_id, card_id)
-);
-```
-
-Import : sous-commande `import-cards` (aussi en fin d'`import-cinemas`). Pour chaque
-carte, liste téléchargée **puis** une transaction : suppression des liens de cette
-carte, insertion des nouveaux. Une source en erreur → `warn!`, anciens liens gardés
-(même règle que le CNC).
-
-### Contrat
-
-```ts
-type Card = { id: string; name: string };   // { id: "ugc_illimite", name: "UGC Illimité" }
-
-type CinemaSummary = {
-  // … champs actuels …
-  cards: string[];          // ids des cartes acceptées, [] si aucune
-};
-```
-
-- `GET /api/meta` : ajoute `cards: Card[]` (toutes les cartes connues, pour l'écran
-  « mes cartes » du front).
-- Nouveau paramètre de query **`cards`** (liste d'ids séparés par des virgules,
-  ex. `cards=ugc_illimite,pathe_cinepass`) : ne garde que les cinémas qui acceptent
-  **au moins une** de ces cartes. Sur `GET /api/cinemas`, `GET /api/movies`
-  (`cinema_count`, `showtime_count`, `next_showtime` calculés sur ces cinémas
-  seulement) et `GET /api/movies/{id}/showtimes`. Id inconnu → 400 `bad_request`.
-- Front : les cartes choisies sont gardées dans le navigateur (`localStorage`), pas
-  de compte. Badge sur les cinémas acceptant une de mes cartes, filtre activable.
-
-### Décisions et questions ouvertes
-
-1. ✅ (2026-10-06) Restrictions par séance (avant-premières exclues, suppléments
-   3D / IMAX) : **ignorées** pour l'instant. Le badge reste au niveau du cinéma.
-2. ⏳ Source Pathé : examinée le 2026-10-08, proposition dans [`CARTES.md`](CARTES.md) (JSON pour le réseau Pathé avec croisement GPS, CSV manuel pour les partenaires du PDF, qui n'a pas d'adresse). À valider. Liens d'origine :
-   - PDF du réseau CinéPass : https://www.pathe.fr/media/files/conditions/Reseau%20CinePass-CineCartes.pdf
-   - API JSON de pathe.fr : https://www.pathe.fr/api/cinemas
-   - Page de l'offre (« 76 cinémas Pathé et plus de 59 partenaires ») : https://www.pathe.fr/cinepass
-
-   Questions à se poser : la liste des partenaires est-elle dans le JSON, ou seulement
-   dans le PDF ? Le PDF a-t-il des colonnes lisibles (nom, code postal) ? À défaut,
-   les partenaires Pathé iront dans `docs/data/cartes.csv` à la main.
-3. ✅ (2026-10-06) Moment : **après l'étape 2**.
+- **UGC Illimité** : page HTML `https://www.ugc.fr/cinemas-acceptant-ui.html`, croisée par code postal, puis même ville (codes CEDEX, codes postaux différents d'AlloCiné), puis le nom.
+- **Pathé CinéPass** : réseau Pathé par l'API JSON `https://www.pathe.fr/api/cinemas` (croisement GPS : moins de 500 m, puis jusqu'à 5 km avec un seuil de nom strict) ; partenaires indépendants du PDF à la main.
+- **`docs/data/cartes.csv`** (`card_id,cinema_id,source_name,commentaire`) : ajouts manuels, toujours réappliqués. `cinema_id` vide = entrée connue absente d'AlloCiné (plus signalée).
+- **Garde-fou** : une liste vide, ou moins de la moitié des liens automatiques actuels, garde les anciens liens (`import-cards --force` pour accepter une liste courte).
+- Les liens portent sur tous les cinémas, masqués compris : un cinéma qui réapparaît garde sa carte. L'API ne montre que les visibles.

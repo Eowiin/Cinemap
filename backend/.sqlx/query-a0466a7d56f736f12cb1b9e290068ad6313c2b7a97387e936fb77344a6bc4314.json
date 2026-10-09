@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\",\n                  lat AS \"lat!: f64\", lng AS \"lng!: f64\", art_et_essai AS \"art_et_essai!: bool\"\n           FROM visible_cinemas\n           WHERE (?1 IS NULL OR art_et_essai = ?1)\n           ORDER BY name_search",
+  "query": "SELECT c.id AS \"id!: String\", c.name AS \"name!: String\", c.city AS \"city?: String\",\n                  c.lat AS \"lat!: f64\", c.lng AS \"lng!: f64\",\n                  c.art_et_essai AS \"art_et_essai!: bool\",\n                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)\n                    AS \"cards!: SqlJson<Vec<String>>\"\n           FROM visible_cinemas c\n           WHERE (?1 IS NULL OR c.art_et_essai = ?1)\n             AND (?2 IS NULL OR EXISTS (\n                   SELECT 1 FROM cinema_cards cc\n                   WHERE cc.cinema_id = c.id\n                     AND cc.card_id IN (SELECT value FROM json_each(?2))))\n           ORDER BY c.name_search",
   "describe": {
     "columns": [
       {
@@ -68,10 +68,16 @@
             "name": "art_et_essai"
           }
         }
+      },
+      {
+        "name": "cards!: SqlJson<Vec<String>>",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       true,
@@ -79,8 +85,9 @@
       true,
       true,
       true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "64727a0ede3f3050ea9754fc79cff5aa2c6580d318395237996112f4ac05e737"
+  "hash": "a0466a7d56f736f12cb1b9e290068ad6313c2b7a97387e936fb77344a6bc4314"
 }

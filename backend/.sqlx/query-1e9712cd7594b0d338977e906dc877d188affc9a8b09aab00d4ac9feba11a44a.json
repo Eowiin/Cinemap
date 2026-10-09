@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cinema_cards (cinema_id, card_id, manual) VALUES (?, ?, 0)\n                 ON CONFLICT (cinema_id, card_id) DO UPDATE SET manual = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1e9712cd7594b0d338977e906dc877d188affc9a8b09aab00d4ac9feba11a44a"
+}

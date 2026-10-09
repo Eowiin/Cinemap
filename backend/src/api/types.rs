@@ -11,6 +11,7 @@ pub struct CinemaSummary {
     pub lat: f64,
     pub lng: f64,
     pub art_et_essai: bool,
+    pub cards: Vec<String>,
     pub distance_km: Option<f64>,
 }
 
@@ -124,4 +125,12 @@ pub struct Meta {
     pub dates_available: Vec<String>,
     pub cinema_count: i64,
     pub movie_count: i64,
+    pub cards: Vec<Card>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Card {
+    pub id: String,
+    pub name: String,
+    pub updated_at: String,
 }

@@ -33,6 +33,13 @@ pub enum SubCommands {
         #[arg(long)]
         all: bool,
     },
+    /// Importe les listes des cartes d'abonnement (UGC Illimité, Pathé CinéPass) et les
+    /// lignes de docs/data/cartes.csv.
+    ImportCards {
+        /// Accepte une liste deux fois plus courte que la précédente (le garde-fou la refuse).
+        #[arg(long)]
+        force: bool,
+    },
     /// Lance l'API HTTP.
     Serve {
         /// Adresse d'écoute (en prod, nginx est devant : inutile d'exposer le port).

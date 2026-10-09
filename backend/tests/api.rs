@@ -145,6 +145,7 @@ async fn cinema_detail_has_every_field() {
         "lat",
         "lng",
         "art_et_essai",
+        "cards",
         "distance_km",
         "address",
         "postal_code",
@@ -418,4 +419,122 @@ async fn meta_describes_visible_data() {
     assert!(meta["last_scrape_at"].is_null());
     assert_eq!(meta["cinema_count"], 3);
     assert_eq!(meta["movie_count"], 2);
+}
+
+#[tokio::test]
+async fn cinemas_carry_their_cards_and_filter_on_them() {
+    let state = state().await;
+    let reply = get(&state, "/api/cinemas").await;
+    let cards: Vec<(&str, &Value)> = reply
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| (c["id"].as_str().unwrap(), &c["cards"]))
+        .collect();
+    assert_eq!(
+        cards,
+        [
+            ("PARIS2", &serde_json::json!([])),
+            ("LYON", &serde_json::json!(["pathe_cinepass"])),
+            (
+                "PARIS1",
+                &serde_json::json!(["pathe_cinepass", "ugc_illimite"])
+            ),
+        ]
+    );
+
+    let reply = get(&state, "/api/cinemas?cards=ugc_illimite").await;
+    assert_eq!(ids(&reply.json), ["PARIS1"]);
+    // « Au moins une » des cartes.
+    let reply = get(&state, "/api/cinemas?cards=ugc_illimite,pathe_cinepass").await;
+    assert_eq!(ids(&reply.json), ["LYON", "PARIS1"]);
+    let reply = get(
+        &state,
+        "/api/cinemas?cards=pathe_cinepass&art_et_essai=false",
+    )
+    .await;
+    assert_eq!(ids(&reply.json), ["LYON"]);
+    let reply = get(
+        &state,
+        &format!("/api/cinemas?cards=pathe_cinepass&{PARIS}"),
+    )
+    .await;
+    assert_eq!(ids(&reply.json), ["PARIS1", "LYON"]);
+
+    let reply = get(&state, "/api/cinemas/PARIS1").await;
+    assert_eq!(
+        reply.json["cards"],
+        serde_json::json!(["pathe_cinepass", "ugc_illimite"])
+    );
+}
+
+#[tokio::test]
+async fn movies_filter_on_cards() {
+    let state = state().await;
+    let reply = get(
+        &state,
+        &format!("/api/movies?date={D1}&cards=pathe_cinepass"),
+    )
+    .await;
+    let counts: Vec<(i64, i64)> = reply.json["movies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| {
+            (
+                m["movie"]["id"].as_i64().unwrap(),
+                m["cinema_count"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    // PARIS1 et LYON acceptent la carte, PARIS2 non.
+    assert_eq!(counts, [(1001, 2), (1002, 1)]);
+
+    let reply = get(
+        &state,
+        &format!("/api/movies?date={D1}&{PARIS}&radius_km=15&cards=ugc_illimite"),
+    )
+    .await;
+    assert_eq!(reply.json["movies"][0]["cinema_count"], 1);
+
+    let reply = get(
+        &state,
+        &format!("/api/movies/1001/showtimes?date={D1}&{PARIS}&radius_km=15&cards=ugc_illimite"),
+    )
+    .await;
+    let cinemas: Vec<&str> = reply.json["cinemas"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["cinema"]["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(cinemas, ["PARIS1"]);
+}
+
+#[tokio::test]
+async fn unknown_or_empty_cards_are_bad_requests() {
+    let state = state().await;
+    for uri in [
+        "/api/cinemas?cards=carte_inconnue",
+        "/api/cinemas?cards=",
+        "/api/movies?cards=ugc_illimite,carte_inconnue",
+    ] {
+        let reply = get(&state, uri).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(reply.json["error"]["code"], "bad_request", "{uri}");
+    }
+}
+
+#[tokio::test]
+async fn meta_lists_cards_by_name() {
+    let state = state().await;
+    let reply = get(&state, "/api/meta").await;
+    assert_eq!(
+        reply.json["cards"],
+        serde_json::json!([
+            { "id": "pathe_cinepass", "name": "Pathé CinéPass", "updated_at": "2099-01-01T02:14:00Z" },
+            { "id": "ugc_illimite", "name": "UGC Illimité", "updated_at": "2099-01-01T02:14:00Z" },
+        ])
+    );
 }
