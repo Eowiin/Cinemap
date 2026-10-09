@@ -72,16 +72,13 @@
     };
   }
 
-  const findCinema = (id: string) =>
-    map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
-
   function openCinema(id: string) {
     map.open = false;
     router.go({ name: 'cinema', id });
   }
 
   /**
-   * Écran tactile (pas de survol) : un appui montre une fiche (nom, ville) avec
+   * Écran tactile (pas de survol) : un appui montre une fiche (nom) avec
    * « Voir les séances », au lieu d'ouvrir un cinéma qu'on n'a pas pu identifier.
    */
   function tapCard(id: string, name: string): HTMLElement {
@@ -89,13 +86,11 @@
     card.className = 'tap-card';
     const title = document.createElement('strong');
     title.textContent = name;
-    const details = document.createElement('span');
-    details.textContent = findCinema(id)?.city ?? '';
     const open = document.createElement('button');
     open.className = 'button primary';
     open.textContent = 'Voir les séances';
     open.addEventListener('click', () => openCinema(id));
-    card.append(title, details, open);
+    card.append(title, open);
     return card;
   }
 
@@ -517,11 +512,6 @@
 
   .map :global(.tap-card strong) {
     font-size: 0.95rem;
-  }
-
-  .map :global(.tap-card span) {
-    color: var(--muted);
-    font-size: 0.82rem;
   }
 
   .map :global(.tap-card .button) {

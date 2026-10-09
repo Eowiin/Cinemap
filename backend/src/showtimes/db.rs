@@ -177,7 +177,7 @@ fn movie_values(movie: &super::allocine::Movie) -> Result<MovieValues<'_>> {
         })
         .take(10)
         .collect::<Vec<_>>();
-    let release = movie.releases.first();
+    let release = super::allocine::original_release(&movie.releases);
 
     Ok(MovieValues {
         id: movie.internal_id,

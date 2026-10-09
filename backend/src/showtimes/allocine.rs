@@ -177,11 +177,54 @@ pub(super) struct CastNode {
     pub(super) role: Option<String>,
 }
 
+/// Une sortie du film : en salle (`Released` / `ReRelease` + `THEATER`), mais aussi VOD,
+/// DVD, télévision… dans un ordre quelconque.
 #[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct Release {
-    #[serde(rename = "releaseDate")]
     pub(super) release_date: Option<ReleaseDate>,
     pub(super) certificate: Option<Certificate>,
+    /// `Released`, `ReRelease`, `Vod`, `Dvd`…
+    pub(super) name: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub(super) release_tags: ReleaseTags,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ReleaseTags {
+    #[serde(default, deserialize_with = "strings_without_nulls")]
+    pub(super) tag_types: Vec<String>,
+}
+
+impl Release {
+    fn in_theaters(&self) -> bool {
+        self.release_tags
+            .tag_types
+            .iter()
+            .any(|tag| tag == "THEATER")
+    }
+
+    fn date(&self) -> Option<&str> {
+        self.release_date.as_ref()?.date.as_deref()
+    }
+}
+
+/// La sortie qui date le film : la sortie d'origine en salle, sinon la plus ancienne
+/// sortie en salle (ressortie), sinon la plus ancienne tout court. Prendre la première
+/// de la liste donnait parfois une ressortie (Godzilla Minus One, 2023, daté 2026).
+pub(super) fn original_release(releases: &[Release]) -> Option<&Release> {
+    let original = |r: &&Release| r.in_theaters() && r.name.as_deref() == Some("Released");
+    earliest(releases.iter().filter(original))
+        .or_else(|| earliest(releases.iter().filter(|r| r.in_theaters())))
+        .or_else(|| earliest(releases.iter()))
+}
+
+/// La sortie datée la plus ancienne (les dates `YYYY-MM-DD` se comparent comme du texte).
+fn earliest<'a>(releases: impl Iterator<Item = &'a Release>) -> Option<&'a Release> {
+    releases
+        .filter(|r| r.date().is_some())
+        .min_by_key(|r| r.date())
 }
 
 #[derive(Default, Deserialize)]
@@ -375,6 +418,38 @@ pub(super) async fn fetch_showtimes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_release_is_the_first_theatrical_release() {
+        // Comme Godzilla Minus One : VOD et ressortie en salle 2026 avant la sortie de 2023.
+        let releases: Vec<Release> = serde_json::from_str(
+            r#"[
+              {"name": "Vod", "releaseDate": {"date": "2024-03-01"}, "releaseTags": {"tagTypes": ["ONLINE"]}},
+              {"name": "ReRelease", "releaseDate": {"date": "2026-10-11"}, "releaseTags": {"tagTypes": ["THEATER"]},
+               "certificate": {"label": "Tout public"}},
+              {"name": "Released", "releaseDate": {"date": "2023-12-07"}, "releaseTags": {"tagTypes": ["THEATER"]},
+               "certificate": {"label": "Avertissement"}}
+            ]"#,
+        )
+        .unwrap();
+        let release = original_release(&releases).unwrap();
+        assert_eq!(release.date(), Some("2023-12-07"));
+        assert_eq!(
+            release.certificate.as_ref().unwrap().label.as_deref(),
+            Some("Avertissement")
+        );
+
+        // Sans sortie d'origine : la plus ancienne en salle, puis la plus ancienne tout court.
+        assert_eq!(
+            original_release(&releases[..2]).unwrap().date(),
+            Some("2026-10-11")
+        );
+        assert_eq!(
+            original_release(&releases[..1]).unwrap().date(),
+            Some("2024-03-01")
+        );
+        assert!(original_release(&[]).is_none());
+    }
     use crate::showtimes::mapping::booking_url;
 
     const C0159_PAGE_1: &str =
