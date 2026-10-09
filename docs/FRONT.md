@@ -53,7 +53,9 @@ Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni b
 
 - **Cadrage retenu** : le dernier cadrage libre de l'accueil (`map.camera`, dans `app.svelte.ts` car la carte est détruite quand on la ferme sur mobile) est restauré au retour d'un cinéma ou d'un film, tant que la position et le rayon n'ont pas changé.
 - **Favoris** : calque à part, non regroupé, doré, avec leur nom dès le zoom 10.
-- **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, ville, cartes, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
+- **Filtres sur la carte** : favoris et cartes (filtres qui portent sur les cinémas) s'appliquent ; les cinémas écartés restent visibles mais atténués (petits points pâles, non regroupés), pour garder ses repères et ne jamais afficher une carte vide. Jour, version et horaire ne s'appliquent pas (un cinéma sans VO ce soir existe toujours). `filters.ts` → `cinemaMatches`.
+- **Bulles** : le nom seul (les cartes acceptées sont sur la fiche du cinéma).
+- **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, ville, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
 
 ## Couverture (2026-10-09)
 

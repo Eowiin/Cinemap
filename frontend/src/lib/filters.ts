@@ -47,3 +47,20 @@ export function clearing(key: ActiveFilter['key']): Partial<UrlFilters> {
       return { cards: null };
   }
 }
+
+/**
+ * Le cinéma passe-t-il les filtres qui portent sur les cinémas (favoris, cartes) ?
+ * Sert à la carte : les autres y sont atténués. Les filtres de séances (jour, version,
+ * horaire) ne s'y appliquent pas : un cinéma sans VO ce soir existe toujours.
+ * Filtre favoris sans aucun favori : ignoré, comme pour l'API.
+ */
+export function cinemaMatches(
+  cinema: { id: string; cards: string[] },
+  filters: UrlFilters,
+  favoriteIds: string[],
+): boolean {
+  if (filters.favorites && favoriteIds.length && !favoriteIds.includes(cinema.id)) return false;
+  const cards = filters.cards;
+  if (cards && !cinema.cards.some((id) => cards.includes(id))) return false;
+  return true;
+}

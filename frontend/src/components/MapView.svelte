@@ -10,7 +10,7 @@
   import type { Position } from '../lib/api/client';
   import type { CinemaSummary } from '../lib/api/types';
   import { app, map } from '../lib/app.svelte';
-  import { cardBadges } from '../lib/cards';
+  import { cinemaMatches } from '../lib/filters';
   import { favorites } from '../lib/favorites.svelte';
   import { router } from '../lib/router.svelte';
 
@@ -75,24 +75,13 @@
   const findCinema = (id: string) =>
     map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
 
-  /** Cartes acceptées par le cinéma, par leur nom. */
-  function cardNames(id: string): string[] {
-    const badges = cardBadges(findCinema(id)?.cards ?? [], app.meta?.cards ?? [], null);
-    return badges.map((badge) => badge.card.name);
-  }
-
-  /** Survol (souris) : nom du cinéma suivi des cartes qu'il accepte. */
-  function popupText(id: string, name: string): string {
-    return [name, ...cardNames(id)].join(' · ');
-  }
-
   function openCinema(id: string) {
     map.open = false;
     router.go({ name: 'cinema', id });
   }
 
   /**
-   * Écran tactile (pas de survol) : un appui montre une fiche (nom, ville, cartes) avec
+   * Écran tactile (pas de survol) : un appui montre une fiche (nom, ville) avec
    * « Voir les séances », au lieu d'ouvrir un cinéma qu'on n'a pas pu identifier.
    */
   function tapCard(id: string, name: string): HTMLElement {
@@ -101,7 +90,7 @@
     const title = document.createElement('strong');
     title.textContent = name;
     const details = document.createElement('span');
-    details.textContent = [findCinema(id)?.city, ...cardNames(id)].filter(Boolean).join(' · ');
+    details.textContent = findCinema(id)?.city ?? '';
     const open = document.createElement('button');
     open.className = 'button primary';
     open.textContent = 'Voir les séances';
@@ -150,11 +139,24 @@
       clusterRadius: 42,
       clusterMaxZoom: 11,
     });
+    // Cinémas écartés par les filtres (favoris, cartes) : atténués, sans regroupement.
+    m.addSource('others', { type: 'geojson', data: features([]) });
     // Favoris à part et sans regroupement : toujours visibles, même dézoomé.
     m.addSource('favorites', { type: 'geojson', data: features([]) });
     m.addSource('highlight', { type: 'geojson', data: features([]) });
     m.addSource('position', { type: 'geojson', data: point(app.position) });
 
+    m.addLayer({
+      id: 'other',
+      type: 'circle',
+      source: 'others',
+      paint: {
+        'circle-color': muted,
+        'circle-opacity': 0.3,
+        'circle-radius': 3.5,
+        'circle-stroke-width': 0,
+      },
+    });
     m.addLayer({
       id: 'clusters',
       type: 'circle',
@@ -337,7 +339,7 @@
           offset: 12,
           maxWidth: '260px',
         });
-        for (const layer of ['cinema', 'favorite', 'highlight']) {
+        for (const layer of ['other', 'cinema', 'favorite', 'highlight']) {
           m.on('click', layer, (e: MapLayerMouseEvent) => {
             const f = e.features?.[0];
             const id = f?.properties?.id as string | undefined;
@@ -358,9 +360,7 @@
             if (f?.geometry.type === 'Point') {
               popup
                 .setLngLat(f.geometry.coordinates as [number, number])
-                .setText(
-                  popupText(String(f.properties?.id ?? ''), String(f.properties?.name ?? '')),
-                )
+                .setText(String(f.properties?.name ?? ''))
                 .addTo(m);
             }
           });
@@ -395,16 +395,20 @@
     };
   });
 
-  // Les favoris quittent la source regroupée pour leur propre calque.
+  // Trois calques : cinémas écartés par les filtres (atténués), favoris (dorés), les autres
+  // (regroupés). Les filtres de séances ne s'appliquent pas à la carte (`cinemaMatches`).
   $effect(() => {
     void styleVersion;
     const ids = favorites.cinemas.items.map((c) => c.id);
-    (instance?.getSource('cinemas') as GeoJSONSource | undefined)?.setData(
-      features(map.all.filter((c) => !ids.includes(c.id))),
-    );
-    (instance?.getSource('favorites') as GeoJSONSource | undefined)?.setData(
-      features(map.all.filter((c) => ids.includes(c.id))),
-    );
+    const shown: CinemaSummary[] = [];
+    const others: CinemaSummary[] = [];
+    for (const cinema of map.all) {
+      (cinemaMatches(cinema, router.filters, ids) ? shown : others).push(cinema);
+    }
+    const source = (name: string) => instance?.getSource(name) as GeoJSONSource | undefined;
+    source('others')?.setData(features(others));
+    source('cinemas')?.setData(features(shown.filter((c) => !ids.includes(c.id))));
+    source('favorites')?.setData(features(shown.filter((c) => ids.includes(c.id))));
   });
 
   $effect(() => {
