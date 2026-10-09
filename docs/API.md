@@ -339,7 +339,7 @@ Un changement d’adresse pendant les appels annule l’enregistrement du lot.
 
 ## Proposition : cartes illimitées (à valider, pas encore dans le contrat)
 
-> Rédigé le 2026-10-06. Rien de ce qui suit n'est implémenté ni figé. Une fois validé,
+> Rédigé le 2026-10-06. Feuille de route : [`CARTES.md`](CARTES.md). Rien de ce qui suit n'est implémenté ni figé. Une fois validé,
 > chaque élément sera reporté dans la section concernée (types, endpoints, schéma) et
 > ce bloc sera supprimé.
 
@@ -416,7 +416,7 @@ type CinemaSummary = {
 
 1. ✅ (2026-10-06) Restrictions par séance (avant-premières exclues, suppléments
    3D / IMAX) : **ignorées** pour l'instant. Le badge reste au niveau du cinéma.
-2. ⏳ Source Pathé : **à trancher au moment de l'implémentation**, en ouvrant les deux :
+2. ⏳ Source Pathé : examinée le 2026-10-08, proposition dans [`CARTES.md`](CARTES.md) (JSON pour le réseau Pathé avec croisement GPS, CSV manuel pour les partenaires du PDF, qui n'a pas d'adresse). À valider. Liens d'origine :
    - PDF du réseau CinéPass : https://www.pathe.fr/media/files/conditions/Reseau%20CinePass-CineCartes.pdf
    - API JSON de pathe.fr : https://www.pathe.fr/api/cinemas
    - Page de l'offre (« 76 cinémas Pathé et plus de 59 partenaires ») : https://www.pathe.fr/cinepass

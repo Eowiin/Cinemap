@@ -25,7 +25,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 | Frontend | **Svelte + Vite + MapLibre GL** (tuiles OpenFreeMap), PWA via `vite-plugin-pwa` | Léger, réactif, carte vectorielle fluide sur mobile. **Écrit par Claude** |
 | Référentiel cinémas | **AlloCiné** (liste par département) + géocodage **API Adresse** + enrichissement **CNC** | Plus aucun rapprochement de noms pour les séances (cause n°1 des bugs de l'ancien site). OSM abandonné |
 | Infos films | AlloCiné (déjà dans la réponse des séances) + **TMDB** en complément (bande-annonce, image de fond, note) | TMDB gratuit pour usage non commercial, en français. OMDb écarté (anglais seulement, 1 000 req/jour) |
-| Rafraîchissement | Scrap de toute la France chaque nuit, J → J+2 (J+6 le mercredi), concurrent avec limite de débit (~3 req/s) | ~30-40 min au lieu de ~6 h. Stratégie hors IDF à revoir si besoin (pas prioritaire) |
+| Rafraîchissement | Scrap de toute la France chaque nuit, J → J+2 (J+6 le mercredi), concurrent avec limite de débit (~3 req/s) | ~30-40 min au lieu de ~6 h. Passage à 7 jours (IDF chaque nuit, hors IDF une fois par semaine) envisagé, voir « Idées pour plus tard » |
 | Base | SQLite en mode WAL | Un seul serveur, lecture majoritaire |
 | Déploiement | **Binaire + systemd + nginx**, pas de Docker. Scrapers via un timer systemd. Build dans GitHub Actions, envoi par SSH | Un binaire Rust n'a pas de dépendances à embarquer, le VPS n'a besoin ni de Rust ni de Node |
 | Outillage | Rust : `cargo fmt`, `clippy`, `cargo test`. Front : prettier, eslint, vitest. CI GitHub Actions | Minimum raisonnable |
@@ -43,6 +43,7 @@ Contraintes : gratuit (aucune source de données payante), hébergé sur le VPS 
 - [`SOURCES.md`](SOURCES.md) : sources de données vérifiées (URLs, formats, pièges).
 - [`ETAPE2.md`](ETAPE2.md) : feuille de route détaillée du scraper de séances.
 - [`SOBRIETE.md`](SOBRIETE.md) : réflexes pour ne pas gaspiller les ressources (mesurer d'abord, où ça compte dans le projet).
+- [`CARTES.md`](CARTES.md) : feuille de route des cartes illimitées (UGC, Pathé…).
 - [`EMBARQUE.md`](EMBARQUE.md) : notes perso pour passer au Rust embarqué plus tard.
 - [`data/departements.csv`](data/departements.csv) : codes INSEE ↔ noms ↔ codes AlloCiné des départements.
 
@@ -131,14 +132,26 @@ Suivi détaillé, procédure et écarts : [`DEPLOY.md`](DEPLOY.md). Préparé pa
 - [ ] Migration de la prod : base remplie (`cinemap-weekly` puis `cinemap-nightly`), timers activés, ancien service supprimé
 
 ## Idées pour plus tard
-- **Cartes illimitées** (proposé le 2026-10-06, à valider) : savoir où passe une carte UGC Illimité, Pathé CinéPass, etc. Données : UGC publie une page HTML statique `https://www.ugc.fr/cinemas-acceptant-ui.html` (nom, adresse, code postal ; UGC, mk2 et partenaires ; ~145 entrées, toutes régions sur une page) ; Pathé annonce « 130 cinémas Pathé et partenaires » sur pathe.fr (format à trouver). Croisement avec nos cinémas : code postal + similarité de nom (réutiliser le code du CNC). Proposition détaillée (schéma, contrat, décisions) en fin d'`API.md` ; à faire **après l'étape 2**, source Pathé à choisir à ce moment-là.
-- Favoris (cinémas, films) stockés localement
-- Filtre « après 20h », formats IMAX / 4DX / Dolby
-- Notifications PWA (« tel film sort mercredi »)
-- Stratégie de rafraîchissement hors IDF plus fine
-- Accessibilité : séances sous-titrées pour sourds et malentendants (`_sme`), audiodescription, salle accessible (tags déjà dans la réponse AlloCiné)
-- « Ce soir près de moi » : prochaines séances de tous les cinémas proches, triées par heure de début
-- Avant-premières, ciné-rencontres, ressorties de classiques (à repérer dans les tags / `productionYear`)
-- Filtre Art et Essai (donnée CNC déjà en base)
-- Partager une séance (Web Share API) et l'ajouter à son agenda (fichier `.ics`)
-- Films qui vont bientôt quitter l'affiche (moins de séances la semaine suivante)
+
+Tri fait le 2026-10-08 avec le propriétaire, pendant le déploiement de la v1. Ordre de priorité :
+
+1. **Finir le déploiement**, puis **mesurer 2 ou 3 nuits de scrape en prod** (durée, `ralentissements` dans le log) avant de toucher au rafraîchissement.
+2. **Cartes illimitées** : UGC Illimité d'abord, puis Pathé CinéPass, puis d'autres cartes si on trouve des listes (pour tous les visiteurs, pas seulement nous). Feuille de route : [`CARTES.md`](CARTES.md). Sources revérifiées le 2026-10-08 : page HTML UGC (145 cinémas avec code postal), JSON Pathé (78 cinémas Pathé avec GPS), PDF Pathé (partenaires sans adresse → CSV à la main).
+3. **Favoris** (cinémas, films) stockés dans le navigateur (`localStorage`), sans compte. Front seulement (Claude), peut se faire en parallèle.
+4. **Séances sur 7 jours** : aujourd'hui J → J+2 (J+6 le mercredi), car une requête AlloCiné = un cinéma × un jour (~3 100 cinémas : ~9 400 requêtes par nuit pour 3 jours, ~22 000 pour 7, avec des 429 dès 3 req/s depuis le VPS). Piste, à décider sur les mesures du point 1 :
+   - IDF (362 cinémas) : J → J+6 chaque nuit (~2 500 requêtes, ~15 min) ;
+   - hors IDF : J → J+2 chaque nuit, plus la semaine complète la nuit de mardi à mercredi (publication des programmes de la semaine ciné) ;
+   - le saut des jours annoncés vides (commit `f39affa`) réduit encore le total.
+5. **« Ce soir près de moi »** : prochaines séances de tous les cinémas proches, tous films confondus, triées par heure de début (nouvel endpoint + vue).
+6. **Accessibilité** : séances sous-titrées pour sourds et malentendants (`_sme`), audiodescription, salle accessible (tags déjà dans la réponse AlloCiné, à garder en base).
+
+Ensuite, sans ordre :
+- Partager une séance (Web Share API) et l'ajouter à son agenda (fichier `.ics`), front seulement.
+- Filtres restants : formats IMAX / 4DX / Dolby (déjà dans `formats` côté API, il manque le filtre front et une vérification des vraies valeurs sur une fixture d'un cinéma IMAX), Art et Essai (déjà dans l'API, il manque le filtre front).
+- Avant-premières, ciné-rencontres, ressorties de classiques : regarder d'abord ce que contiennent vraiment les tags AlloCiné et `productionYear` en prod.
+- Films qui vont bientôt quitter l'affiche (beaucoup moins de séances la semaine suivante) : dépend du point 4.
+
+Fait ou abandonné :
+- ~~Filtre « après 20h »~~ : fait (paramètre `after`, `FilterBar.svelte`).
+- ~~Notifications PWA~~ : abandonné le 2026-10-08 (serveur Web Push, abonnements côté serveur, iPhone seulement si la PWA est installée : trop lourd pour le gain).
+- Stratégie de rafraîchissement hors IDF : intégrée au point 4.
