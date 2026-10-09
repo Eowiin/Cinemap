@@ -154,7 +154,9 @@ Films triés par titre, séances par heure.
 
 Les films « à l'affiche » un jour donné (page d'accueil).
 
-Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50, max 200), `cards?` (les compteurs ne portent alors que sur ces cinémas).
+Query : `date?`, `lat?`, `lng?`, `radius_km?` (défaut 15 si lat/lng fournis), `version?`, `after?`, `limit?` (défaut 50, max 200), `cards?` (les compteurs ne portent alors que sur ces cinémas), `cinemas?`.
+
+**`cinemas`** (aussi sur `/api/movies/{id}/showtimes`) : ids de cinémas séparés par des virgules (50 max), pour le filtre « mes cinémas favoris » (les favoris vivent dans le navigateur). Seuls ces cinémas comptent, **où qu'ils soient** : `radius_km` est alors ignoré (la position sert encore à `distance_km` et au tri). Id mal formé ou liste vide → 400 ; id inconnu ou masqué → simplement absent du résultat.
 
 ```json
 {
@@ -180,7 +182,7 @@ Réponse : `Movie`. 404 si inconnu.
 
 Où et quand voir un film.
 
-Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours une position, Paris par défaut), `radius_km?` (défaut 15, max 100), `version?`, `after?`, `cards?`.
+Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours une position, Paris par défaut), `radius_km?` (défaut 15, max 100), `version?`, `after?`, `cards?`, `cinemas?` (voir `/api/movies`).
 
 ```json
 {

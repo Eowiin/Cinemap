@@ -30,6 +30,7 @@ pub struct RawQuery {
     pub art_et_essai: Option<String>,
     pub q: Option<String>,
     pub cards: Option<String>,
+    pub cinemas: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,6 +170,36 @@ pub async fn parse_cards(raw: Option<&str>, pool: &SqlitePool) -> ApiResult<Opti
         return Err(AppError::BadRequest(format!(
             "Carte inconnue : {unknown}. Valeurs possibles : {}",
             known.join(", ")
+        )));
+    }
+    Ok(Some(serde_json::to_string(&ids)?))
+}
+
+const MAX_CINEMAS: usize = 50;
+
+/// Paramètre `cinemas` (ids séparés par des virgules, filtre « mes favoris ») : la liste
+/// en JSON pour `json_each`, ou `None`. Un id inconnu n'est pas une erreur (un favori peut
+/// avoir fermé) : il ne ressort simplement pas.
+pub fn parse_cinemas(raw: Option<&str>) -> ApiResult<Option<String>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let ids: Vec<&str> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .collect();
+    if ids.is_empty() || ids.len() > MAX_CINEMAS {
+        return Err(AppError::BadRequest(format!(
+            "cinemas doit contenir entre 1 et {MAX_CINEMAS} identifiants"
+        )));
+    }
+    if let Some(bad) = ids
+        .iter()
+        .find(|id| !id.chars().all(|c| c.is_ascii_alphanumeric()))
+    {
+        return Err(AppError::BadRequest(format!(
+            "Identifiant de cinéma invalide : {bad}"
         )));
     }
     Ok(Some(serde_json::to_string(&ids)?))

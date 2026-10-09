@@ -1,0 +1,93 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.id AS \"id!: String\", c.name AS \"name!: String\", c.city AS \"city?: String\",\n                  c.lat AS \"lat!: f64\", c.lng AS \"lng!: f64\",\n                  c.art_et_essai AS \"art_et_essai!: bool\",\n                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)\n                    AS \"cards!: SqlJson<Vec<String>>\"\n           FROM visible_cinemas c\n           WHERE c.id IN (SELECT value FROM json_each(?1))\n             AND (?2 IS NULL OR EXISTS (\n                   SELECT 1 FROM cinema_cards cc\n                   WHERE cc.cinema_id = c.id\n                     AND cc.card_id IN (SELECT value FROM json_each(?2))))",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "city?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "city"
+          }
+        }
+      },
+      {
+        "name": "lat!: f64",
+        "ordinal": 3,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "lat"
+          }
+        }
+      },
+      {
+        "name": "lng!: f64",
+        "ordinal": 4,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "lng"
+          }
+        }
+      },
+      {
+        "name": "art_et_essai!: bool",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "art_et_essai"
+          }
+        }
+      },
+      {
+        "name": "cards!: SqlJson<Vec<String>>",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ffdce42b362b83506db161dbb383f6a5983a72b1f360a9f102b13fdac4c0c442"
+}

@@ -3,6 +3,7 @@
 import { api, type Position } from './api/client';
 import type { CinemaSummary, Meta } from './api/types';
 import { effectiveAfter, floorQuarter, parisNow } from './format';
+import { favorites } from './favorites.svelte';
 import { router } from './router.svelte';
 
 export const PARIS: Position = { lat: 48.8566, lng: 2.3522 };
@@ -137,5 +138,10 @@ export function showtimeFilters() {
     version: router.filters.version,
     after: effectiveAfter(date, app.today, floorQuarter(app.now.time), router.filters.after),
     cards: router.filters.cards,
+    // Filtre actif mais aucun favori : pas de filtre (la barre le signale).
+    cinemas:
+      router.filters.favorites && favorites.cinemas.items.length
+        ? favorites.cinemas.items.map((c) => c.id).slice(0, 50)
+        : null,
   };
 }

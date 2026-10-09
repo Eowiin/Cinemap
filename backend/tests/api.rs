@@ -538,3 +538,34 @@ async fn meta_lists_cards_by_name() {
         ])
     );
 }
+
+#[tokio::test]
+async fn favorites_filter_ignores_the_radius() {
+    let state = state().await;
+    // Depuis Paris, rayon 5 km : seul PARIS1 ; avec les favoris, LYON compte aussi.
+    let reply = get(
+        &state,
+        &format!("/api/movies?date={D1}&{PARIS}&radius_km=5&cinemas=LYON,PARIS1,OLD,INCONNU"),
+    )
+    .await;
+    assert_eq!(reply.json["movies"][0]["cinema_count"], 2);
+
+    let reply = get(
+        &state,
+        &format!("/api/movies/1001/showtimes?date={D1}&{PARIS}&radius_km=5&cinemas=LYON,PARIS2"),
+    )
+    .await;
+    let cinemas: Vec<&str> = reply.json["cinemas"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["cinema"]["id"].as_str().unwrap())
+        .collect();
+    // Triés par distance, OLD (masqué) et les non-favoris absents.
+    assert_eq!(cinemas, ["PARIS2", "LYON"]);
+
+    for uri in ["/api/movies?cinemas=", "/api/movies?cinemas=C0001;DROP"] {
+        let reply = get(&state, uri).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{uri}");
+    }
+}

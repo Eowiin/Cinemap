@@ -93,7 +93,7 @@
   </header>
 
   <section class="sessions">
-    <FilterBar dates={data.dates} />
+    <FilterBar dates={data.dates} scope="cinema" />
     {#if !isCoveredPostalCode(cinema.postal_code)}
       <CoverageNotice what="les séances de ce cinéma" />
     {/if}

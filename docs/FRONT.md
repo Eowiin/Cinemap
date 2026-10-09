@@ -41,13 +41,21 @@ Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni b
 - Le dernier filtre est retenu (`StoredList` `cinemap:cards`, `lib/cards.svelte.ts`) et réappliqué à l'ouverture si l'URL n'a pas de `cards` (un lien partagé décide).
 - Badges (`CardBadges.svelte`) : toutes les cartes acceptées, celles du filtre en couleur ; fiche cinéma (avec « d'après les listes … du 09/10 »), séances d'un film, popup de la carte.
 
+## Filtres (revus le 2026-10-09)
+
+- Rangée des jours toujours visible : la semaine (J à J+6), les jours sans séances grisés au lieu d'être cachés (un jour au-delà vient d'un lien partagé). `lib/filters.ts` (pur, testé).
+- Bouton « Filtres (n) » → panneau `<dialog>` (feuille en bas sur mobile, fenêtre centrée dès 640 px) : Version, Horaire, Cinémas (« seulement mes cinémas favoris »), Carte d'abonnement. Les changements s'appliquent tout de suite ; « Tout effacer » / « Voir les séances ».
+- Filtres actifs en pastilles retirables à côté du bouton.
+- Favoris : `favoris=1` dans l'URL ; les ids viennent du navigateur et partent en `cinemas=` (`API.md`), **sans rayon**. Sur la fiche d'un cinéma (`scope="cinema"`), seuls Version et Horaire.
+- Vérifié en build de prod piloté par Chrome sans interface (captures mobile 390 px et bureau 1280 px, mode sombre, pas de défilement horizontal).
+
 ## Couverture (2026-10-09)
 
 Séances mises à jour pour l'Île-de-France seulement (`lib/coverage.ts`). Message `CoverageNotice` : accueil et fiche film si la position est hors IDF, fiche d'un cinéma hors IDF.
 
 ## Carte indisponible
 
-`MapView` affiche un message et le détail technique (au lieu d'un fond gris) si WebGL 2 manque, si MapLibre ne se charge pas ou si le fond de carte ne répond pas. Signalé : la carte ne s'affichait pas sur un Android (Chrome), cause pas encore connue.
+`MapView` affiche un message et le détail technique (au lieu d'un fond gris) si WebGL 2 manque, si MapLibre ne se charge pas ou si le fond de carte ne répond pas. Signalé : fond sombre avec les boutons +/− et aucun point sur un Android (Chrome) : le style OpenFreeMap ne se charge probablement pas (bloqueur, « DNS privé »). Garde-fou : message au bout de 20 s sans style chargé ; le détail inclut le GPU et le user agent.
 
 ## Les bugs de l'ancien site, et ce qui les évite
 

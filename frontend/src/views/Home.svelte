@@ -58,7 +58,7 @@
 
 {#if favorites.cinemas.items.length || favorites.movies.items.length}
   <section class="favorites" aria-labelledby="favorites-title">
-    <h2 id="favorites-title" class="visually-hidden">Mes favoris</h2>
+    <h2 id="favorites-title" class="label">Mes favoris</h2>
     {#if favorites.cinemas.items.length}
       <ul class="scroll-row" aria-label="Mes cinémas">
         {#each favorites.cinemas.items as cinema (cinema.id)}
@@ -101,8 +101,15 @@
 {#if movies.data}
   {#if movies.data.movies.length === 0}
     <div class="empty">
-      <p>Aucune séance trouvée avec ces critères.</p>
-      {#if app.radiusKm < 100}
+      {#if router.filters.favorites}
+        <p>Aucune séance dans vos cinémas favoris avec ces critères.</p>
+        <button class="button" onclick={() => router.setFilters({ favorites: false })}>
+          Voir tous les cinémas
+        </button>
+      {:else}
+        <p>Aucune séance trouvée avec ces critères.</p>
+      {/if}
+      {#if !router.filters.favorites && app.radiusKm < 100}
         <button class="button" onclick={() => app.setRadius(app.radiusKm < 30 ? 30 : 100)}>
           Chercher plus loin
         </button>
@@ -187,6 +194,14 @@
     display: grid;
     gap: 0.4rem;
     margin-bottom: 0.9rem;
+  }
+
+  .label {
+    font-size: 0.8rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
   }
 
   .favorites ul {

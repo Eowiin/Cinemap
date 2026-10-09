@@ -15,6 +15,8 @@ export type UrlFilters = {
   after: string | null;
   /** Ids de cartes d'abonnement (`cards=ugc_illimite,pathe_cinepass`), null = toutes. */
   cards: string[] | null;
+  /** `favoris=1` : seulement mes cinémas favoris (gardés dans le navigateur). */
+  favorites: boolean;
 };
 
 export function parseRoute(pathname: string): Route {
@@ -41,6 +43,7 @@ export function parseFilters(search: string): UrlFilters {
     version: version === 'VF' || version === 'VO' ? version : null,
     after: after && /^([01]\d|2[0-3]):[0-5]\d$/.test(after) ? after : null,
     cards: cards.length ? cards : null,
+    favorites: params.get('favoris') === '1',
   };
 }
 
@@ -50,6 +53,7 @@ export function filtersQuery(filters: UrlFilters): string {
   if (filters.version) params.set('version', filters.version);
   if (filters.after) params.set('after', filters.after);
   if (filters.cards?.length) params.set('cards', filters.cards.join(','));
+  if (filters.favorites) params.set('favoris', '1');
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }

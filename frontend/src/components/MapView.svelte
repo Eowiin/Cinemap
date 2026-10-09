@@ -34,8 +34,20 @@
   let failure = $state<{ message: string; detail: string } | null>(null);
 
   function fail(message: string, error: unknown) {
-    failure = { message, detail: error instanceof Error ? error.message : String(error) };
+    const detail = error instanceof Error ? error.message : String(error);
+    failure = { message, detail: `${detail} · ${gpuName()} · ${navigator.userAgent}` };
     console.error('[carte]', message, error);
+  }
+
+  /** Carte graphique vue par WebGL : à nous envoyer avec le message d'erreur. */
+  function gpuName(): string {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      const info = gl?.getExtension('WEBGL_debug_renderer_info');
+      return (info && gl ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : null) ?? '?';
+    } catch {
+      return '?';
+    }
   }
 
   function hasWebGl2(): boolean {
@@ -212,6 +224,17 @@
         }
         m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
         m.on('style.load', () => addLayers(m));
+        // Rien d'affiché au bout de 20 s (fond de carte bloqué par un bloqueur de pub ou un
+        // « DNS privé », réseau très lent) : on le dit au lieu de laisser un fond vide.
+        const watchdog = setTimeout(() => {
+          if (!disposed && styleVersion === 0) {
+            fail(
+              "Le fond de carte ne se charge pas. Un bloqueur de publicité ou le « DNS privé » d'Android bloque peut-être tiles.openfreemap.org.",
+              'style non chargé après 20 s',
+            );
+          }
+        }, 20_000);
+        m.once('style.load', () => clearTimeout(watchdog));
         // Une tuile en erreur passe ; un fond de carte qui ne charge jamais, non.
         m.on('error', (event) => {
           if (styleVersion === 0)

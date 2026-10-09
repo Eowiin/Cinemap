@@ -58,9 +58,12 @@ export type ShowtimeFilters = {
   after?: string | null;
   /** Ids de cartes : cinémas qui acceptent au moins l'une d'elles. */
   cards?: string[] | null;
+  /** Ids de cinémas (mes favoris) : seulement ceux-là, où qu'ils soient. */
+  cinemas?: string[] | null;
 };
 
-const cardsParam = (cards?: string[] | null) => (cards?.length ? cards.join(',') : undefined);
+/** Liste d'ids en paramètre (`a,b,c`), absente si vide. */
+const cardsParam = (ids?: string[] | null) => (ids?.length ? ids.join(',') : undefined);
 
 const position = (p?: Position | null) => (p ? { lat: p.lat, lng: p.lng } : {});
 
@@ -87,6 +90,7 @@ export const api = {
         version: filters.version,
         after: filters.after,
         cards: cardsParam(filters.cards),
+        cinemas: cardsParam(filters.cinemas),
         radius_km: filters.position ? filters.radius_km : undefined,
         limit: filters.limit,
         ...position(filters.position),
@@ -106,6 +110,7 @@ export const api = {
         version: filters.version,
         after: filters.after,
         cards: cardsParam(filters.cards),
+        cinemas: cardsParam(filters.cinemas),
         radius_km: filters.radius_km,
         ...position(filters.position),
       },

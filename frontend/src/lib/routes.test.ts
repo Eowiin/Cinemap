@@ -22,12 +22,14 @@ describe('filters', () => {
       version: 'VO',
       after: '20:00',
       cards: null,
+      favorites: false,
     });
     expect(parseFilters('?date=demain&version=vost&after=25:00')).toEqual({
       date: null,
       version: null,
       after: null,
       cards: null,
+      favorites: false,
     });
   });
 
@@ -45,16 +47,19 @@ describe('filters', () => {
       version: 'VF' as const,
       after: null,
       cards: ['ugc_illimite', 'pathe_cinepass'],
+      favorites: true,
     };
     expect(parseFilters(filtersQuery(filters))).toEqual(filters);
-    expect(filtersQuery({ date: null, version: null, after: null, cards: null })).toBe('');
+    expect(
+      filtersQuery({ date: null, version: null, after: null, cards: null, favorites: false }),
+    ).toBe('');
   });
 
   it('builds links that keep the filters', () => {
     expect(
       href(
         { name: 'movie', id: 42 },
-        { date: '2026-10-09', version: null, after: null, cards: null },
+        { date: '2026-10-09', version: null, after: null, cards: null, favorites: false },
       ),
     ).toBe('/film/42?date=2026-10-09');
   });

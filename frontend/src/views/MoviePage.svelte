@@ -131,7 +131,11 @@
   </article>
 
   <section class="sessions">
-    <h2>Séances à moins de {app.radiusKm} km de {app.positionLabel}</h2>
+    <h2>
+      {router.filters.favorites
+        ? 'Séances dans mes cinémas favoris'
+        : `Séances à moins de ${app.radiusKm} km de ${app.positionLabel}`}
+    </h2>
     <FilterBar dates={showtimes.data?.dates ?? []} />
     {#if !isCoveredPosition(app.position)}
       <CoverageNotice what="les séances autour de vous" />
@@ -144,8 +148,15 @@
     {#if showtimes.data}
       {#if showtimes.data.cinemas.length === 0}
         <div class="empty">
-          <p>Aucune séance dans ce rayon avec ces critères.</p>
-          {#if nextRadius}
+          {#if router.filters.favorites}
+            <p>Aucune séance de ce film dans vos cinémas favoris avec ces critères.</p>
+            <button class="button" onclick={() => router.setFilters({ favorites: false })}>
+              Voir tous les cinémas
+            </button>
+          {:else}
+            <p>Aucune séance dans ce rayon avec ces critères.</p>
+          {/if}
+          {#if !router.filters.favorites && nextRadius}
             <button class="button" onclick={() => app.setRadius(nextRadius)}>
               Chercher à {nextRadius} km
             </button>

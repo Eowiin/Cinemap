@@ -11,8 +11,8 @@ use super::cinemas::CinemaRow;
 use super::error::{ApiResult, AppError};
 use super::geo::{Position, bounding_box, haversine_km, round_km};
 use super::params::{
-    RawQuery, after_bound, parse_after, parse_cards, parse_date, parse_limit, parse_movie_id,
-    parse_position, parse_radius, parse_version,
+    RawQuery, after_bound, parse_after, parse_cards, parse_cinemas, parse_date, parse_limit,
+    parse_movie_id, parse_position, parse_radius, parse_version,
 };
 use super::types::{
     CinemaSummary, CinemaWithShowtimes, Movie, MovieShowtimesResponse, MovieSummary, NowShowing,
@@ -136,6 +136,47 @@ pub(super) async fn cinemas_within(
     Ok(nearby)
 }
 
+/// Cinémas visibles de la liste `ids` (JSON, `parse_cinemas`), où qu'ils soient, du plus
+/// proche au plus loin de `center` : le filtre « mes favoris » ignore le rayon.
+pub(super) async fn cinemas_by_ids(
+    pool: &SqlitePool,
+    center: Position,
+    ids: &str,
+    cards: Option<&str>,
+) -> ApiResult<Vec<NearbyCinema>> {
+    let rows = sqlx::query_as!(
+        CinemaRow,
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.lat AS "lat!: f64", c.lng AS "lng!: f64",
+                  c.art_et_essai AS "art_et_essai!: bool",
+                  (SELECT json_group_array(card_id) FROM cinema_cards WHERE cinema_id = c.id)
+                    AS "cards!: SqlJson<Vec<String>>"
+           FROM visible_cinemas c
+           WHERE c.id IN (SELECT value FROM json_each(?1))
+             AND (?2 IS NULL OR EXISTS (
+                   SELECT 1 FROM cinema_cards cc
+                   WHERE cc.cinema_id = c.id
+                     AND cc.card_id IN (SELECT value FROM json_each(?2))))"#,
+        ids,
+        cards,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut found: Vec<NearbyCinema> = rows
+        .into_iter()
+        .map(|row| {
+            let distance = haversine_km(center, row.position());
+            NearbyCinema {
+                summary: row.into_summary(Some(round_km(distance))),
+                distance,
+            }
+        })
+        .collect();
+    found.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+    Ok(found)
+}
+
 pub async fn get_one(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -199,6 +240,7 @@ pub async fn showtimes(
     let version = parse_version(raw.version.as_deref())?.map(|v| v.as_sql());
     let after = after_bound(date, parse_after(raw.after.as_deref())?);
     let cards = parse_cards(raw.cards.as_deref(), &state.pool).await?;
+    let favorites = parse_cinemas(raw.cinemas.as_deref())?;
     let date = date.format(DATE_FORMAT).to_string();
     let today = today.format(DATE_FORMAT).to_string();
 
@@ -216,7 +258,10 @@ pub async fn showtimes(
     .ok_or(AppError::NotFound("Film introuvable"))?
     .into();
 
-    let nearby = cinemas_within(&state.pool, center, radius_km, cards.as_deref()).await?;
+    let nearby = match &favorites {
+        Some(ids) => cinemas_by_ids(&state.pool, center, ids, cards.as_deref()).await?,
+        None => cinemas_within(&state.pool, center, radius_km, cards.as_deref()).await?,
+    };
     if nearby.is_empty() {
         return Ok(Json(MovieShowtimesResponse {
             movie,
@@ -309,11 +354,14 @@ pub async fn list(
     let after = after_bound(date, parse_after(raw.after.as_deref())?);
     let limit = i64::from(parse_limit(raw.limit.as_deref())?);
     let cards = parse_cards(raw.cards.as_deref(), &state.pool).await?;
+    let favorites = parse_cinemas(raw.cinemas.as_deref())?;
     let date = date.format(DATE_FORMAT).to_string();
 
-    let cinema_ids = match position {
-        None => None,
-        Some(center) => {
+    // Favoris : ces cinémas, où qu'ils soient (le rayon ne s'applique pas).
+    let cinema_ids = match (favorites, position) {
+        (Some(ids), _) => Some(ids),
+        (None, None) => None,
+        (None, Some(center)) => {
             let nearby = cinemas_within(&state.pool, center, radius_km, cards.as_deref()).await?;
             if nearby.is_empty() {
                 // Rien dans le rayon : inutile d'interroger les séances.
