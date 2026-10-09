@@ -1,21 +1,14 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
   import { cardBadges } from '../lib/cards';
-  import { myCards } from '../lib/cards.svelte';
+  import { router } from '../lib/router.svelte';
 
-  /** `onlyMine` : n'affiche que mes cartes (listes) ; sinon toutes, les miennes en couleur. */
-  let { cards, onlyMine = false }: { cards: string[]; onlyMine?: boolean } = $props();
+  /** Cartes acceptées par le cinéma ; celles du filtre en couleur. */
+  let { cards }: { cards: string[] } = $props();
 
-  const badges = $derived(
-    cardBadges(
-      cards,
-      app.meta?.cards ?? [],
-      myCards.items.map((c) => c.id),
-      onlyMine,
-    ),
-  );
+  const badges = $derived(cardBadges(cards, app.meta?.cards ?? [], router.filters.cards));
 </script>
 
-{#each badges as { card, mine } (card.id)}
-  <span class="badge" class:accent={mine} title="Carte acceptée">{card.name}</span>
+{#each badges as { card, active } (card.id)}
+  <span class="badge" class:accent={active} title="Carte acceptée">{card.name}</span>
 {/each}

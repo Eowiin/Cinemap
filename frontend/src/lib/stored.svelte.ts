@@ -31,6 +31,11 @@ export class StoredList<T extends Keyed> {
     this.write(toggled(this.items, item));
   }
 
+  /** Remplace toute la liste (doublons et éléments invalides écartés). */
+  set(items: T[]) {
+    this.write(parseStored(serializeStored(items), this.isItem));
+  }
+
   remove(id: T['id']) {
     this.write(this.items.filter((item) => item.id !== id));
   }

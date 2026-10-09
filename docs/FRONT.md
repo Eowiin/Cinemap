@@ -37,9 +37,17 @@ Cinémas et films, gardés dans le navigateur (`localStorage`), sans compte ni b
 
 ## Cartes d'abonnement (2026-10-09)
 
-- « Mes cartes » = une `StoredList<{ id }>` de plus (`cinemap:cards`, `lib/cards.svelte.ts`), choisies sur l'accueil (`MyCards.svelte`) parmi `meta.cards`.
-- Filtre : chip « Ma carte / Mes cartes » dans `FilterBar` → paramètre `cards` dans l'URL (lien partageable), envoyé à `/api/movies` et `/api/movies/{id}/showtimes`. Un lien partagé avec d'autres cartes affiche leur nom sur la chip. Changer mes cartes pendant que le filtre est actif le met à jour.
-- Badges (`CardBadges.svelte`) : fiche cinéma (toutes les cartes acceptées, les miennes en couleur, et « d'après les listes … du 09/10 »), séances d'un film et popup de la carte (les miennes seulement).
+- Revu le 2026-10-09 (le système « mes cartes » + bouton « Ma carte » était déroutant) : **un bouton par carte dans `FilterBar`**, un clic filtre tout de suite (paramètre `cards` de l'URL, lien partageable, envoyé à `/api/movies` et `/api/movies/{id}/showtimes`).
+- Le dernier filtre est retenu (`StoredList` `cinemap:cards`, `lib/cards.svelte.ts`) et réappliqué à l'ouverture si l'URL n'a pas de `cards` (un lien partagé décide).
+- Badges (`CardBadges.svelte`) : toutes les cartes acceptées, celles du filtre en couleur ; fiche cinéma (avec « d'après les listes … du 09/10 »), séances d'un film, popup de la carte.
+
+## Couverture (2026-10-09)
+
+Séances mises à jour pour l'Île-de-France seulement (`lib/coverage.ts`). Message `CoverageNotice` : accueil et fiche film si la position est hors IDF, fiche d'un cinéma hors IDF.
+
+## Carte indisponible
+
+`MapView` affiche un message et le détail technique (au lieu d'un fond gris) si WebGL 2 manque, si MapLibre ne se charge pas ou si le fond de carte ne répond pas. Signalé : la carte ne s'affichait pas sur un Android (Chrome), cause pas encore connue.
 
 ## Les bugs de l'ancien site, et ce qui les évite
 

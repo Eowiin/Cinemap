@@ -1,5 +1,6 @@
 <script lang="ts">
   import CardBadges from '../components/CardBadges.svelte';
+  import CoverageNotice from '../components/CoverageNotice.svelte';
   import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
@@ -9,6 +10,7 @@
   import { api } from '../lib/api/client';
   import { app, map, showtimeFilters } from '../lib/app.svelte';
   import { cardListDate } from '../lib/cards';
+  import { isCoveredPostalCode } from '../lib/coverage';
   import { favoriteCinema } from '../lib/favorites';
   import { favorites } from '../lib/favorites.svelte';
   import { formatRuntime } from '../lib/format';
@@ -92,6 +94,9 @@
 
   <section class="sessions">
     <FilterBar dates={data.dates} />
+    {#if !isCoveredPostalCode(cinema.postal_code)}
+      <CoverageNotice what="les séances de ce cinéma" />
+    {/if}
     {#if data.movies.length === 0}
       <p class="empty muted">Aucune séance avec ces critères.</p>
     {:else}

@@ -4,6 +4,7 @@
   import MapView from './components/MapView.svelte';
   import SearchBox from './components/SearchBox.svelte';
   import { app, map } from './lib/app.svelte';
+  import { restoreCardFilter } from './lib/cards.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
@@ -17,7 +18,7 @@
   const showMap = $derived(isWide || map.open);
 
   onMount(() => {
-    app.loadMeta();
+    app.loadMeta().then(() => restoreCardFilter(app.meta?.cards ?? []));
     const onChange = () => (isWide = wide.matches);
     wide.addEventListener('change', onChange);
     return () => wide.removeEventListener('change', onChange);

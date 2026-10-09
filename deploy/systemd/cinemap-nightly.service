@@ -1,4 +1,6 @@
-# Séances de toute la France (J, J+1, J+2, et J+6 le mercredi) puis TMDB.
+# Séances de l'Île-de-France sur la semaine (J à J+6) puis TMDB. Décision du 2026-10-09 :
+# l'IDF seulement pour commencer (~2 500 requêtes, ~45 min à 1 req/s) ; le front prévient
+# que les autres régions n'ont pas (encore) de séances.
 # Lancé par cinemap-nightly.timer ; à la main : systemctl start cinemap-nightly
 [Unit]
 Description=Cinemap : scrape des séances puis enrichissement TMDB
@@ -15,7 +17,7 @@ WorkingDirectory=/var/lib/cinemap
 # Les ExecStart d'un oneshot s'enchaînent ; si le scrape échoue, tmdb n'est pas lancé.
 # 1 req/s : test IDF du 2026-10-09, ~1 000 requêtes pour un seul blocage (contre un toutes
 # les ~300 requêtes à 3 req/s). Voir docs/ETAPE2.md.
-ExecStart=/opt/cinemap/current/cinemap scrape --interval-ms 1000
+ExecStart=/opt/cinemap/current/cinemap scrape --nightly --department 75,77,78,91,92,93,94,95 --days 7 --interval-ms 1000
 ExecStart=/opt/cinemap/current/cinemap tmdb
 # Laisse la priorité CPU / disque à l'API.
 Nice=10

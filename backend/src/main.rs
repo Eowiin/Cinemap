@@ -36,6 +36,8 @@ async fn main() -> anyhow::Result<()> {
             cinema,
             date,
             department,
+            days,
+            nightly,
             interval_ms,
         } => {
             let min_interval = interval_ms
@@ -46,6 +48,8 @@ async fn main() -> anyhow::Result<()> {
                 cinema.as_deref(),
                 date.as_deref(),
                 &department,
+                days,
+                nightly,
                 min_interval,
             )
             .await

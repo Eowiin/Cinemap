@@ -40,6 +40,11 @@ const BLOCK_PAUSE: Duration = Duration::from_secs(5 * 60);
 /// Réponses correctes d'affilée avant d'accélérer d'un cran.
 const SPEEDUP_AFTER: u32 = 20;
 
+/// `days` jours consécutifs à partir d'aujourd'hui (`scrape --days`).
+fn next_days(today: NaiveDate, days: u32) -> Vec<NaiveDate> {
+    (0..u64::from(days)).map(|n| today + Days::new(n)).collect()
+}
+
 fn cine_dates(today: NaiveDate) -> Vec<NaiveDate> {
     let mut dates = vec![today, today + Days::new(1), today + Days::new(2)];
     if today.weekday() == chrono::Weekday::Wed {
@@ -466,16 +471,18 @@ pub async fn scrape(
     cinema_id: Option<&str>,
     requested_date: Option<&str>,
     departments: &[String],
+    days: Option<u32>,
+    nightly: bool,
     min_interval: Duration,
 ) -> anyhow::Result<()> {
     let today = paris_today();
-    let dates = if let Some(date) = requested_date {
-        vec![
+    let dates = match (requested_date, days) {
+        (Some(date), _) => vec![
             NaiveDate::parse_from_str(date, DATE_FORMAT)
                 .with_context(|| format!("Date invalide : {date}. Format attendu : YYYY-MM-DD"))?,
-        ]
-    } else {
-        cine_dates(today)
+        ],
+        (None, Some(days)) => next_days(today, days),
+        (None, None) => cine_dates(today),
     };
 
     let cinema_ids = if let Some(cinema_id) = cinema_id {
@@ -487,9 +494,10 @@ pub async fn scrape(
         bail!("Aucun cinéma visible à scraper pour ces départements : {departments:?}");
     }
 
-    // Seul un run complet alimente `/api/meta` (`last_scrape_at`) : un test sur un cinéma
-    // ou un département ne doit pas faire croire que toute la France est à jour.
-    let kind = if cinema_id.is_none() && departments.is_empty() {
+    // Seul un run de référence alimente `/api/meta` (`last_scrape_at`) : la France entière,
+    // ou le run de nuit (`--nightly`, qui peut se limiter à des départements). Un test sur
+    // un cinéma ou un département ne doit pas faire croire que les données sont à jour.
+    let kind = if cinema_id.is_none() && (departments.is_empty() || nightly) {
         "showtimes"
     } else {
         "showtimes_partial"
@@ -545,6 +553,15 @@ mod tests {
                 NaiveDate::from_ymd_opt(2026, 10, 13).unwrap(),
             ]
         );
+    }
+
+    #[test]
+    fn next_days_counts_today() {
+        let friday = NaiveDate::from_ymd_opt(2026, 10, 9).unwrap();
+        let days = next_days(friday, 7);
+        assert_eq!(days.len(), 7);
+        assert_eq!(days[0], friday);
+        assert_eq!(days[6], NaiveDate::from_ymd_opt(2026, 10, 15).unwrap());
     }
 
     #[test]

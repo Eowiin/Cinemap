@@ -17,8 +17,15 @@ pub enum SubCommands {
         #[arg(long, conflicts_with = "department")]
         cinema: Option<String>,
         /// Date cinéma au format YYYY-MM-DD (par défaut : J, J+1, J+2 et J+6 le mercredi).
-        #[arg(long)]
+        #[arg(long, conflicts_with = "days")]
         date: Option<String>,
+        /// Nombre de jours à partir d'aujourd'hui (7 = la semaine, J à J+6).
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=7))]
+        days: Option<u32>,
+        /// Run de nuit : alimente « mis à jour il y a X » (`/api/meta`) même limité à des
+        /// départements.
+        #[arg(long, conflicts_with = "cinema")]
+        nightly: bool,
         /// Limite le scraping aux cinémas de ces départements (ex. 75 ou 75,92,93).
         #[arg(long, conflicts_with = "cinema", value_delimiter = ',')]
         department: Vec<String>,

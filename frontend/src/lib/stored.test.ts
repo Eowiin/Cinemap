@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cardBadges, cardListDate } from './cards';
+import { cardBadges, cardListDate, toggledCard } from './cards';
+import { isCoveredPosition, isCoveredPostalCode } from './coverage';
 import { isFavoriteCinema, isFavoriteMovie } from './favorites';
 import { markedFirst, parseStored, refreshed, serializeStored, toggled } from './stored';
 
@@ -60,28 +61,42 @@ describe('markedFirst', () => {
   });
 });
 
-describe('cardBadges', () => {
+describe('cards', () => {
   const known = [
     { id: 'pathe_cinepass', name: 'Pathé CinéPass', updated_at: '2026-10-09T02:00:00Z' },
     { id: 'ugc_illimite', name: 'UGC Illimité', updated_at: '2026-10-09T02:00:00Z' },
   ];
 
-  it('montre les cartes du cinéma, les miennes marquées, ou seulement les miennes', () => {
-    const cinema = ['pathe_cinepass', 'ugc_illimite'];
-    expect(
-      cardBadges(cinema, known, ['ugc_illimite'], false).map((b) => [b.card.id, b.mine]),
-    ).toEqual([
+  it('montre les cartes du cinéma, celles du filtre marquées', () => {
+    const badges = cardBadges(['ugc_illimite', 'pathe_cinepass'], known, ['ugc_illimite']);
+    expect(badges.map((b) => [b.card.id, b.active])).toEqual([
       ['pathe_cinepass', false],
       ['ugc_illimite', true],
     ]);
-    expect(cardBadges(cinema, known, ['ugc_illimite'], true).map((b) => b.card.id)).toEqual([
+    expect(cardBadges([], known, null)).toEqual([]);
+  });
+
+  it('ajoute et retire une carte du filtre, sans filtre quand il n’en reste aucune', () => {
+    expect(toggledCard(null, 'ugc_illimite')).toEqual(['ugc_illimite']);
+    expect(toggledCard(['ugc_illimite'], 'pathe_cinepass')).toEqual([
       'ugc_illimite',
+      'pathe_cinepass',
     ]);
-    expect(cardBadges([], known, ['ugc_illimite'], false)).toEqual([]);
+    expect(toggledCard(['ugc_illimite'], 'ugc_illimite')).toBeNull();
   });
 
   it('date la liste à Paris', () => {
     // 23 h 30 UTC le 8 = 1 h 30 le 9 à Paris.
     expect(cardListDate('2026-10-08T23:30:00Z')).toBe('09/10');
+  });
+});
+
+describe('coverage', () => {
+  it("reconnaît l'Île-de-France par position et par code postal", () => {
+    expect(isCoveredPosition({ lat: 48.8566, lng: 2.3522 })).toBe(true);
+    expect(isCoveredPosition({ lat: 45.764, lng: 4.8357 })).toBe(false);
+    expect(isCoveredPostalCode('93100')).toBe(true);
+    expect(isCoveredPostalCode('69002')).toBe(false);
+    expect(isCoveredPostalCode(null)).toBe(true);
   });
 });

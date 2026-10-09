@@ -11,7 +11,6 @@
   import type { CinemaSummary } from '../lib/api/types';
   import { app, map } from '../lib/app.svelte';
   import { cardBadges } from '../lib/cards';
-  import { myCards } from '../lib/cards.svelte';
   import { router } from '../lib/router.svelte';
 
   const STYLES = {
@@ -27,6 +26,26 @@
 
   const dark = matchMedia('(prefers-color-scheme: dark)');
 
+  /**
+   * Carte impossible à afficher : un message (et le détail technique, à nous envoyer)
+   * au lieu d'un fond gris muet. Cas vus : WebGL 2 absent ou bloqué (MapLibre 6 en a
+   * besoin), module ou fond de carte qui ne se charge pas.
+   */
+  let failure = $state<{ message: string; detail: string } | null>(null);
+
+  function fail(message: string, error: unknown) {
+    failure = { message, detail: error instanceof Error ? error.message : String(error) };
+    console.error('[carte]', message, error);
+  }
+
+  function hasWebGl2(): boolean {
+    try {
+      return document.createElement('canvas').getContext('webgl2') !== null;
+    } catch {
+      return false;
+    }
+  }
+
   function features(cinemas: CinemaSummary[]): FeatureCollection<Point> {
     return {
       type: 'FeatureCollection',
@@ -38,16 +57,11 @@
     };
   }
 
-  /** Nom du cinéma suivi de mes cartes qu'il accepte (« UGC Les Halles · UGC Illimité »). */
+  /** Nom du cinéma suivi des cartes qu'il accepte (« UGC Les Halles · UGC Illimité »). */
   function popupText(id: string, name: string): string {
     const cinema = map.highlighted.find((c) => c.id === id) ?? map.all.find((c) => c.id === id);
-    const mine = cardBadges(
-      cinema?.cards ?? [],
-      app.meta?.cards ?? [],
-      myCards.items.map((c) => c.id),
-      true,
-    );
-    return [name, ...mine.map((badge) => badge.card.name)].join(' · ');
+    const badges = cardBadges(cinema?.cards ?? [], app.meta?.cards ?? [], null);
+    return [name, ...badges.map((badge) => badge.card.name)].join(' · ');
   }
 
   function point(p: Position): FeatureCollection<Point> {
@@ -166,63 +180,87 @@
     let disposed = false;
     let removeThemeListener = () => {};
 
+    if (!hasWebGl2()) {
+      fail(
+        "Votre navigateur n'active pas WebGL 2, nécessaire à la carte. Mettez Chrome à jour ou activez l'accélération matérielle.",
+        'getContext("webgl2") = null',
+      );
+      return;
+    }
+
     Promise.all([
       import('maplibre-gl'),
       import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
       import('maplibre-gl/dist/maplibre-gl.css'),
-    ]).then(([maplibregl, { default: workerUrl }]) => {
-      if (disposed) return;
-      // MapLibre 6 charge son worker à part : Vite doit en publier le fichier.
-      maplibregl.setWorkerUrl(workerUrl);
-      const m = new maplibregl.Map({
-        container,
-        style: dark.matches ? STYLES.dark : STYLES.light,
-        center: [app.position.lng, app.position.lat],
-        zoom: 11,
-        attributionControl: { compact: true },
-      });
-      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-      m.on('style.load', () => addLayers(m));
-
-      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
-      for (const layer of ['cinema', 'highlight']) {
-        m.on('click', layer, (e: MapLayerMouseEvent) => {
-          const id = e.features?.[0]?.properties?.id as string | undefined;
-          if (!id) return;
-          popup.remove();
-          map.open = false;
-          router.go({ name: 'cinema', id });
+    ])
+      .then(([maplibregl, { default: workerUrl }]) => {
+        if (disposed) return;
+        // MapLibre 6 charge son worker à part : Vite doit en publier le fichier.
+        maplibregl.setWorkerUrl(workerUrl);
+        let m: MlMap;
+        try {
+          m = new maplibregl.Map({
+            container,
+            style: dark.matches ? STYLES.dark : STYLES.light,
+            center: [app.position.lng, app.position.lat],
+            zoom: 11,
+            attributionControl: { compact: true },
+          });
+        } catch (error) {
+          fail("La carte n'a pas pu démarrer sur ce navigateur.", error);
+          return;
+        }
+        m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+        m.on('style.load', () => addLayers(m));
+        // Une tuile en erreur passe ; un fond de carte qui ne charge jamais, non.
+        m.on('error', (event) => {
+          if (styleVersion === 0)
+            fail("Le fond de carte (OpenFreeMap) n'a pas pu se charger.", event.error);
         });
-        m.on('mouseenter', layer, (e: MapLayerMouseEvent) => {
-          m.getCanvas().style.cursor = 'pointer';
+
+        const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+        for (const layer of ['cinema', 'highlight']) {
+          m.on('click', layer, (e: MapLayerMouseEvent) => {
+            const id = e.features?.[0]?.properties?.id as string | undefined;
+            if (!id) return;
+            popup.remove();
+            map.open = false;
+            router.go({ name: 'cinema', id });
+          });
+          m.on('mouseenter', layer, (e: MapLayerMouseEvent) => {
+            m.getCanvas().style.cursor = 'pointer';
+            const f = e.features?.[0];
+            if (f?.geometry.type === 'Point') {
+              popup
+                .setLngLat(f.geometry.coordinates as [number, number])
+                .setText(
+                  popupText(String(f.properties?.id ?? ''), String(f.properties?.name ?? '')),
+                )
+                .addTo(m);
+            }
+          });
+          m.on('mouseleave', layer, () => {
+            m.getCanvas().style.cursor = '';
+            popup.remove();
+          });
+        }
+        m.on('click', 'clusters', async (e: MapLayerMouseEvent) => {
           const f = e.features?.[0];
-          if (f?.geometry.type === 'Point') {
-            popup
-              .setLngLat(f.geometry.coordinates as [number, number])
-              .setText(popupText(String(f.properties?.id ?? ''), String(f.properties?.name ?? '')))
-              .addTo(m);
-          }
+          if (!f || f.geometry.type !== 'Point') return;
+          const source = m.getSource('cinemas') as GeoJSONSource;
+          const zoom = await source.getClusterExpansionZoom(f.properties?.cluster_id as number);
+          m.easeTo({ center: f.geometry.coordinates as [number, number], zoom });
         });
-        m.on('mouseleave', layer, () => {
-          m.getCanvas().style.cursor = '';
-          popup.remove();
-        });
-      }
-      m.on('click', 'clusters', async (e: MapLayerMouseEvent) => {
-        const f = e.features?.[0];
-        if (!f || f.geometry.type !== 'Point') return;
-        const source = m.getSource('cinemas') as GeoJSONSource;
-        const zoom = await source.getClusterExpansionZoom(f.properties?.cluster_id as number);
-        m.easeTo({ center: f.geometry.coordinates as [number, number], zoom });
-      });
-      m.on('mouseenter', 'clusters', () => (m.getCanvas().style.cursor = 'pointer'));
-      m.on('mouseleave', 'clusters', () => (m.getCanvas().style.cursor = ''));
+        m.on('mouseenter', 'clusters', () => (m.getCanvas().style.cursor = 'pointer'));
+        m.on('mouseleave', 'clusters', () => (m.getCanvas().style.cursor = ''));
 
-      const onTheme = () => m.setStyle(dark.matches ? STYLES.dark : STYLES.light, { diff: false });
-      dark.addEventListener('change', onTheme);
-      removeThemeListener = () => dark.removeEventListener('change', onTheme);
-      instance = m;
-    });
+        const onTheme = () =>
+          m.setStyle(dark.matches ? STYLES.dark : STYLES.light, { diff: false });
+        dark.addEventListener('change', onTheme);
+        removeThemeListener = () => dark.removeEventListener('change', onTheme);
+        instance = m;
+      })
+      .catch((error) => fail("La carte n'a pas pu se charger. Vérifiez la connexion.", error));
 
     return () => {
       disposed = true;
@@ -277,13 +315,44 @@
   });
 </script>
 
-<div class="map" bind:this={container}></div>
+<div class="map" bind:this={container}>
+  {#if failure}
+    <div class="failure" role="alert">
+      <p>{failure.message}</p>
+      <p class="muted detail">Détail : {failure.detail}</p>
+      <button class="button" onclick={() => location.reload()}>Réessayer</button>
+    </div>
+  {/if}
+</div>
 
 <style>
   .map {
     position: absolute;
     inset: 0;
     background: var(--surface-2);
+  }
+
+  .failure {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.6rem;
+    padding: 1.5rem;
+    text-align: center;
+    background: var(--surface-2);
+  }
+
+  .failure p {
+    margin: 0;
+    max-width: 32rem;
+  }
+
+  .detail {
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
   }
 
   /* Préfixé par .map : le CSS de MapLibre, chargé après le nôtre, gagnerait sinon

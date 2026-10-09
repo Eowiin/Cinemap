@@ -1,12 +1,13 @@
 <script lang="ts">
   import FilterBar from '../components/FilterBar.svelte';
-  import MyCards from '../components/MyCards.svelte';
+  import CoverageNotice from '../components/CoverageNotice.svelte';
   import Icon from '../components/Icon.svelte';
   import Poster from '../components/Poster.svelte';
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
   import { app, map, PARIS, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
   import { favorites } from '../lib/favorites.svelte';
+  import { isCoveredPosition } from '../lib/coverage';
   import { formatRuntime, timeAgo, timeOf } from '../lib/format';
   import { router } from '../lib/router.svelte';
   import { resource } from '../lib/resource.svelte';
@@ -49,8 +50,11 @@
     {/if}
   </div>
   {#if app.locateError}<p class="error">{app.locateError}</p>{/if}
-  <MyCards />
 </section>
+
+{#if !isCoveredPosition(app.position)}
+  <CoverageNotice what="les séances autour de vous" />
+{/if}
 
 {#if favorites.cinemas.items.length || favorites.movies.items.length}
   <section class="favorites" aria-labelledby="favorites-title">
