@@ -132,7 +132,7 @@ Ainsi que la liste des non croisés (le `warn!`), à relire **un par un** sur Al
 ## Lot F : prod
 
 - [x] `import_cards` appelé à la fin d'`import-cinemas` (après le CNC), erreur → `warn!` sans faire échouer l'import.
-- [x] Rien à changer dans `deploy/systemd/` (le timer hebdo lance déjà `import-cinemas`). Premier remplissage à la main sur le VPS : `sudo -u cinemap /opt/cinemap/current/cinemap import-cards`.
+- [x] Rien à changer dans `deploy/systemd/` (le timer hebdo lance déjà `import-cinemas`). Premier remplissage à la main sur le VPS : voir « Prod » plus bas (`systemd-run`, pour charger `/etc/cinemap/cinemap.env`).
 - [x] Une ligne `scrape_runs` `kind = 'cards'` ? Utile si on veut voir dans la base quand la liste a été rafraîchie. `cards.updated_at` suffit peut-être : à toi de juger.
 
 ## Lot G : autres cartes (plus tard)
@@ -176,7 +176,13 @@ Pathé annonce « 76 cinémas Pathé et plus de 59 partenaires » : on retombe e
 **Prod** : la migration passe au redémarrage de `serve` (déploiement). Premier remplissage, sans attendre le timer du mardi :
 
 ```bash
-sudo -u cinemap /opt/cinemap/current/cinemap import-cards
+# `sudo -u cinemap …` seul ne marche pas : DATABASE_URL est dans /etc/cinemap/cinemap.env,
+# que seuls les services chargent.
+systemd-run --pty --wait --collect \
+  --uid=cinemap --gid=cinemap \
+  -p EnvironmentFile=/etc/cinemap/cinemap.env \
+  -p WorkingDirectory=/var/lib/cinemap \
+  /opt/cinemap/current/cinemap import-cards
 ```
 
 **Questions pour toi** :
