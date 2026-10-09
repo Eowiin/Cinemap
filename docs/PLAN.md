@@ -121,15 +121,15 @@ Suivi détaillé : [`FRONT.md`](FRONT.md).
 - [x] Responsive mobile d'abord
 - [ ] Essai sur un vrai téléphone (installation PWA, géolocalisation) par le propriétaire
 
-### 6. Déploiement
+### 6. Déploiement ✅
 Suivi détaillé, procédure et écarts : [`DEPLOY.md`](DEPLOY.md). Préparé par Claude le 2026-10-08.
 - [x] Réécrire `docs/DEPLOY.md` : binaire + systemd + nginx (front statique, `/api` vers axum), HTTPS (certbot), domaine `cinemap.ethansaux.fr`
 - [x] SIGTERM dans `serve` (arrêt propre sous systemd)
 - [x] Timers systemd : `scrape` puis `tmdb` chaque nuit à 4 h, `import-cinemas` le mardi à 2 h (`deploy/systemd/`)
 - [x] GitHub Actions (`ci.yml`) : CI (fmt, clippy, tests, build front) + déploiement (binaire + `dist/` par SSH, releases versionnées, restart, health check, retour arrière automatique) ; `backend/.sqlx/` versionné, `SQLX_OFFLINE=true`
-- [ ] Préparation du VPS par le propriétaire (DNS, ancien service retiré, utilisateur `cinemap`, unités, nginx, certbot) : `DEPLOY.md` étapes 1 à 5
-- [ ] Merge `rewrite` → `main` (premier déploiement par la CI)
-- [ ] Migration de la prod : base remplie (`cinemap-weekly` puis `cinemap-nightly`), timers activés, ancien service supprimé
+- [x] Préparation du VPS par le propriétaire (DNS, ancien service retiré, utilisateur `cinemap`, unités, nginx, certbot) : `DEPLOY.md` étapes 1 à 5
+- [x] Merge `rewrite` → `main` (premier déploiement par la CI)
+- [x] Migration de la prod : base remplie (`cinemap-weekly` puis `cinemap-nightly`), timers activés, ancien service supprimé **Étape 6 terminée le 2026-10-09** : premier run France le 2026-10-08 (5 h à 3 req/s, voir `ETAPE2.md`), puis scrape nocturne réglé à 1 req/s.
 
 ## Idées pour plus tard
 
