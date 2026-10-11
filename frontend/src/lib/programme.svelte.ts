@@ -2,7 +2,7 @@ import { addDays, parisNow } from './format';
 import { isPlanStop, type PlanStop } from './planner';
 import { StoredList } from './stored.svelte';
 
-/** Mon programme : les séances choisies, gardées dans le navigateur, tous jours confondus. */
+/** Ma journée (le « programme ») : les séances choisies, gardées dans le navigateur, tous jours confondus. */
 export const programme = new StoredList<PlanStop>('cinemap:programme', isPlanStop);
 
 // Les jours passés ne servent plus. La veille reste un jour : une séance à 00h15

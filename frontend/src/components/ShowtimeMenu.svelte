@@ -1,17 +1,9 @@
 <script lang="ts">
   import { dateLabel, timeOf } from '../lib/format';
   import { app } from '../lib/app.svelte';
-  import {
-    clock,
-    conflicts,
-    DEFAULT_RUNTIME_MIN,
-    endMinutes,
-    linkLabel,
-    shareParam,
-  } from '../lib/planner';
+  import { clock, conflicts, DEFAULT_RUNTIME_MIN, endMinutes, linkLabel } from '../lib/planner';
   import { programme, showtimeMenu } from '../lib/programme.svelte';
   import { router } from '../lib/router.svelte';
-  import { followUpHref } from '../lib/routes';
   import Icon from './Icon.svelte';
 
   // Un seul menu pour toute l'application (App.svelte), ouvert par un appui sur un horaire.
@@ -38,15 +30,7 @@
     if (!stop) return;
     const date = stop.date;
     dialog.close();
-    router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
-  }
-
-  function openFollowUps() {
-    if (!stop) return;
-    const filters = { ...router.filters, date: stop.date === app.today ? null : stop.date };
-    const path = followUpHref(filters, shareParam([stop]));
-    dialog.close();
-    router.goto(path);
+    router.goto(`/journee${date === app.today ? '' : `?date=${date}`}`);
   }
 
   function closeOnBackdrop(event: MouseEvent) {
@@ -85,6 +69,12 @@
         </span>
       </p>
 
+      {#if stop.booking_url}
+        <a class="button primary wide" href={stop.booking_url} target="_blank" rel="noopener">
+          <Icon name="external" size={16} /> Réserver
+        </a>
+      {/if}
+
       {#if issues.length}
         <ul class="issues">
           {#each issues as { other, link, after } (other.id)}
@@ -100,21 +90,19 @@
       {/if}
 
       <div class="actions">
-        {#if stop.booking_url}
-          <a class="button primary" href={stop.booking_url} target="_blank" rel="noopener">
-            <Icon name="external" size={16} /> Réserver
-          </a>
-        {/if}
-        <button class="button" class:on={planned} aria-pressed={planned} onclick={toggle}>
+        <button
+          class="button"
+          class:primary={!stop.booking_url && !planned}
+          class:on={planned}
+          aria-pressed={planned}
+          onclick={toggle}
+        >
           <Icon name={planned ? 'check' : 'plus'} size={16} />
-          {planned ? 'Dans mon programme' : 'Ajouter au programme'}
-        </button>
-        <button class="button" onclick={openFollowUps}>
-          <Icon name="route" size={16} /> Et après ?
+          {planned ? 'Dans ma journée' : 'Ajouter à ma journée'}
         </button>
         {#if planned || dayCount}
           <button class="link" onclick={openProgramme}>
-            <Icon name="calendar" size={16} /> Voir mon programme ({dayCount + (planned ? 1 : 0)})
+            Voir ma journée ({dayCount + (planned ? 1 : 0)}) →
           </button>
         {/if}
       </div>
@@ -173,6 +161,12 @@
   .issues :global(svg) {
     flex: none;
     margin-top: 0.15rem;
+  }
+
+  .wide {
+    justify-content: center;
+    padding: 0.7em 1em;
+    font-weight: 600;
   }
 
   .actions {

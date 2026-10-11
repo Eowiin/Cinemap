@@ -22,8 +22,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/` | À l'affiche autour de la position (Paris par défaut, bouton « Autour de moi »), rayon 5 à 100 km |
 | `/film/{id}` | Fiche film + séances par cinéma, triées par distance |
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
-| `/et-apres` | « Et après ? » : ce qu'on peut enchaîner après une séance (`?s=cinéma.film.HHMM` + filtres) |
-| `/programme` | Mon programme du jour (séances enchaînées), ou un programme partagé (`?date=…&s=…`) |
+| `/journee` | Ma journée (séances enchaînées, « Ensuite ? »), ou une journée partagée (`?date=…&s=…`) |
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
 
@@ -59,22 +58,23 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - **Bulles** : le nom seul (les cartes acceptées sont sur la fiche du cinéma).
 - **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
 
-## Programme du jour, mode manuel (2026-10-11)
+## Ma journée : programme manuel (2026-10-11)
 
-- **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter au programme / Retirer, Voir mon programme. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
+- **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter à ma journée / Retirer, Voir ma journée. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
 - **Calculs** (`lib/planner.ts`, pur, testé) : fin = début + 15 min de pubs + `runtime_min` (2 h supposées si inconnue) ; trajet à vol d'oiseau, le plus court entre à pied (4 km/h, 15 min/km) et transports (10 min + 3 min/km), donc à pied sous ~800 m ; battement souhaité 10 min. Statut de chaque enchaînement : chevauchement, trajet trop court, juste (< 10 min de battement), ok. Constantes en tête du fichier, à ajuster avec l'usage.
 - **Stockage** : `StoredList` `cinemap:programme`, chaque séance garde de quoi s'afficher et calculer les trajets sans l'API (`PlanStop`). Les jours avant la veille sont effacés au chargement. Icône calendrier dans l'en-tête, avec le nombre de séances prévues.
-- **Partage par lien, sans serveur** : `/programme?date=2026-10-12&s=C0159.1000032855.2030,…` (cinéma, film, heure `HHMM` du jour ciné, `2415` = 00h15 ; 8 au plus). Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée (compté par le scrape). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à mon programme » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
+- **Partage par lien, sans serveur** : `/journee?date=2026-10-12&s=C0159.1000032855.2030,…` (cinéma, film, heure `HHMM` du jour ciné, `2415` = 00h15 ; 8 au plus). Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée (compté par le scrape). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à ma journée » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
 - Limite : mon programme garde l'id de séance ; si AlloCiné la renumérote, elle reste affichée dans le programme mais l'horaire n'est plus surligné sur les fiches.
 - Vérifié en dev piloté par Chrome sans interface (390 px, clair et sombre) : ajout, alerte de chevauchement, page, lien partagé avec une séance introuvable, aucune erreur console, pas de défilement horizontal.
 
-## « Et après ? » (2026-10-11)
+## « Ensuite ? » (2026-10-11)
 
-- Depuis le menu d'une séance (« Et après ? ») ou la dernière séance de mon programme. Lien `/et-apres?date=…&s=C0065.327174.1530` + les filtres en cours (version, cartes, favoris), qui s'appliquent aux séances proposées.
-- Deux appels : le programme du cinéma de départ (souvent déjà en cache) pour retrouver la séance, puis `GET /api/showtimes` (`API.md`) autour de ce cinéma, `after` = fin estimée, 200 séances au plus. Mesuré en local : 99 séances = 33 Ko, **3,8 Ko gzip**.
+- Revu le soir même : une page « Et après ? » à part, avec une liste à plat (heure · film · cinéma, le même film cinq fois, sans affiche), obligeait à des allers-retours avec le programme. Tout se fait maintenant dans **Ma journée** : sous la dernière séance, « Ensuite ? » propose les films qu'on peut enchaîner, **un appui sur un horaire l'ajoute**, et la proposition repart de la nouvelle fin.
+- Une ligne par film et cinéma (affiche, cinéma + trajet, durée, 4 horaires au plus), 5 lignes puis « + n autres ». Horaire « juste » (< 10 min de battement) bordé d'orange.
+- `GET /api/showtimes` (`API.md`) autour du cinéma de la dernière séance, `after` = fin estimée, 200 séances au plus, avec les filtres en cours (version, cartes, favoris). Mesuré en local : 99 séances = 33 Ko, **3,8 Ko gzip**.
 - Distance : même cinéma (`cinemas=<id>`), 1, 3 (par défaut) ou 5 km. Le filtre favoris ignore la distance, comme ailleurs ; « même cinéma » prime.
-- `planner.followUps` : autre film, ni chevauchement ni trajet trop court (« juste » gardé, en orange), par heure puis distance. D'abord ce qui commence moins de 90 min après la fin, le reste derrière « Plus tard (n) ». Fin après minuit : rien à proposer (`after` ne dépasse pas le jour ciné).
-- Un appui sur une proposition ouvre le menu de séance (ajouter au programme, réserver, « Et après ? » de nouveau).
+- `planner.followUps` / `groupFollowUps` : autre film, ni chevauchement ni trajet trop court, par heure puis distance. Fin après minuit : rien à proposer (`after` ne dépasse pas le jour ciné).
+- Menu d'une séance : **Réserver** en grand en tête, puis « Ajouter à ma journée » et « Voir ma journée → ».
 
 ## Couverture (2026-10-09)
 

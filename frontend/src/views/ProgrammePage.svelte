@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FollowUps from '../components/FollowUps.svelte';
   import Icon from '../components/Icon.svelte';
   import Status from '../components/Status.svelte';
   import { app, map } from '../lib/app.svelte';
@@ -19,10 +20,10 @@
   import { resolveStops } from '../lib/resolve';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { followUpHref, href } from '../lib/routes';
+  import { href } from '../lib/routes';
 
-  // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
-  // (`?date=…&s=C0159.8269…`), retrouvé via le programme de chaque cinéma.
+  // Deux modes : ma journée (gardée dans le navigateur), ou une journée partagée
+  // (`?date=…&s=C0159.1000032855.2030…`), retrouvé via le programme de chaque cinéma.
 
   const refs = $derived(parseShareParam(new URLSearchParams(router.search).get('s')));
   const shared = $derived(refs.length > 0);
@@ -54,8 +55,8 @@
   let manualUrl = $state<string | null>(null);
 
   async function share() {
-    const url = `${location.origin}/programme?date=${date}&s=${shareParam(stops)}`;
-    const title = `Programme ciné, ${dateLabel(date, app.today).toLowerCase()}`;
+    const url = `${location.origin}/journee?date=${date}&s=${shareParam(stops)}`;
+    const title = `Ma journée ciné, ${dateLabel(date, app.today).toLowerCase()}`;
     if (navigator.share) {
       try {
         await navigator.share({ title, url });
@@ -76,7 +77,7 @@
   function keepShared() {
     const added = stops.filter((s) => !programme.has(s.id));
     programme.set([...programme.items, ...($state.snapshot(added) as PlanStop[])]);
-    router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
+    router.goto(`/journee${date === app.today ? '' : `?date=${date}`}`);
   }
 
   function clearDay() {
@@ -88,12 +89,12 @@
   }
 </script>
 
-<svelte:head><title>{shared ? 'Programme partagé' : 'Mon programme'} · Cinemap</title></svelte:head>
+<svelte:head><title>{shared ? 'Journée partagée' : 'Ma journée'} · Cinemap</title></svelte:head>
 
 <a class="back" href={href({ name: 'home' }, router.filters)}><Icon name="back" /> À l'affiche</a>
 
 <header>
-  <h1>{shared ? 'Programme partagé' : 'Mon programme'}</h1>
+  <h1>{shared ? 'Journée partagée' : 'Ma journée'}</h1>
   {#if shared}
     <p class="muted">{dateLabel(date, app.today)}</p>
   {:else}
@@ -105,6 +106,21 @@
         </button>
       {/each}
     </div>
+  {/if}
+  {#if !shared && stopsOf(date).length}
+    <div class="actions">
+      <button class="button small primary" onclick={share} disabled={stops.length > MAX_STOPS}>
+        <Icon name="share" size={15} />
+        {copied ? 'Lien copié' : 'Partager'}
+      </button>
+      <button class="button small" onclick={clearDay}>Vider la journée</button>
+    </div>
+    {#if manualUrl}
+      <label class="manual">
+        <span class="muted small">Lien à copier :</span>
+        <input readonly value={manualUrl} onfocus={(e) => e.currentTarget.select()} />
+      </label>
+    {/if}
   {/if}
 </header>
 
@@ -166,8 +182,8 @@
           {#if !shared}
             <button
               class="icon"
-              aria-label="Retirer {stop.movie.title} du programme"
-              title="Retirer du programme"
+              aria-label="Retirer {stop.movie.title} de la journée"
+              title="Retirer de la journée"
               onclick={() => programme.remove(stop.id)}><Icon name="close" size={16} /></button
             >
           {/if}
@@ -185,37 +201,18 @@
       {/if}
     {/each}
     {#if !shared}
-      {@const last = steps[steps.length - 1]!.stop}
       <li class="after">
-        <a
-          class="button"
-          href={followUpHref(
-            { ...router.filters, date: date === app.today ? null : date },
-            shareParam([last]),
-          )}><Icon name="route" size={16} /> Et après « {last.movie.title} » ?</a
-        >
+        <FollowUps from={steps[steps.length - 1]!.stop} />
       </li>
     {/if}
   </ol>
 
-  <div class="actions">
-    {#if shared}
+  {#if shared}
+    <div class="actions">
       <button class="button primary" onclick={keepShared}>
-        <Icon name="plus" size={16} /> Ajouter à mon programme
+        <Icon name="plus" size={16} /> Ajouter à ma journée
       </button>
-    {:else}
-      <button class="button primary" onclick={share} disabled={stops.length > MAX_STOPS}>
-        <Icon name="share" size={16} />
-        {copied ? 'Lien copié' : 'Partager'}
-      </button>
-      <button class="button" onclick={clearDay}>Vider la journée</button>
-    {/if}
-  </div>
-  {#if manualUrl}
-    <label class="manual">
-      <span class="muted small">Lien à copier :</span>
-      <input readonly value={manualUrl} onfocus={(e) => e.currentTarget.select()} />
-    </label>
+    </div>
   {/if}
   <p class="muted small">
     Fin estimée = séance + 15 min de pubs + durée du film. Trajets à vol d'oiseau : à pied à 4 km/h,
@@ -225,7 +222,7 @@
   <div class="empty">
     <p>Rien de prévu {date === app.today ? "aujourd'hui" : 'ce jour-là'}.</p>
     <p class="muted">
-      Appuyez sur un horaire, dans la fiche d'un film ou d'un cinéma, puis « Ajouter au programme ».
+      Appuyez sur un horaire, dans la fiche d'un film ou d'un cinéma, puis « Ajouter à ma journée ».
       Cinemap signale les séances qui se chevauchent et les trajets trop courts.
     </p>
     <a class="button" href={href({ name: 'home' }, router.filters)}>Voir les films à l'affiche</a>
@@ -367,16 +364,9 @@
   }
 
   .after {
-    margin: 0.6rem 0 0 1.9rem;
-    padding-left: 1rem;
+    margin-left: 1.9rem;
+    padding: 0.7rem 0 0.2rem 1rem;
     border-left: 2px dashed var(--border);
-  }
-
-  .after .button {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .actions {

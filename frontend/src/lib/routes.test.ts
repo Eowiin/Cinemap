@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filtersQuery, followUpHref, href, parseFilters, parseRoute } from './routes';
+import { filtersQuery, href, parseFilters, parseRoute } from './routes';
 
 describe('parseRoute', () => {
   it('recognises the pages', () => {
@@ -7,8 +7,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/film/1000032855')).toEqual({ name: 'movie', id: 1000032855 });
     expect(parseRoute('/cinema/C0159')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/cinema/C0159/')).toEqual({ name: 'cinema', id: 'C0159' });
-    expect(parseRoute('/programme')).toEqual({ name: 'programme' });
-    expect(parseRoute('/et-apres')).toEqual({ name: 'next' });
+    expect(parseRoute('/journee')).toEqual({ name: 'programme' });
   });
 
   it('rejects anything else', () => {
@@ -64,15 +63,5 @@ describe('filters', () => {
         { date: '2026-10-09', version: null, after: null, cards: null, favorites: false },
       ),
     ).toBe('/film/42?date=2026-10-09');
-  });
-});
-
-describe('followUpHref', () => {
-  it('keeps the filters and adds the showtime', () => {
-    const none = parseFilters('');
-    expect(followUpHref(none, 'C0065.42.2030')).toBe('/et-apres?s=C0065.42.2030');
-    expect(followUpHref({ ...none, version: 'VO' }, 'C0065.42.2030')).toBe(
-      '/et-apres?version=VO&s=C0065.42.2030',
-    );
   });
 });

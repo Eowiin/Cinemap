@@ -5,6 +5,7 @@ import {
   distanceKm,
   endMinutes,
   followUps,
+  groupFollowUps,
   nearbyStops,
   isPlanStop,
   link,
@@ -239,6 +240,22 @@ describe('nearbyStops', () => {
         movie: { id: 9, title: 'Neuf', runtime_min: 100 },
         cinema: { id: 'C0065', name: 'Le Grand Rex', lat: 48.8707, lng: 2.3477 },
       },
+    ]);
+  });
+});
+
+describe('groupFollowUps', () => {
+  it('groups by movie and cinema, in order of first showtime', () => {
+    const from = stop('1', '2026-10-11T14:00:00', 90);
+    const list = followUps(from, [
+      stop('2', '2026-10-11T18:00:00', 90),
+      stop('3', '2026-10-11T17:00:00', 90, HALLES),
+      stop('2', '2026-10-11T20:00:00', 90),
+      { ...stop('4', '2026-10-11T19:00:00', 90), movie: stop('2', '', 90).movie },
+    ]);
+    expect(groupFollowUps(list).map((g) => [g.key, g.items.map((f) => f.stop.id)])).toEqual([
+      ['3@C0159', ['3']],
+      ['2@C0065', ['2', '4', '2']],
     ]);
   });
 });

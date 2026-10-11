@@ -183,7 +183,7 @@ export function nearbyStops(data: NearbyShowtimes): PlanStop[] {
 export type FollowUp = { stop: PlanStop; link: Link };
 
 /**
- * « Et après ? » : les séances qu'on peut enchaîner après `from` (ni chevauchement ni
+ * « Ensuite ? » : les séances qu'on peut enchaîner après `from` (ni chevauchement ni
  * trajet trop court ; « juste » compris, signalé), d'un autre film, par heure puis distance.
  */
 export function followUps(from: PlanStop, candidates: PlanStop[]): FollowUp[] {
@@ -194,6 +194,23 @@ export function followUps(from: PlanStop, candidates: PlanStop[]): FollowUp[] {
     .sort(
       (a, b) => startMinutes(a.stop) - startMinutes(b.stop) || a.link.travel.km - b.link.travel.km,
     );
+}
+
+export type FollowUpGroup = { key: string; movieId: number; items: FollowUp[] };
+
+/**
+ * Les suites possibles groupées par film et cinéma (une ligne = une affiche et ses
+ * horaires), dans l'ordre du premier horaire possible.
+ */
+export function groupFollowUps(list: FollowUp[]): FollowUpGroup[] {
+  const groups: FollowUpGroup[] = [];
+  for (const f of list) {
+    const key = `${f.stop.movie.id}@${f.stop.cinema.id}`;
+    const group = groups.find((g) => g.key === key);
+    if (group) group.items.push(f);
+    else groups.push({ key, movieId: f.stop.movie.id, items: [f] });
+  }
+  return groups;
 }
 
 // Partage par lien, sans serveur : `s=C0159.1000032855.2030,C0065.316112.2415`

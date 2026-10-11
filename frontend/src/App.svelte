@@ -11,7 +11,6 @@
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
   import MoviePage from './views/MoviePage.svelte';
-  import NextPage from './views/NextPage.svelte';
   import NotFound from './views/NotFound.svelte';
   import ProgrammePage from './views/ProgrammePage.svelte';
 
@@ -46,12 +45,10 @@
     <SearchBox />
     <a
       class="programme"
-      href="/programme"
+      href="/journee"
       aria-current={router.route.name === 'programme' ? 'page' : undefined}
-      aria-label={planned
-        ? `Mon programme, ${planned} séance${planned > 1 ? 's' : ''}`
-        : 'Mon programme'}
-      title="Mon programme"
+      aria-label={planned ? `Ma journée, ${planned} séance${planned > 1 ? 's' : ''}` : 'Ma journée'}
+      title="Ma journée"
     >
       <Icon name="calendar" />
       {#if planned}<span class="count">{planned}</span>{/if}
@@ -67,8 +64,6 @@
       {#key router.route.id}<CinemaPage id={router.route.id} />{/key}
     {:else if router.route.name === 'programme'}
       <ProgrammePage />
-    {:else if router.route.name === 'next'}
-      <NextPage />
     {:else}
       <NotFound />
     {/if}
