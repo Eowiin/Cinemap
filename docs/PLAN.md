@@ -164,7 +164,7 @@ Ajouté le 2026-10-11 avec le propriétaire :
   - automatique ensuite : choisir 2 à 4 films, essayer toutes les combinaisons (fin = séance + ~15 min de pubs + `runtime_min`, trajet à vol d'oiseau avec vitesse moyenne, marge 10-15 min), calcul dans le navigateur ;
   - respecte les filtres actifs (cartes, VO…), plus un filtre « même cinéma » ;
   - « Et après ? » depuis une séance : ce qu'on peut enchaîner à proximité. **Fait le 2026-10-11** (« Ensuite ? » dans Ma journée) avec l'endpoint `GET /api/showtimes` (en front seul : un appel par cinéma voisin, ~60 dans 3 km autour du Grand Rex), qui servira aussi au point 5 ;
-  - partage par lien (identifiants des séances dans l'URL, sans serveur) + export `.ics`.
+  - partage par lien (identifiants des séances dans l'URL, sans serveur) + export `.ics` : **faits le 2026-10-11**.
 - **Soutenir le projet** : lien Ko-fi ou Liberapay pour participer aux frais du serveur. Gratuit pour tout le reste : un abonnement est écarté (frais Stripe sur les petites sommes, comptes obligatoires, clé TMDB non commerciale). Dons à déclarer dans la micro-entreprise (à confirmer avec l'URSSAF ou un comptable).
 - **Scraping plus intelligent** (pas de proxies ni de rotation d'IP pour contourner les limites d'AlloCiné, pas de licence Webedia) : éviter les requêtes inutiles (point 4), et à terme récupérer les séances des grandes enseignes (UGC, Pathé, MK2, CGR) sur leurs propres sites, chacune à un rythme poli, pour qu'AlloCiné ne couvre plus que les indépendants.
 - Plus tard : **watchlist ou programme commun sans compte**, via un lien secret (identifiant aléatoire non devinable, petite table côté serveur, expiration après la date) : ceux qui ont le lien ajoutent des films ou votent pour des séances.

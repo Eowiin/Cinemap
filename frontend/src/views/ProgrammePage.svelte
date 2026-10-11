@@ -16,6 +16,7 @@
     travelLabel,
     type PlanStop,
   } from '../lib/planner';
+  import { dayToIcs } from '../lib/ics';
   import { programme, programmeDays, stopsOf } from '../lib/programme.svelte';
   import { resolveStops } from '../lib/resolve';
   import { resource } from '../lib/resource.svelte';
@@ -80,6 +81,19 @@
     router.goto(`/journee${date === app.today ? '' : `?date=${date}`}`);
   }
 
+  /** Fichier `.ics` : sur iPhone, Safari propose « Tout ajouter » au calendrier. */
+  function exportCalendar() {
+    const blob = new Blob([dayToIcs($state.snapshot(stops) as PlanStop[])], {
+      type: 'text/calendar;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cinemap-${date}.ics`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
   function clearDay() {
     programme.set(programme.items.filter((s) => s.date !== date));
   }
@@ -112,6 +126,9 @@
       <button class="button small primary" onclick={share} disabled={stops.length > MAX_STOPS}>
         <Icon name="share" size={15} />
         {copied ? 'Lien copié' : 'Partager'}
+      </button>
+      <button class="button small" onclick={exportCalendar}>
+        <Icon name="calendar" size={15} /> Agenda
       </button>
       <button class="button small" onclick={clearDay}>Vider la journée</button>
     </div>
