@@ -107,11 +107,18 @@ export const app = new AppState();
 /** Ce dont la carte a besoin pour placer un cinéma mis en avant. */
 export type MapCinema = Pick<CinemaSummary, 'id' | 'name' | 'lat' | 'lng'>;
 
+export type MapRoute = {
+  path: { lat: number; lng: number }[];
+  stops: { cinema: MapCinema; label: string }[];
+};
+
 /** Ce que la carte doit montrer, fixé par la page affichée. */
 class MapState {
   all = $state<CinemaSummary[]>([]);
   /** Cinémas mis en avant (séances du film, cinéma affiché). */
   highlighted = $state<MapCinema[]>([]);
+  /** Trajet de la journée (Ma journée) : ligne entre les cinémas et numéros d'étape. */
+  route = $state<MapRoute | null>(null);
   /** Point à centrer (cinéma affiché) ; sinon la carte cadre `highlighted` et la position. */
   focus = $state<Position | null>(null);
   /** Mobile : carte plein écran ouverte. */
@@ -131,9 +138,10 @@ class MapState {
     }
   }
 
-  show(highlighted: MapCinema[], focus: Position | null = null) {
+  show(highlighted: MapCinema[], focus: Position | null = null, route: MapRoute | null = null) {
     this.highlighted = highlighted;
     this.focus = focus;
+    this.route = route;
   }
 }
 

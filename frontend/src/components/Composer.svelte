@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { MovieSummary } from '../lib/api/types';
   import { api } from '../lib/api/client';
   import { app, showtimeFilters } from '../lib/app.svelte';
   import { composeOrDrop, type ComposedPlan } from '../lib/composer';
@@ -13,22 +12,28 @@
     travelLabel,
     type PlanStop,
   } from '../lib/planner';
-  import { programme, wanted } from '../lib/programme.svelte';
+  import { programme, wanted, type WantedMovie } from '../lib/programme.svelte';
   import { resource } from '../lib/resource.svelte';
   import Icon from './Icon.svelte';
   import Poster from './Poster.svelte';
   import Status from './Status.svelte';
 
-  // Programme automatique : on choisit 2 à 4 films, Cinemap propose les meilleures journées
-  // (le moins d'attente) autour des séances déjà prévues, qui restent fixes.
+  // Programme automatique, en deux temps : on coche 1 à 4 films (ceux de la journée sont
+  // déjà cochés), puis Cinemap propose les meilleures journées (le moins d'attente).
+  // Tous les horaires sont libres : « Choisir » remplace la journée.
 
-  let { date, fixed }: { date: string; fixed: PlanStop[] } = $props();
+  let { date, day }: { date: string; day: PlanStop[] } = $props();
 
   const MAX_FILMS = 4;
+  /** Films listés avant « Plus de films ». */
+  const FIRST_FILMS = 8;
   const RADII = [2, 5, 10] as const;
+  // Rouvert tel quel au retour d'une fiche (films cochés gardés dans le navigateur).
   let open = $state(wanted.items.length > 0);
+  let step = $state<'pick' | 'results'>('pick');
   let radius = $state<number>(5);
   let query = $state('');
+  let more = $state(false);
 
   const isToday = $derived(date === app.today);
   const starts = $derived(
@@ -39,8 +44,7 @@
   const startValue = $derived(start && starts.includes(start) ? start : isToday ? 'now' : '14:00');
   const after = $derived(startValue === 'now' ? floorQuarter(app.now.time) : startValue);
 
-  // Films déjà dans la journée : rien à composer pour eux.
-  const films = $derived(wanted.items.filter((w) => !fixed.some((s) => s.movie.id === w.id)));
+  const films = $derived(wanted.items);
 
   const searchArgs = $derived.by(() => {
     const filters = showtimeFilters();
@@ -55,31 +59,37 @@
     };
   });
 
-  // Suggestions : les films à l'affiche autour (souvent déjà en cache depuis l'accueil).
+  // Les films à l'affiche autour (souvent déjà en cache depuis l'accueil).
   const showing = resource(
     () => (open ? searchArgs : null),
     (args, signal) =>
       args ? api.nowShowing({ ...args, limit: 60 }, signal) : Promise.resolve(null),
   );
-  // Sans film choisi : les plus diffusés autour ; ensuite, seulement en tapant (la liste
-  // repousserait les propositions).
-  const suggestions = $derived(
-    (wanted.items.length && !query.trim() ? [] : (showing.data?.movies ?? []))
-      .map((m) => m.movie)
-      .filter(
-        (m) =>
-          !wanted.has(m.id) &&
-          !fixed.some((s) => s.movie.id === m.id) &&
-          (!query.trim() || titleMatches(m.title, query)),
-      )
-      .slice(0, query.trim() ? 8 : 6),
-  );
+  type Choice = WantedMovie & { runtime_min: number | null };
+  // Les films cochés absents de la liste (ex. séance de la journée avant « dès ») restent en tête.
+  const choices = $derived.by((): Choice[] => {
+    const listed: Choice[] = (showing.data?.movies ?? []).map(({ movie }) => ({
+      id: movie.id,
+      title: movie.title,
+      poster_url: movie.poster_url,
+      runtime_min: movie.runtime_min,
+    }));
+    const extra = films
+      .filter((f) => !listed.some((m) => m.id === f.id))
+      .map((f) => ({ ...f, runtime_min: null }));
+    const all = [...extra, ...listed];
+    return query.trim() ? all.filter((m) => titleMatches(m.title, query)) : all;
+  });
+  const shownChoices = $derived(more || query.trim() ? choices : choices.slice(0, FIRST_FILMS));
 
   // Séances de chaque film choisi : un appel par film (4 au plus), gardé tant que les
-  // réglages ne changent pas (ajouter un film ne redemande pas les autres).
+  // réglages ne changent pas.
   const fetched: Record<string, PlanStop[]> = {};
   const showtimes = resource(
-    () => (open && films.length ? { ...searchArgs, ids: films.map((f) => f.id) } : null),
+    () =>
+      open && step === 'results' && films.length
+        ? { ...searchArgs, ids: films.map((f) => f.id) }
+        : null,
     async (args, signal) => {
       if (!args) return null;
       const { ids, ...filters } = args;
@@ -107,38 +117,55 @@
   const result = $derived(
     lists && available.length
       ? composeOrDrop(
-          fixed,
+          [],
           lists.filter((l) => l.length > 0),
         )
       : null,
   );
 
-  function addFilm(movie: MovieSummary) {
-    if (wanted.items.length >= MAX_FILMS) return;
-    wanted.set([
-      ...wanted.items,
-      { id: movie.id, title: movie.title, poster_url: movie.poster_url },
-    ]);
-    query = '';
+  function openComposer() {
+    // Les films de la journée sont déjà cochés : composer, c'est recomposer toute la journée.
+    if (!wanted.items.length) {
+      const seen: WantedMovie[] = [];
+      for (const s of day) {
+        if (!seen.some((w) => w.id === s.movie.id)) {
+          seen.push({ id: s.movie.id, title: s.movie.title, poster_url: null });
+        }
+      }
+      wanted.set(seen.slice(0, MAX_FILMS));
+    }
+    step = 'pick';
+    open = true;
+  }
+
+  function toggleFilm(film: Choice) {
+    if (wanted.has(film.id)) wanted.remove(film.id);
+    else if (wanted.items.length < MAX_FILMS) {
+      wanted.set([
+        ...wanted.items,
+        { id: film.id, title: film.title, poster_url: film.poster_url },
+      ]);
+    }
   }
 
   function choose(plan: ComposedPlan) {
-    programme.set([...programme.items, ...($state.snapshot(plan.added) as PlanStop[])]);
-    wanted.set([]);
-    open = false;
+    programme.set([
+      ...programme.items.filter((s) => s.date !== date),
+      ...($state.snapshot(plan.stops) as PlanStop[]),
+    ]);
+    close();
   }
 
   function close() {
     open = false;
     wanted.set([]);
     query = '';
+    more = false;
   }
-
-  const isAdded = (plan: ComposedPlan, stop: PlanStop) => plan.added.some((s) => s.id === stop.id);
 </script>
 
 {#if !open}
-  <button class="button" onclick={() => (open = true)}>
+  <button class="button" onclick={openComposer}>
     <Icon name="sliders" size={16} /> Composer automatiquement
   </button>
 {:else}
@@ -149,49 +176,6 @@
         ><Icon name="close" size={16} /></button
       >
     </header>
-
-    <div class="films">
-      {#each wanted.items as film (film.id)}
-        <button
-          class="chip on"
-          onclick={() => wanted.remove(film.id)}
-          aria-label="Retirer {film.title}"
-        >
-          {film.title}
-          <Icon name="close" size={14} />
-        </button>
-      {/each}
-    </div>
-
-    {#if wanted.items.length < MAX_FILMS}
-      <input
-        class="search"
-        type="search"
-        placeholder={wanted.items.length
-          ? 'Ajouter un autre film'
-          : 'Quels films voulez-vous voir ?'}
-        aria-label="Ajouter un film"
-        bind:value={query}
-      />
-      {#if suggestions.length}
-        <ul class="suggestions">
-          {#each suggestions as movie (movie.id)}
-            <li>
-              <button class="suggestion" onclick={() => addFilm(movie)}>
-                <Poster url={movie.poster_url} title={movie.title} width={32} height={43} />
-                <span>
-                  {movie.title}
-                  <span class="muted small">{formatRuntime(movie.runtime_min) ?? ''}</span>
-                </span>
-                <Icon name="plus" size={16} />
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {:else if query.trim() && showing.data}
-        <p class="muted small">Aucun film à l'affiche à moins de {radius} km ne correspond.</p>
-      {/if}
-    {/if}
 
     <div class="settings">
       <div class="scroll-row" role="group" aria-label="À partir de">
@@ -211,78 +195,139 @@
       </div>
     </div>
 
-    {#if films.length}
+    {#if step === 'pick'}
+      <p class="muted small">
+        Cochez 1 à {MAX_FILMS} films{day.length
+          ? ' (ceux de votre journée le sont déjà ; tous leurs horaires seront revus)'
+          : ''}.
+      </p>
+      <input
+        class="search"
+        type="search"
+        placeholder="Chercher un film"
+        aria-label="Chercher un film"
+        bind:value={query}
+      />
+      <Status
+        loading={showing.loading && !showing.data}
+        error={showing.error}
+        retry={showing.retry}
+      />
+      {#if shownChoices.length}
+        <ul class="choices">
+          {#each shownChoices as film (film.id)}
+            {@const checked = wanted.has(film.id)}
+            <li>
+              <button
+                class="choice"
+                class:checked
+                aria-pressed={checked}
+                disabled={!checked && films.length >= MAX_FILMS}
+                onclick={() => toggleFilm(film)}
+              >
+                <Poster url={film.poster_url} title={film.title} width={32} height={43} />
+                <span>
+                  {film.title}
+                  <span class="muted small">{formatRuntime(film.runtime_min) ?? ''}</span>
+                </span>
+                <span class="box" aria-hidden="true">
+                  {#if checked}<Icon name="check" size={14} />{/if}
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if shownChoices.length < choices.length}
+          <button class="link" onclick={() => (more = true)}>
+            Plus de films ({choices.length - shownChoices.length})
+          </button>
+        {/if}
+      {:else if showing.data}
+        <p class="muted small">Aucun film à l'affiche à moins de {radius} km ne correspond.</p>
+      {/if}
+      <div class="validate">
+        <button
+          class="button primary"
+          disabled={films.length === 0}
+          onclick={() => {
+            step = 'results';
+            query = '';
+          }}
+        >
+          {films.length === 0
+            ? 'Cochez au moins un film'
+            : `Composer avec ${films.length} film${films.length > 1 ? 's' : ''}`}
+        </button>
+      </div>
+    {:else}
+      <div class="summary">
+        <span class="small">{films.map((f) => f.title).join(' · ')}</span>
+        <button class="link small" onclick={() => (step = 'pick')}>Modifier</button>
+      </div>
+
       <Status
         loading={showtimes.loading && !showtimes.data}
         error={showtimes.error}
         retry={showtimes.retry}
       />
-    {/if}
 
-    {#if missing.length}
-      <p class="notice small">
-        {missing.map((f) => `« ${f.title} »`).join(', ')}
-        {missing.length > 1 ? 'ne passent' : 'ne passe'} pas à moins de {radius} km après {after}.
-      </p>
-    {/if}
-    {#if result}
-      {#if result.plans.length === 0}
+      {#if missing.length}
         <p class="notice small">
-          Impossible de caser ces films dans la journée : essayez plus tôt ou plus loin.
+          {missing.map((f) => `« ${f.title} »`).join(', ')}
+          {missing.length > 1 ? 'ne passent' : 'ne passe'} pas à moins de {radius} km après {after}.
         </p>
-      {:else}
-        {#if result.dropped !== null}
-          <p class="notice small">
-            Impossible de tout caser ; sans « {available[result.dropped]?.title} » :
-          </p>
-        {/if}
-        <ol class="plans" class:stale={showtimes.loading}>
-          {#each result.plans as plan, i (plan.added.map((s) => s.id).join())}
-            <li class="plan">
-              <ol class="plan-stops">
-                {#each plan.stops as stop, j (stop.id)}
-                  {@const added = isAdded(plan, stop)}
-                  <li class:fixed={!added}>
-                    <strong class="time">{timeOf(stop.starts_at)}</strong>
-                    <span class="what">
-                      <span class="title">{stop.movie.title}</span>
-                      <span class="muted small"
-                        >{stop.cinema.name} · {stop.version}{added ? '' : ' · déjà prévue'}</span
-                      >
-                    </span>
-                  </li>
-                  {#if plan.stops[j + 1]}
-                    {@const l = link(stop, plan.stops[j + 1]!)}
-                    <li class="between {l.status}">
-                      {l.travel.mode === 'same' ? 'Même cinéma' : travelLabel(l.travel)} · {linkLabel(
-                        l,
-                      ).toLowerCase()}
-                    </li>
-                  {/if}
-                {/each}
-              </ol>
-              <div class="plan-foot">
-                <span class="muted small">
-                  Fin {clock(plan.end)} · {plan.travels === 0
-                    ? 'sans trajet'
-                    : `${plan.travels} trajet${plan.travels > 1 ? 's' : ''}`} · {duration(
-                    plan.wait,
-                  )} entre les films
-                </span>
-                <button class="button small" class:primary={i === 0} onclick={() => choose(plan)}
-                  >Choisir</button
-                >
-              </div>
-            </li>
-          {/each}
-        </ol>
       {/if}
-    {:else if !films.length && !missing.length}
-      <p class="muted small">
-        Choisissez 1 à {MAX_FILMS} films : Cinemap cherche les enchaînements avec le moins d'attente{fixed.length
-          ? ', autour des séances déjà prévues'
-          : ''}.
-      </p>
+      {#if result}
+        {#if result.plans.length === 0}
+          <p class="notice small">
+            Impossible de caser ces films dans la journée : essayez plus tôt ou plus loin.
+          </p>
+        {:else}
+          {#if result.dropped !== null}
+            <p class="notice small">
+              Impossible de tout caser ; sans « {available[result.dropped]?.title} » :
+            </p>
+          {/if}
+          <ol class="plans" class:stale={showtimes.loading}>
+            {#each result.plans as plan, i (plan.stops.map((s) => s.id).join())}
+              <li class="plan">
+                <ol class="plan-stops">
+                  {#each plan.stops as stop, j (stop.id)}
+                    <li>
+                      <strong class="time">{timeOf(stop.starts_at)}</strong>
+                      <span class="what">
+                        <span class="title">{stop.movie.title}</span>
+                        <span class="muted small">{stop.cinema.name} · {stop.version}</span>
+                      </span>
+                    </li>
+                    {#if plan.stops[j + 1]}
+                      {@const l = link(stop, plan.stops[j + 1]!)}
+                      <li class="between {l.status}">
+                        {l.travel.mode === 'same' ? 'Même cinéma' : travelLabel(l.travel)} · {linkLabel(
+                          l,
+                        ).toLowerCase()}
+                      </li>
+                    {/if}
+                  {/each}
+                </ol>
+                <div class="plan-foot">
+                  <span class="muted small">
+                    Fin {clock(plan.end)} · {plan.travels === 0
+                      ? 'sans trajet'
+                      : `${plan.travels} trajet${plan.travels > 1 ? 's' : ''}`}{plan.stops.length >
+                    1
+                      ? ` · ${duration(plan.wait)} entre les films`
+                      : ''}
+                  </span>
+                  <button class="button small" class:primary={i === 0} onclick={() => choose(plan)}
+                    >{day.length ? 'Remplacer ma journée' : 'Choisir'}</button
+                  >
+                </div>
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      {/if}
     {/if}
   </section>
 {/if}
@@ -350,7 +395,7 @@
     background: var(--surface);
   }
 
-  .suggestions {
+  .choices {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -358,7 +403,7 @@
     gap: 0.3rem;
   }
 
-  .suggestion {
+  .choice {
     width: 100%;
     display: flex;
     align-items: center;
@@ -370,19 +415,72 @@
     text-align: left;
   }
 
-  .suggestion:hover {
+  .choice:hover {
     background: var(--surface-2);
   }
 
-  .suggestion > span {
+  .choice > span:not(.box) {
     flex: 1;
     min-width: 0;
     display: grid;
     font-weight: 550;
   }
 
-  .suggestion :global(svg) {
+  .choice:disabled {
+    opacity: 0.45;
+  }
+
+  .box {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.3rem;
+    height: 1.3rem;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .checked .box {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+
+  .link {
+    justify-self: start;
+    border: none;
+    background: none;
+    padding: 0;
     color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Le bouton de validation reste visible pendant qu'on fait défiler la liste. */
+  .validate {
+    position: sticky;
+    bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    display: grid;
+    padding-top: 0.3rem;
+  }
+
+  .validate .button {
+    justify-content: center;
+    box-shadow: var(--shadow);
+  }
+
+  .validate .button:disabled {
+    background: var(--surface-2);
+    border-color: var(--border);
+    color: var(--muted);
+    box-shadow: none;
+  }
+
+  .summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-weight: 600;
   }
 
   .settings {
@@ -448,10 +546,6 @@
 
   .title {
     font-weight: 650;
-  }
-
-  .fixed {
-    opacity: 0.6;
   }
 
   .between {

@@ -7,6 +7,8 @@
   import { dateLabel, timeOf } from '../lib/format';
   import {
     clock,
+    dayRoute,
+    directionsUrl,
     DEFAULT_RUNTIME_MIN,
     endMinutes,
     linkLabel,
@@ -45,11 +47,17 @@
 
   const stops = $derived(shared ? (sharedStops.data?.stops ?? []) : stopsOf(date));
   const steps = $derived(plan(stops));
+  /** Changements de cinéma dans la journée (0 : pas de trajet à montrer). */
+  const moves = $derived(Math.max(dayRoute(stops).path.length - 1, 0));
   const problems = $derived(steps.filter((s) => s.next && s.next.status !== 'ok').length);
 
   $effect(() => {
-    const seen = new Map(stops.map((s) => [s.cinema.id, s.cinema]));
-    map.show([...seen.values()]);
+    const route = dayRoute(stops);
+    map.show(
+      route.stops.map((s) => s.cinema),
+      null,
+      route,
+    );
   });
 
   let copied = $state(false);
@@ -144,7 +152,7 @@
 
 {#if !shared}
   <div class="compose">
-    <Composer {date} fixed={stopsOf(date)} />
+    <Composer {date} day={stopsOf(date)} />
   </div>
 {/if}
 
@@ -165,6 +173,11 @@
 {/if}
 
 {#if steps.length}
+  {#if moves}
+    <button class="button small route-toggle" onclick={() => (map.open = true)}>
+      <Icon name="map" size={15} /> Voir le trajet sur la carte
+    </button>
+  {/if}
   {#if problems}
     <p class="notice">
       <Icon name="alert" size={16} />
@@ -176,7 +189,7 @@
   {/if}
 
   <ol class="steps" class:stale={shared && sharedStops.loading}>
-    {#each steps as { stop, next } (stop.id)}
+    {#each steps as { stop, next }, i (stop.id)}
       <li class="stop card">
         <div class="times">
           <strong>{timeOf(stop.starts_at)}</strong>
@@ -220,6 +233,14 @@
             {next.status === 'short' || next.status === 'overlap'
               ? linkLabel(next)
               : `${next.travel.mode === 'same' ? 'Même cinéma' : travelLabel(next.travel)} · ${linkLabel(next).toLowerCase()}`}
+            {#if next.travel.mode !== 'same' && next.status !== 'overlap'}
+              ·
+              <a
+                href={directionsUrl(stop.cinema, steps[i + 1]!.stop.cinema, next.travel.mode)}
+                target="_blank"
+                rel="noopener">Itinéraire</a
+              >
+            {/if}
           </span>
         </li>
       {/if}
@@ -276,6 +297,22 @@
 
   p {
     margin: 0;
+  }
+
+  /* Sur mobile, la carte est cachée : ce bouton l'ouvre. Sur ordinateur, elle est déjà là. */
+  .route-toggle {
+    margin-bottom: 0.8rem;
+  }
+
+  @media (min-width: 900px) {
+    .route-toggle {
+      display: none;
+    }
+  }
+
+  .link a {
+    color: inherit;
+    font-weight: 600;
   }
 
   .compose {

@@ -196,6 +196,44 @@ export function followUps(from: PlanStop, candidates: PlanStop[]): FollowUp[] {
     );
 }
 
+/**
+ * Le trajet de la journée pour la carte : les cinémas dans l'ordre de visite (sans
+ * répéter deux séances de suite au même endroit) et, par cinéma, ses numéros d'étape
+ * (« 1 · 3 » si on y revient).
+ */
+export function dayRoute(stops: PlanStop[]): {
+  path: PlanStop['cinema'][];
+  stops: { cinema: PlanStop['cinema']; label: string }[];
+} {
+  const path: PlanStop['cinema'][] = [];
+  for (const s of [...stops].sort((a, b) => startMinutes(a) - startMinutes(b))) {
+    if (path.at(-1)?.id !== s.cinema.id) path.push(s.cinema);
+  }
+  const labels = new Map<string, { cinema: PlanStop['cinema']; numbers: number[] }>();
+  path.forEach((cinema, i) => {
+    const entry = labels.get(cinema.id) ?? { cinema, numbers: [] };
+    entry.numbers.push(i + 1);
+    labels.set(cinema.id, entry);
+  });
+  return {
+    path,
+    stops: [...labels.values()].map(({ cinema, numbers }) => ({
+      cinema,
+      label: numbers.join(' · '),
+    })),
+  };
+}
+
+/** Lien Google Maps du trajet entre deux cinémas (à pied ou en transports). */
+export function directionsUrl(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  mode: Travel['mode'],
+): string {
+  const travelmode = mode === 'transit' ? 'transit' : 'walking';
+  return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${travelmode}`;
+}
+
 export type FollowUpGroup = { key: string; movieId: number; items: FollowUp[] };
 
 /**

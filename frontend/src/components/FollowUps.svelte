@@ -124,7 +124,8 @@
 </script>
 
 {#if tooLate}
-  <!-- Fin après minuit : `after` ne dépasse pas le jour ciné, rien à proposer. -->
+  <!-- `after` ne dépasse pas le jour ciné : on le dit plutôt que de cacher le bouton. -->
+  <p class="muted small">Dernière séance finie après minuit : rien à enchaîner ce jour-là.</p>
 {:else if !open}
   <button class="button" onclick={() => (open = true)}>
     <Icon name="plus" size={16} /> Enchaîner un film

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   clock,
   conflicts,
+  dayRoute,
+  directionsUrl,
   distanceKm,
   endMinutes,
   followUps,
@@ -257,5 +259,27 @@ describe('groupFollowUps', () => {
       ['3@C0159', ['3']],
       ['2@C0065', ['2', '4', '2']],
     ]);
+  });
+});
+
+describe('dayRoute', () => {
+  it('orders cinemas, merges consecutive visits and numbers returns', () => {
+    const route = dayRoute([
+      stop('c', '2026-10-11T20:00:00', 90),
+      stop('a', '2026-10-11T11:00:00', 90),
+      stop('b', '2026-10-11T14:00:00', 90, HALLES),
+      stop('b2', '2026-10-11T16:30:00', 90, HALLES),
+    ]);
+    expect(route.path.map((c) => c.id)).toEqual(['C0065', 'C0159', 'C0065']);
+    expect(route.stops.map((s) => [s.cinema.id, s.label])).toEqual([
+      ['C0065', '1 · 3'],
+      ['C0159', '2'],
+    ]);
+  });
+
+  it('builds a directions link', () => {
+    expect(directionsUrl(REX, HALLES, 'transit')).toBe(
+      'https://www.google.com/maps/dir/?api=1&origin=48.8707,2.3477&destination=48.8617,2.3464&travelmode=transit',
+    );
   });
 });

@@ -5,11 +5,11 @@
     Map as MlMap,
     MapLayerMouseEvent,
   } from 'maplibre-gl';
-  import type { FeatureCollection, Point } from 'geojson';
+  import type { FeatureCollection, LineString, Point } from 'geojson';
   import { onMount } from 'svelte';
   import type { Position } from '../lib/api/client';
   import type { CinemaSummary } from '../lib/api/types';
-  import { app, map, type MapCinema } from '../lib/app.svelte';
+  import { app, map, type MapCinema, type MapRoute } from '../lib/app.svelte';
   import { cinemaMatches } from '../lib/filters';
   import { favorites } from '../lib/favorites.svelte';
   import { router } from '../lib/router.svelte';
@@ -94,6 +94,36 @@
     return card;
   }
 
+  function routeLine(route: MapRoute | null): FeatureCollection<LineString> {
+    const path = route?.path ?? [];
+    return {
+      type: 'FeatureCollection',
+      features:
+        path.length < 2
+          ? []
+          : [
+              {
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: path.map((p) => [p.lng, p.lat]) },
+                properties: {},
+              },
+            ],
+    };
+  }
+
+  /** Numéros d'étape, seulement s'il y a un trajet (un seul cinéma : rien à montrer). */
+  function routeStops(route: MapRoute | null): FeatureCollection<Point> {
+    const stops = route && route.path.length > 1 ? route.stops : [];
+    return {
+      type: 'FeatureCollection',
+      features: stops.map(({ cinema, label }) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [cinema.lng, cinema.lat] },
+        properties: { id: cinema.id, name: cinema.name, label },
+      })),
+    };
+  }
+
   /** Position et rayon : si l'un change, le cadrage retenu ne vaut plus. */
   const cameraKey = () => `${app.position.lat},${app.position.lng},${app.radiusKm}`;
 
@@ -140,6 +170,8 @@
     m.addSource('favorites', { type: 'geojson', data: features([]) });
     m.addSource('highlight', { type: 'geojson', data: features([]) });
     m.addSource('position', { type: 'geojson', data: point(app.position) });
+    m.addSource('route-line', { type: 'geojson', data: routeLine(null) });
+    m.addSource('route-stops', { type: 'geojson', data: routeStops(null) });
 
     m.addLayer({
       id: 'other',
@@ -227,6 +259,14 @@
       },
       paint: { 'text-color': text, 'text-halo-color': surface, 'text-halo-width': 1.5 },
     });
+    // Trajet de la journée : sous les points, pour ne pas les masquer.
+    m.addLayer({
+      id: 'route-line',
+      type: 'line',
+      source: 'route-line',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': accent, 'line-width': 3, 'line-dasharray': [1.5, 1.5] },
+    });
     m.addLayer({
       id: 'highlight',
       type: 'circle',
@@ -252,6 +292,29 @@
         'text-optional': true,
       },
       paint: { 'text-color': text, 'text-halo-color': surface, 'text-halo-width': 1.5 },
+    });
+    m.addLayer({
+      id: 'route-stop',
+      type: 'circle',
+      source: 'route-stops',
+      paint: {
+        'circle-color': accent,
+        'circle-radius': ['case', ['>', ['length', ['get', 'label']], 2], 15, 11],
+        'circle-stroke-color': surface,
+        'circle-stroke-width': 2,
+      },
+    });
+    m.addLayer({
+      id: 'route-stop-label',
+      type: 'symbol',
+      source: 'route-stops',
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': font,
+        'text-size': 11,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': css.getPropertyValue('--accent-text').trim() },
     });
     m.addLayer({
       id: 'position',
@@ -334,7 +397,7 @@
           offset: 12,
           maxWidth: '260px',
         });
-        for (const layer of ['other', 'cinema', 'favorite', 'highlight']) {
+        for (const layer of ['other', 'cinema', 'favorite', 'highlight', 'route-stop']) {
           m.on('click', layer, (e: MapLayerMouseEvent) => {
             const f = e.features?.[0];
             const id = f?.properties?.id as string | undefined;
@@ -416,6 +479,13 @@
     (instance?.getSource('highlight') as GeoJSONSource | undefined)?.setData(
       features(map.highlighted),
     );
+  });
+
+  $effect(() => {
+    void styleVersion;
+    const route = map.route;
+    (instance?.getSource('route-line') as GeoJSONSource | undefined)?.setData(routeLine(route));
+    (instance?.getSource('route-stops') as GeoJSONSource | undefined)?.setData(routeStops(route));
   });
 
   // Cadrage : le cinéma affiché, sinon les cinémas mis en avant et la position, sinon le rayon.

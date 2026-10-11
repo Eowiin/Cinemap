@@ -81,12 +81,19 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 
 ## Composer automatiquement (2026-10-11)
 
-- Bloc en haut de **Ma journée**, fermé par défaut. On choisit 1 à 4 films (recherche sur les films à l'affiche autour, les plus diffusés proposés tant qu'aucun n'est choisi), « dès » maintenant / 14 h / 18 h… (14 h par défaut un autre jour), 2, 5 ou 10 km autour de la position. Filtres en cours appliqués (version, cartes, favoris). Les films choisis restent dans le navigateur (`cinemap:compose`) : on peut aller voir une fiche et revenir.
-- Les séances déjà prévues restent fixes : l'automatique complète autour (affichées atténuées, « déjà prévue »).
-- **Classement** (`lib/composer.ts`, pur, testé) : le moins d'attente entre les films (trajets compris), un enchaînement « juste » compte 15 min de plus, puis le moins de trajets, puis finir tôt. 3 journées proposées, « Choisir » les ajoute.
+- Bloc en haut de **Ma journée**, fermé par défaut. **Deux temps** (revu le soir même : la liste disparaissait dès le premier film choisi) : on **coche** 1 à 4 films dans la liste des films à l'affiche autour (8 puis « Plus de films », recherche par titre, bouton « Composer avec n films » qui reste visible en bas), puis les propositions s'affichent (« Modifier » revient à la liste).
+- **Composer, c'est recomposer la journée** (revu le même soir : l'automatique complétait autour des séances prévues, et un seul film se collait à la suite) : les films de la journée sont déjà cochés, tous les horaires sont libres, et « Remplacer ma journée » remplace les séances du jour.
+- Réglages : « dès » maintenant / 14 h / 18 h… (14 h par défaut un autre jour), 2, 5 ou 10 km autour de la position. Filtres en cours appliqués (version, cartes, favoris). Les films cochés restent dans le navigateur (`cinemap:compose`) : on peut aller voir une fiche et revenir, le bloc se rouvre tel quel.
+- **Classement** (`lib/composer.ts`, pur, testé) : le moins d'attente entre les films (trajets compris), un enchaînement « juste » compte 15 min de plus, puis le moins de trajets, puis finir tôt. 3 journées proposées.
 - **Calcul** : tous les ordres des films (24 pour 4), et pour chaque film les 6 premières séances possibles après la précédente (une plus tardive n'ajoute que de l'attente). Heures et trajets entre cinémas calculés une fois. Mesuré : 4 films × 50 séances dans 30 cinémas, **~20 ms** (580 ms avant ces caches).
 - Un film sans séance dans ces conditions est signalé et la journée se compose sans lui ; si tous ne tiennent pas, les meilleures journées sans l'un d'eux (« Impossible de tout caser ; sans « X » »).
-- Requêtes : `/api/movies` pour les suggestions (souvent en cache), puis un `/api/movies/{id}/showtimes` par film, gardé tant que les réglages ne changent pas.
+- Requêtes : `/api/movies` pour la liste (souvent en cache), puis un `/api/movies/{id}/showtimes` par film coché, gardé tant que les réglages ne changent pas.
+
+## Trajet de la journée (2026-10-11)
+
+- Sur la carte, les cinémas de Ma journée numérotés dans l'ordre (« 1 · 3 » si on y revient), reliés par une ligne pointillée (`planner.dayRoute`, `map.route`). Rien si tout se passe dans un seul cinéma.
+- Mobile : bouton « Voir le trajet sur la carte » (la carte est cachée) ; ordinateur : la carte est déjà là.
+- Lien « Itinéraire » sur chaque trajet entre deux séances : Google Maps, à pied ou en transports selon l'estimation. Un lien par trajet : Google ne gère pas les étapes intermédiaires en transports.
 
 ## Couverture (2026-10-09)
 
