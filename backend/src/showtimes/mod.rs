@@ -3,7 +3,7 @@ mod db;
 mod mapping;
 
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     sync::{
         Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
@@ -238,6 +238,39 @@ fn observe_response(
     }
 }
 
+/// Ce qui a changé un jour donné, tous cinémas confondus : sert à choisir quels jours
+/// redemander chaque nuit (`PLAN.md`, point 4).
+#[derive(Debug, Default, PartialEq)]
+struct DayChanges {
+    /// Couples (cinéma, date) écrits.
+    pairs: usize,
+    /// Couples dont au moins une séance est apparue ou a disparu.
+    changed_pairs: usize,
+    added: usize,
+    removed: usize,
+    renumbered: usize,
+}
+
+impl DayChanges {
+    fn record(&mut self, saved: &db::SaveReport) {
+        self.pairs += 1;
+        if saved.added > 0 || saved.removed > 0 {
+            self.changed_pairs += 1;
+        }
+        self.added += saved.added;
+        self.removed += saved.removed;
+        self.renumbered += saved.renumbered;
+    }
+
+    fn merge(&mut self, other: &Self) {
+        self.pairs += other.pairs;
+        self.changed_pairs += other.changed_pairs;
+        self.added += other.added;
+        self.removed += other.removed;
+        self.renumbered += other.renumbered;
+    }
+}
+
 /// Résultat d'un cinéma : les dates non terminées (erreur ou coupe-circuit) se déduisent
 /// de `dates.len() - completed_dates`.
 #[derive(Debug, Default)]
@@ -246,6 +279,7 @@ struct CinemaReport {
     showtimes: usize,
     /// Dates vidées sans requête : AlloCiné avait déjà dit qu'il n'y aurait rien.
     skipped_dates: usize,
+    changes: BTreeMap<NaiveDate, DayChanges>,
 }
 
 /// Compteurs du run. `ok_dates` / `error_dates` sont des couples (cinéma, date), comme
@@ -263,6 +297,7 @@ struct RunReport {
     circuit_breaker_tripped: bool,
     slowdowns: usize,
     final_interval: Duration,
+    changes: BTreeMap<NaiveDate, DayChanges>,
 }
 
 impl RunReport {
@@ -277,6 +312,9 @@ impl RunReport {
         self.error_dates += failed_dates;
         self.showtimes += cinema.showtimes;
         self.skipped_dates += cinema.skipped_dates;
+        for (date, changes) in &cinema.changes {
+            self.changes.entry(*date).or_default().merge(changes);
+        }
     }
 }
 
@@ -340,9 +378,10 @@ async fn scrape_cinema(
         };
         // Même vide, on enregistre : ça efface les séances d'un ancien run pour ce jour.
         match db::save_showtimes(&pool, &cinema_id, &date_string, &movies).await {
-            Ok(written) => {
+            Ok(saved) => {
                 report.completed_dates += 1;
-                report.showtimes += written;
+                report.showtimes += saved.written;
+                report.changes.entry(*date).or_default().record(&saved);
             }
             Err(error) => {
                 warn!(cinema = %cinema_id, %date_string, error = %format!("{error:#}"), "Écriture des séances en échec");
@@ -437,6 +476,7 @@ fn log_run_report(
     summary: &db::ShowtimesSummary,
     purged: u64,
     elapsed: Duration,
+    today: NaiveDate,
 ) {
     info!(
         cinemas_ok = report.successful_cinemas,
@@ -464,6 +504,19 @@ fn log_run_report(
         sans_lien = summary.without_booking_url,
         "État de la base après le run"
     );
+    // Un jour demandé pour la première fois (le dernier de `--days`) compte tout en ajouts.
+    for (date, changes) in &report.changes {
+        info!(
+            jour = %date,
+            avance_j = (*date - today).num_days(),
+            couples = changes.pairs,
+            couples_modifies = changes.changed_pairs,
+            seances_ajoutees = changes.added,
+            seances_retirees = changes.removed,
+            seances_renumerotees = changes.renumbered,
+            "Changements du programme"
+        );
+    }
 }
 
 pub async fn scrape(
@@ -510,7 +563,7 @@ pub async fn scrape(
     let purged = db::purge_past_showtimes(pool, &today.format(DATE_FORMAT).to_string()).await?;
     db::finish_run(pool, run_id, report.ok_dates, report.error_dates).await?;
     let summary = db::showtimes_summary(pool).await?;
-    log_run_report(&report, &summary, purged, started.elapsed());
+    log_run_report(&report, &summary, purged, started.elapsed(), today);
 
     // Code de sortie non nul pour le cron : coupe-circuit ou run entièrement raté.
     if report.circuit_breaker_tripped {
@@ -585,11 +638,13 @@ mod tests {
             completed_dates: 3,
             showtimes: 10,
             skipped_dates: 2,
+            ..CinemaReport::default()
         };
         let partial = CinemaReport {
             completed_dates: 1,
             showtimes: 2,
             skipped_dates: 0,
+            ..CinemaReport::default()
         };
         report.add_cinema(&complete, 3);
         report.add_cinema(&partial, 3);
@@ -604,6 +659,50 @@ mod tests {
             ),
             (1, 1, 4, 2, 12, 2)
         );
+    }
+
+    #[test]
+    fn run_report_sums_changes_per_day() {
+        let monday = NaiveDate::from_ymd_opt(2026, 10, 12).unwrap();
+        let tuesday = NaiveDate::from_ymd_opt(2026, 10, 13).unwrap();
+        let mut unchanged = DayChanges::default();
+        unchanged.record(&db::SaveReport {
+            written: 5,
+            added: 0,
+            removed: 0,
+            renumbered: 0,
+        });
+        let mut changed = DayChanges::default();
+        changed.record(&db::SaveReport {
+            written: 4,
+            added: 2,
+            removed: 1,
+            renumbered: 3,
+        });
+        let first = CinemaReport {
+            changes: BTreeMap::from([(monday, unchanged), (tuesday, DayChanges::default())]),
+            ..CinemaReport::default()
+        };
+        let second = CinemaReport {
+            changes: BTreeMap::from([(monday, changed)]),
+            ..CinemaReport::default()
+        };
+
+        let mut report = RunReport::default();
+        report.add_cinema(&first, 0);
+        report.add_cinema(&second, 0);
+
+        assert_eq!(
+            report.changes[&monday],
+            DayChanges {
+                pairs: 2,
+                changed_pairs: 1,
+                added: 2,
+                removed: 1,
+                renumbered: 3,
+            }
+        );
+        assert_eq!(report.changes[&tuesday], DayChanges::default());
     }
 
     #[test]

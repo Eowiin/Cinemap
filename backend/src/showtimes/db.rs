@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use anyhow::Result;
 use sqlx::SqlitePool;
 use sqlx::{Sqlite, Transaction};
@@ -15,13 +17,78 @@ use super::{
 /// On ne la garde qu'en J-1 (vu sur G02BG le 2026-10-08 : contrainte UNIQUE sur `showtimes.id`).
 const CINE_DAY_STARTS_AT: &str = "05:00:00";
 
-/// Remplace les séances du couple (cinéma, date) et renvoie le nombre de séances écrites.
+/// Bilan d'écriture d'un couple (cinéma, date), pour mesurer à quelle avance le programme
+/// bouge vraiment (`PLAN.md`, point 4). `added` / `removed` comparent ce que voit
+/// l'utilisateur (film, heure, version, formats) ; `renumbered` compte les séances au contenu
+/// inchangé mais à l'ID AlloCiné différent (lien de réservation à rafraîchir). Un jour
+/// jamais scrapé compte tout en `added`.
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct SaveReport {
+    pub written: usize,
+    pub added: usize,
+    pub removed: usize,
+    pub renumbered: usize,
+}
+
+/// Une séance telle que la compare `diff_showtimes` : l'ID, puis le contenu.
+type StoredShowtime = (String, i64, String, String, String);
+
+const SELECT_STORED: &str = "SELECT id, movie_id, starts_at, version, formats FROM showtimes
+     WHERE cinema_id = ? AND date = ?";
+
+async fn stored_showtimes(
+    tx: &mut Transaction<'_, Sqlite>,
+    cinema_id: &str,
+    date: &str,
+) -> Result<Vec<StoredShowtime>> {
+    Ok(sqlx::query_as(SELECT_STORED)
+        .bind(cinema_id)
+        .bind(date)
+        .fetch_all(&mut **tx)
+        .await?)
+}
+
+/// `(added, removed, renumbered)`. Le contenu peut se répéter (deux salles à la même heure) :
+/// on compte les occurrences, pas seulement leur présence.
+fn diff_showtimes(
+    previous: &[StoredShowtime],
+    current: &[StoredShowtime],
+) -> (usize, usize, usize) {
+    let mut by_content: HashMap<(i64, &str, &str, &str), isize> = HashMap::new();
+    for (_, movie, starts_at, version, formats) in previous {
+        *by_content
+            .entry((*movie, starts_at, version, formats))
+            .or_default() -= 1;
+    }
+    for (_, movie, starts_at, version, formats) in current {
+        *by_content
+            .entry((*movie, starts_at, version, formats))
+            .or_default() += 1;
+    }
+    let added = by_content
+        .values()
+        .filter(|n| **n > 0)
+        .map(|n| n.unsigned_abs())
+        .sum();
+    let removed = by_content
+        .values()
+        .filter(|n| **n < 0)
+        .map(|n| n.unsigned_abs())
+        .sum();
+
+    // Parmi les séances au contenu inchangé, celles qui n'ont plus le même ID.
+    let previous: HashSet<&StoredShowtime> = previous.iter().collect();
+    let same_id = current.iter().filter(|row| previous.contains(row)).count();
+    (added, removed, current.len() - added - same_id)
+}
+
+/// Remplace les séances du couple (cinéma, date).
 pub(super) async fn save_showtimes(
     pool: &SqlitePool,
     cinema_id: &str,
     date: &str,
     movies: &[MovieResult],
-) -> Result<usize> {
+) -> Result<SaveReport> {
     let day_start = format!("{date}T{CINE_DAY_STARTS_AT}");
     let mut tx = pool.begin().await?;
 
@@ -29,6 +96,7 @@ pub(super) async fn save_showtimes(
         upsert_movie(&mut tx, &entry.movie).await?;
     }
 
+    let previous = stored_showtimes(&mut tx, cinema_id, date).await?;
     sqlx::query("DELETE FROM showtimes WHERE cinema_id = ? AND date = ?")
         .bind(cinema_id)
         .bind(date)
@@ -47,8 +115,15 @@ pub(super) async fn save_showtimes(
         }
     }
 
+    let current = stored_showtimes(&mut tx, cinema_id, date).await?;
+    let (added, removed, renumbered) = diff_showtimes(&previous, &current);
     tx.commit().await?;
-    Ok(written)
+    Ok(SaveReport {
+        written,
+        added,
+        removed,
+        renumbered,
+    })
 }
 
 /// Ouvre une ligne `scrape_runs` et renvoie son `id`. Tant que `finish_run` n'a pas été
@@ -367,13 +442,15 @@ mod tests {
         assert_eq!(
             save_showtimes(&pool, "C1", "2026-10-09", &movies)
                 .await
-                .unwrap(),
+                .unwrap()
+                .written,
             1
         );
         assert_eq!(
             save_showtimes(&pool, "C1", "2026-10-10", &movies)
                 .await
-                .unwrap(),
+                .unwrap()
+                .written,
             0
         );
 
@@ -382,6 +459,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(date, "2026-10-09");
+    }
+
+    fn stored(id: &str, starts_at: &str) -> StoredShowtime {
+        (id.into(), 1, starts_at.into(), "VF".into(), "[]".into())
+    }
+
+    #[test]
+    fn diff_separates_real_changes_from_renumbering() {
+        let previous = [
+            stored("a", "2026-10-12T14:00:00"),
+            stored("b", "2026-10-12T16:00:00"),
+            stored("c", "2026-10-12T18:00:00"),
+            stored("d", "2026-10-12T20:00:00"),
+            stored("e", "2026-10-12T20:00:00"),
+        ];
+        let current = [
+            stored("a", "2026-10-12T14:00:00"), // inchangée
+            stored("x", "2026-10-12T16:00:00"), // même séance, nouvel ID
+            stored("c", "2026-10-12T18:30:00"), // décalée
+            stored("d", "2026-10-12T20:00:00"), // une des deux salles de 20 h a disparu
+            stored("y", "2026-10-12T22:00:00"), // nouvelle
+        ];
+        assert_eq!(diff_showtimes(&previous, &current), (2, 2, 1));
+        assert_eq!(diff_showtimes(&[], &current), (5, 0, 0));
     }
 
     #[tokio::test]
@@ -482,9 +583,10 @@ mod tests {
             })
             .expect("la fixture doit contenir une séance avec une version reconnue");
 
-        save_showtimes(&pool, "C0159", "2026-10-06", &movies)
+        let first = save_showtimes(&pool, "C0159", "2026-10-06", &movies)
             .await
             .unwrap();
+        assert_eq!((first.added, first.removed), (first.written, 0));
         sqlx::query("UPDATE movies SET tmdb_id = 12345 WHERE id = ?")
             .bind(movie_id)
             .execute(&pool)
@@ -504,9 +606,18 @@ mod tests {
                 screenings.retain(|showtime| showtime.internal_id != removed_id);
             }
         }
-        save_showtimes(&pool, "C0159", "2026-10-06", &movies)
+        let second = save_showtimes(&pool, "C0159", "2026-10-06", &movies)
             .await
             .unwrap();
+        assert_eq!(
+            second,
+            SaveReport {
+                written: first.written - 1,
+                added: 0,
+                removed: 1,
+                renumbered: 0,
+            }
+        );
 
         let removed_count: i64 = sqlx::query_scalar("SELECT count(*) FROM showtimes WHERE id = ?")
             .bind(removed_id.to_string())
