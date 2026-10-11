@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::client::{RETRY_DELAYS, fetch_with_retries_and_hooks};
 use anyhow::{Context, bail};
@@ -410,9 +410,35 @@ pub(super) async fn fetch_showtimes(
                 response.message.as_deref().unwrap_or("message absent")
             );
         }
-        results.extend(response.results);
+        let duplicates = append_new_movies(&mut results, response.results);
+        if duplicates > 0 {
+            tracing::info!(
+                cinema_id,
+                date,
+                page,
+                duplicates,
+                "Films déjà vus sur une page précédente : ignorés"
+            );
+        }
     }
     Ok(Day::Showtimes(results))
+}
+
+/// Ajoute les films d'une page suivante sauf ceux déjà présents, et renvoie leur nombre.
+/// Cloudflare cache chaque page séparément : deux pages d'un même jour peuvent venir de deux
+/// versions du programme, et un film décalé d'une page apparaît alors deux fois (vu le
+/// 2026-10-11 sur C0026 : `UNIQUE constraint failed: showtimes.id` à l'écriture).
+fn append_new_movies(results: &mut Vec<MovieResult>, page: Vec<MovieResult>) -> usize {
+    let seen: HashSet<i64> = results
+        .iter()
+        .map(|entry| entry.movie.internal_id)
+        .collect();
+    let before = page.len();
+    results.extend(
+        page.into_iter()
+            .filter(|entry| !seen.contains(&entry.movie.internal_id)),
+    );
+    before - (results.len() - seen.len())
 }
 
 #[cfg(test)]
@@ -466,6 +492,29 @@ mod tests {
         P0095_PAGE_1,
         W5076_PAGE_1,
     ];
+
+    #[test]
+    fn append_new_movies_skips_movies_already_seen() {
+        let page = |ids: &[i64]| {
+            let results: Vec<String> = ids
+                .iter()
+                .map(|id| format!(r#"{{"movie":{{"internalId":{id},"title":"F"}}}}"#))
+                .collect();
+            serde_json::from_str::<Response>(&format!(
+                r#"{{"error":false,"results":[{}]}}"#,
+                results.join(",")
+            ))
+            .unwrap()
+            .results
+        };
+        let mut results = page(&[1, 2]);
+        assert_eq!(append_new_movies(&mut results, page(&[2, 3])), 1);
+        let ids: Vec<i64> = results
+            .iter()
+            .map(|entry| entry.movie.internal_id)
+            .collect();
+        assert_eq!(ids, [1, 2, 3]);
+    }
 
     #[test]
     fn showtimes_url_ends_with_a_slash_for_page_one() {
