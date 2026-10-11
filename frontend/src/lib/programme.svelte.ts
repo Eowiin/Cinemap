@@ -1,5 +1,6 @@
 import { addDays, parisNow } from './format';
 import { isPlanStop, type PlanStop } from './planner';
+import { isRecord } from './stored';
 import { StoredList } from './stored.svelte';
 
 /** Ma journée (le « programme ») : les séances choisies, gardées dans le navigateur, tous jours confondus. */
@@ -12,6 +13,17 @@ export const programme = new StoredList<PlanStop>('cinemap:programme', isPlanSto
   const kept = programme.items.filter((s) => s.date >= yesterday);
   if (kept.length !== programme.items.length) programme.set(kept);
 }
+
+/** Films à caser par « Composer automatiquement » (gardés pour revenir d'une fiche). */
+export type WantedMovie = { id: number; title: string; poster_url: string | null };
+
+const isWanted = (v: unknown): v is WantedMovie =>
+  isRecord(v) &&
+  typeof v.id === 'number' &&
+  typeof v.title === 'string' &&
+  (v.poster_url === null || typeof v.poster_url === 'string');
+
+export const wanted = new StoredList<WantedMovie>('cinemap:compose', isWanted);
 
 /** Séances du programme pour un jour. */
 export function stopsOf(date: string): PlanStop[] {

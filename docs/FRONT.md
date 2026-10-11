@@ -79,6 +79,15 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - `planner.followUps` / `groupFollowUps` : autre film, ni chevauchement ni trajet trop court, par heure puis distance. Fin après minuit : rien à proposer (`after` ne dépasse pas le jour ciné).
 - Menu d'une séance : **Réserver** en grand en tête, puis « Ajouter à ma journée » et « Voir ma journée → ».
 
+## Composer automatiquement (2026-10-11)
+
+- Bloc en haut de **Ma journée**, fermé par défaut. On choisit 1 à 4 films (recherche sur les films à l'affiche autour, les plus diffusés proposés tant qu'aucun n'est choisi), « dès » maintenant / 14 h / 18 h… (14 h par défaut un autre jour), 2, 5 ou 10 km autour de la position. Filtres en cours appliqués (version, cartes, favoris). Les films choisis restent dans le navigateur (`cinemap:compose`) : on peut aller voir une fiche et revenir.
+- Les séances déjà prévues restent fixes : l'automatique complète autour (affichées atténuées, « déjà prévue »).
+- **Classement** (`lib/composer.ts`, pur, testé) : le moins d'attente entre les films (trajets compris), un enchaînement « juste » compte 15 min de plus, puis le moins de trajets, puis finir tôt. 3 journées proposées, « Choisir » les ajoute.
+- **Calcul** : tous les ordres des films (24 pour 4), et pour chaque film les 6 premières séances possibles après la précédente (une plus tardive n'ajoute que de l'attente). Heures et trajets entre cinémas calculés une fois. Mesuré : 4 films × 50 séances dans 30 cinémas, **~20 ms** (580 ms avant ces caches).
+- Un film sans séance dans ces conditions est signalé et la journée se compose sans lui ; si tous ne tiennent pas, les meilleures journées sans l'un d'eux (« Impossible de tout caser ; sans « X » »).
+- Requêtes : `/api/movies` pour les suggestions (souvent en cache), puis un `/api/movies/{id}/showtimes` par film, gardé tant que les réglages ne changent pas.
+
 ## Couverture (2026-10-09)
 
 Séances mises à jour pour l'Île-de-France seulement (`lib/coverage.ts`). Message `CoverageNotice` : accueil et fiche film si la position est hors IDF, fiche d'un cinéma hors IDF.

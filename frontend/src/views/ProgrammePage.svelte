@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Composer from '../components/Composer.svelte';
   import FollowUps from '../components/FollowUps.svelte';
   import Icon from '../components/Icon.svelte';
   import Status from '../components/Status.svelte';
@@ -141,6 +142,12 @@
   {/if}
 </header>
 
+{#if !shared}
+  <div class="compose">
+    <Composer {date} fixed={stopsOf(date)} />
+  </div>
+{/if}
+
 {#if shared}
   <Status
     loading={sharedStops.loading && !sharedStops.data}
@@ -269,6 +276,10 @@
 
   p {
     margin: 0;
+  }
+
+  .compose {
+    margin-bottom: 1rem;
   }
 
   .count {

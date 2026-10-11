@@ -161,7 +161,7 @@ Ajouté le 2026-10-11 avec le propriétaire :
   - iPhone : seulement iOS 16.4+, PWA ajoutée à l'écran d'accueil, autorisation demandée sur un tap. Sans `PushManager` : afficher pourquoi c'est indisponible ; sur iOS hors `display-mode: standalone` : expliquer « Partager → Sur l'écran d'accueil ».
 - **Programme du jour** (plusieurs films à la suite) :
   - manuel d'abord : ajouter des séances, signaler les chevauchements et les trajets trop courts ; **fait le 2026-10-11** (front seul, `FRONT.md` « Programme du jour »), partage par lien compris ;
-  - automatique ensuite : choisir 2 à 4 films, essayer toutes les combinaisons (fin = séance + ~15 min de pubs + `runtime_min`, trajet à vol d'oiseau avec vitesse moyenne, marge 10-15 min), calcul dans le navigateur ;
+  - automatique ensuite (**fait le 2026-10-11**, « Composer automatiquement » dans Ma journée, `FRONT.md`) : choisir 2 à 4 films, essayer toutes les combinaisons (fin = séance + ~15 min de pubs + `runtime_min`, trajet à vol d'oiseau avec vitesse moyenne, marge 10-15 min), calcul dans le navigateur ;
   - respecte les filtres actifs (cartes, VO…), plus un filtre « même cinéma » ;
   - « Et après ? » depuis une séance : ce qu'on peut enchaîner à proximité. **Fait le 2026-10-11** (« Ensuite ? » dans Ma journée) avec l'endpoint `GET /api/showtimes` (en front seul : un appel par cinéma voisin, ~60 dans 3 km autour du Grand Rex), qui servira aussi au point 5 ;
   - partage par lien (identifiants des séances dans l'URL, sans serveur) + export `.ics` : **faits le 2026-10-11**.
