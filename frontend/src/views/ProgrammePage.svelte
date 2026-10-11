@@ -9,6 +9,7 @@
     DEFAULT_RUNTIME_MIN,
     endMinutes,
     linkLabel,
+    matchesRef,
     MAX_STOPS,
     parseShareParam,
     plan,
@@ -59,9 +60,10 @@
       if (!page) continue;
       for (const { movie, showtimes } of page.movies) {
         for (const s of showtimes) {
-          if (refs.some((r) => r.showtimeId === s.id && r.cinemaId === page.cinema.id)) {
-            stops.push(toStop(page.date, s, movie, page.cinema));
-          }
+          const candidate = toStop(page.date, s, movie, page.cinema);
+          // Même film à la même heure en VF et en VO (deux salles) : la première suffit.
+          const ref = refs.find((r) => matchesRef(r, candidate));
+          if (ref && !stops.some((x) => matchesRef(ref, x))) stops.push(candidate);
         }
       }
     }

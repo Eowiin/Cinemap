@@ -6,6 +6,7 @@ import {
   endMinutes,
   isPlanStop,
   link,
+  matchesRef,
   linkLabel,
   travelLabel,
   parseShareParam,
@@ -118,23 +119,26 @@ describe('conflicts', () => {
 });
 
 describe('share link', () => {
-  it('round-trips cinema and showtime ids, in time order', () => {
-    const stops = [
-      stop('82697374947', '2026-10-11T20:00:00', 90, HALLES),
-      stop('8269', '2026-10-11T14:00:00', 90),
-    ];
-    const param = shareParam(stops);
-    expect(param).toBe('C0065.8269,C0159.82697374947');
-    expect(parseShareParam(param)).toEqual([
-      { cinemaId: 'C0065', showtimeId: '8269' },
-      { cinemaId: 'C0159', showtimeId: '82697374947' },
+  it('round-trips cinema, movie and start time, in time order', () => {
+    const late = stop('7', '2026-10-12T00:15:00', 90, HALLES);
+    const early = stop('42', '2026-10-11T14:05:00', 90);
+    const param = shareParam([late, early]);
+    expect(param).toBe('C0065.42.1405,C0159.7.2415');
+    const refs = parseShareParam(param);
+    expect(refs).toEqual([
+      { cinemaId: 'C0065', movieId: 42, minutes: 845 },
+      { cinemaId: 'C0159', movieId: 7, minutes: 1455 },
     ]);
+    expect(matchesRef(refs[1]!, late)).toBe(true);
+    expect(matchesRef(refs[1]!, early)).toBe(false);
   });
 
   it('skips malformed parts and duplicates', () => {
-    expect(parseShareParam('C0065.1,abc,C0159.1,<x>.2,,C0159.3')).toEqual([
-      { cinemaId: 'C0065', showtimeId: '1' },
-      { cinemaId: 'C0159', showtimeId: '3' },
+    expect(
+      parseShareParam('C0065.1.2030,abc,C0065.1.2030,<x>.2.1000,C0159.3.2061,,C0159.3.0900'),
+    ).toEqual([
+      { cinemaId: 'C0065', movieId: 1, minutes: 1230 },
+      { cinemaId: 'C0159', movieId: 3, minutes: 540 },
     ]);
     expect(parseShareParam(null)).toEqual([]);
   });

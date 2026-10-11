@@ -169,15 +169,19 @@ export function conflicts(
   return result;
 }
 
-// Partage par lien, sans serveur : `s=C0159.82697374947,W7504.82697374838`.
-// L'id de séance seul ne suffit pas : on la retrouve via le programme de son cinéma.
+// Partage par lien, sans serveur : `s=C0159.1000032855.2030,C0065.316112.2415`
+// (cinéma, film, heure au format HHMM du jour ciné : 2415 = 00h15 le lendemain).
+// Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée, le lien casserait.
 
-export type StopRef = { cinemaId: string; showtimeId: string };
+export type StopRef = { cinemaId: string; movieId: number; minutes: number };
+
+const hhmm = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}${String(minutes % 60).padStart(2, '0')}`;
 
 export function shareParam(stops: PlanStop[]): string {
   return [...stops]
     .sort((a, b) => startMinutes(a) - startMinutes(b))
-    .map((s) => `${s.cinema.id}.${s.id}`)
+    .map((s) => `${s.cinema.id}.${s.movie.id}.${hhmm(startMinutes(s))}`)
     .join(',');
 }
 
@@ -187,12 +191,25 @@ export function parseShareParam(value: string | null): StopRef[] {
   const seen = new Set<string>();
   const refs: StopRef[] = [];
   for (const part of value.split(',')) {
-    const match = part.match(/^([A-Za-z0-9]+)\.([A-Za-z0-9_-]+)$/);
-    if (!match || seen.has(match[2]!)) continue;
-    seen.add(match[2]!);
-    refs.push({ cinemaId: match[1]!, showtimeId: match[2]! });
+    const match = part.match(/^([A-Za-z0-9]+)\.(\d{1,12})\.([0-4]\d)([0-5]\d)$/);
+    if (!match || seen.has(part)) continue;
+    seen.add(part);
+    refs.push({
+      cinemaId: match[1]!,
+      movieId: Number(match[2]),
+      minutes: Number(match[3]) * 60 + Number(match[4]),
+    });
   }
   return refs.slice(0, MAX_STOPS);
+}
+
+/** La séance désignée par un lien partagé, s'il y en a une. */
+export function matchesRef(ref: StopRef, stop: PlanStop): boolean {
+  return (
+    ref.cinemaId === stop.cinema.id &&
+    ref.movieId === stop.movie.id &&
+    ref.minutes === startMinutes(stop)
+  );
 }
 
 const isString = (v: unknown): v is string => typeof v === 'string';
