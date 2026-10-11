@@ -104,11 +104,14 @@ class AppState {
 
 export const app = new AppState();
 
+/** Ce dont la carte a besoin pour placer un cinéma mis en avant. */
+export type MapCinema = Pick<CinemaSummary, 'id' | 'name' | 'lat' | 'lng'>;
+
 /** Ce que la carte doit montrer, fixé par la page affichée. */
 class MapState {
   all = $state<CinemaSummary[]>([]);
   /** Cinémas mis en avant (séances du film, cinéma affiché). */
-  highlighted = $state<CinemaSummary[]>([]);
+  highlighted = $state<MapCinema[]>([]);
   /** Point à centrer (cinéma affiché) ; sinon la carte cadre `highlighted` et la position. */
   focus = $state<Position | null>(null);
   /** Mobile : carte plein écran ouverte. */
@@ -128,7 +131,7 @@ class MapState {
     }
   }
 
-  show(highlighted: CinemaSummary[], focus: Position | null = null) {
+  show(highlighted: MapCinema[], focus: Position | null = null) {
     this.highlighted = highlighted;
     this.focus = focus;
   }

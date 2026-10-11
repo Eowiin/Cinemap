@@ -11,6 +11,8 @@ import {
 class Router {
   route = $state<Route>(parseRoute(location.pathname));
   filters = $state<UrlFilters>(parseFilters(location.search));
+  /** Query brute, pour les paramètres propres à une page (`s` du programme partagé). */
+  search = $state(location.search);
 
   constructor() {
     addEventListener('popstate', () => this.sync());
@@ -19,6 +21,7 @@ class Router {
   private sync() {
     this.route = parseRoute(location.pathname);
     this.filters = parseFilters(location.search);
+    this.search = location.search;
   }
 
   /** Navigation vers un chemin interne (`/film/42?date=…`), avec une entrée d'historique. */
@@ -39,6 +42,7 @@ class Router {
     const filters = { ...this.filters, ...changes };
     history.replaceState(null, '', location.pathname + filtersQuery(filters));
     this.filters = filters;
+    this.search = location.search;
   }
 }
 

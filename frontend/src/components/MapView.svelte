@@ -9,7 +9,7 @@
   import { onMount } from 'svelte';
   import type { Position } from '../lib/api/client';
   import type { CinemaSummary } from '../lib/api/types';
-  import { app, map } from '../lib/app.svelte';
+  import { app, map, type MapCinema } from '../lib/app.svelte';
   import { cinemaMatches } from '../lib/filters';
   import { favorites } from '../lib/favorites.svelte';
   import { router } from '../lib/router.svelte';
@@ -61,7 +61,7 @@
     }
   }
 
-  function features(cinemas: CinemaSummary[]): FeatureCollection<Point> {
+  function features(cinemas: MapCinema[]): FeatureCollection<Point> {
     return {
       type: 'FeatureCollection',
       features: cinemas.map((c) => ({

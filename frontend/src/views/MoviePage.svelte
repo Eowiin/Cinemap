@@ -174,7 +174,12 @@
                 >
                 <CardBadges cards={cinema.cards} />
               </div>
-              <ShowtimeChips showtimes={list} date={showtimes.data.date} />
+              <ShowtimeChips
+                showtimes={list}
+                date={showtimes.data.date}
+                movie={showtimes.data.movie}
+                {cinema}
+              />
             </li>
           {/each}
         </ul>

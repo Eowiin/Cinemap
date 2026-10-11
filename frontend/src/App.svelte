@@ -3,19 +3,24 @@
   import Icon from './components/Icon.svelte';
   import MapView from './components/MapView.svelte';
   import SearchBox from './components/SearchBox.svelte';
+  import ShowtimeMenu from './components/ShowtimeMenu.svelte';
   import { app, map } from './lib/app.svelte';
   import { restoreCardFilter } from './lib/cards.svelte';
+  import { programme } from './lib/programme.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
   import MoviePage from './views/MoviePage.svelte';
   import NotFound from './views/NotFound.svelte';
+  import ProgrammePage from './views/ProgrammePage.svelte';
 
   // Sur mobile, la carte (MapLibre, tuiles, liste des 3 100 cinémas) ne se charge
   // que si on l'ouvre : pas de données téléchargées pour rien.
   const wide = matchMedia('(min-width: 900px)');
   let isWide = $state(wide.matches);
   const showMap = $derived(isWide || map.open);
+  // Séances prévues à partir d'aujourd'hui (la veille reste en mémoire pour les séances après minuit).
+  const planned = $derived(programme.items.filter((s) => s.date >= app.today).length);
 
   onMount(() => {
     app.loadMeta().then(() => restoreCardFilter(app.meta?.cards ?? []));
@@ -38,6 +43,18 @@
       <span>Cinemap</span>
     </a>
     <SearchBox />
+    <a
+      class="programme"
+      href="/programme"
+      aria-current={router.route.name === 'programme' ? 'page' : undefined}
+      aria-label={planned
+        ? `Mon programme, ${planned} séance${planned > 1 ? 's' : ''}`
+        : 'Mon programme'}
+      title="Mon programme"
+    >
+      <Icon name="calendar" />
+      {#if planned}<span class="count">{planned}</span>{/if}
+    </a>
   </header>
 
   <main class="panel">
@@ -47,10 +64,14 @@
       {#key router.route.id}<MoviePage id={router.route.id} />{/key}
     {:else if router.route.name === 'cinema'}
       {#key router.route.id}<CinemaPage id={router.route.id} />{/key}
+    {:else if router.route.name === 'programme'}
+      <ProgrammePage />
     {:else}
       <NotFound />
     {/if}
   </main>
+
+  <ShowtimeMenu />
 
   <section class="map-area" class:open={map.open} aria-label="Carte des cinémas">
     {#if showMap}<MapView />{/if}
@@ -89,6 +110,36 @@
     font-size: 1.1rem;
     letter-spacing: -0.02em;
     text-decoration: none;
+  }
+
+  .programme {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    padding: 0.45rem;
+    border-radius: 10px;
+    color: var(--text);
+  }
+
+  .programme:hover,
+  .programme[aria-current='page'] {
+    background: var(--surface-2);
+  }
+
+  .count {
+    position: absolute;
+    top: -0.1rem;
+    right: -0.2rem;
+    display: grid;
+    place-items: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.7rem;
+    font-weight: 700;
   }
 
   .panel {

@@ -1,32 +1,46 @@
 <script lang="ts">
-  import type { Showtime } from '../lib/api/types';
+  import type { MovieSummary, Showtime } from '../lib/api/types';
   import { isAfterMidnight, timeOf } from '../lib/format';
+  import { toStop, type PlanStop } from '../lib/planner';
+  import { programme, showtimeMenu } from '../lib/programme.svelte';
 
-  let { showtimes, date }: { showtimes: Showtime[]; date: string } = $props();
+  /** Un appui ouvre le menu de la séance (réserver, ajouter au programme). */
+  let {
+    showtimes,
+    date,
+    movie,
+    cinema,
+  }: {
+    showtimes: Showtime[];
+    date: string;
+    movie: Pick<MovieSummary, 'id' | 'title' | 'runtime_min'>;
+    cinema: PlanStop['cinema'];
+  } = $props();
 
   const label = (s: Showtime) =>
     [timeOf(s.starts_at), s.version, ...s.formats].join(' ') +
     (isAfterMidnight(s.starts_at, date) ? ' (après minuit)' : '');
+
+  const open = (s: Showtime) => showtimeMenu.open(toStop(date, s, movie, cinema), s.formats);
 </script>
 
 <ul class="showtimes">
   {#each showtimes as s (s.id)}
+    {@const planned = programme.has(s.id)}
     <li>
-      <svelte:element
-        this={s.booking_url ? 'a' : 'span'}
+      <button
         class="showtime"
-        class:bookable={!!s.booking_url}
-        href={s.booking_url ?? undefined}
-        target={s.booking_url ? '_blank' : undefined}
-        rel={s.booking_url ? 'noopener' : undefined}
-        title={s.booking_url ? `Réserver : ${label(s)}` : label(s)}
+        class:planned
+        aria-haspopup="dialog"
+        title={planned ? `${label(s)}, dans mon programme` : label(s)}
+        onclick={() => open(s)}
       >
         <strong>
           {timeOf(s.starts_at)}{#if isAfterMidnight(s.starts_at, date)}<sup>+1</sup>{/if}
         </strong>
         <span class="version" class:vf={s.version === 'VF'}>{s.version}</span>
         {#each s.formats as format (format)}<span class="format">{format}</span>{/each}
-      </svelte:element>
+      </button>
     </li>
   {/each}
 </ul>
@@ -53,8 +67,14 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .bookable:hover {
+  .showtime:hover {
     border-color: var(--accent);
+  }
+
+  /* Dans mon programme. */
+  .planned {
+    border-color: var(--accent);
+    background: var(--accent-soft);
   }
 
   strong {

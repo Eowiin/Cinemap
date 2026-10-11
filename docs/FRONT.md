@@ -22,6 +22,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/` | À l'affiche autour de la position (Paris par défaut, bouton « Autour de moi »), rayon 5 à 100 km |
 | `/film/{id}` | Fiche film + séances par cinéma, triées par distance |
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
+| `/programme` | Mon programme du jour (séances enchaînées), ou un programme partagé (`?date=…&s=…`) |
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
 
@@ -56,6 +57,15 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - **Filtres sur la carte** : favoris et cartes (filtres qui portent sur les cinémas) s'appliquent ; les cinémas écartés restent visibles mais atténués (petits points pâles, non regroupés), pour garder ses repères et ne jamais afficher une carte vide. Jour, version et horaire ne s'appliquent pas (un cinéma sans VO ce soir existe toujours). `filters.ts` → `cinemaMatches`.
 - **Bulles** : le nom seul (les cartes acceptées sont sur la fiche du cinéma).
 - **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
+
+## Programme du jour, mode manuel (2026-10-11)
+
+- **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter au programme / Retirer, Voir mon programme. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
+- **Calculs** (`lib/planner.ts`, pur, testé) : fin = début + 15 min de pubs + `runtime_min` (2 h supposées si inconnue) ; trajet à vol d'oiseau, le plus court entre à pied (4 km/h, 15 min/km) et transports (10 min + 3 min/km), donc à pied sous ~800 m ; battement souhaité 10 min. Statut de chaque enchaînement : chevauchement, trajet trop court, juste (< 10 min de battement), ok. Constantes en tête du fichier, à ajuster avec l'usage.
+- **Stockage** : `StoredList` `cinemap:programme`, chaque séance garde de quoi s'afficher et calculer les trajets sans l'API (`PlanStop`). Les jours avant la veille sont effacés au chargement. Icône calendrier dans l'en-tête, avec le nombre de séances prévues.
+- **Partage par lien, sans serveur** : `/programme?date=2026-10-12&s=C0159.82697374947,C0065.8269…` (cinéma + id de séance, 8 au plus). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à mon programme » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
+- À vérifier : la stabilité des ids de séance AlloCiné d'un scrape à l'autre (comparaison des relevés `data/snapshots/`). S'ils changent, retrouver la séance par cinéma + film + heure.
+- Vérifié en dev piloté par Chrome sans interface (390 px, clair et sombre) : ajout, alerte de chevauchement, page, lien partagé avec une séance introuvable, aucune erreur console, pas de défilement horizontal.
 
 ## Couverture (2026-10-09)
 

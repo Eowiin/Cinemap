@@ -115,7 +115,7 @@
                   .filter(Boolean)
                   .join(' · ')}
               </p>
-              <ShowtimeChips {showtimes} date={data.date} />
+              <ShowtimeChips {showtimes} date={data.date} {movie} {cinema} />
             </div>
           </li>
         {/each}

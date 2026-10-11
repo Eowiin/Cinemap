@@ -7,6 +7,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'movie'; id: number }
   | { name: 'cinema'; id: string }
+  | { name: 'programme' }
   | { name: 'not-found' };
 
 export type UrlFilters = {
@@ -25,6 +26,7 @@ export function parseRoute(pathname: string): Route {
   if (movie) return { name: 'movie', id: Number(movie[1]) };
   const cinema = pathname.match(/^\/cinema\/([A-Za-z0-9]+)\/?$/);
   if (cinema) return { name: 'cinema', id: cinema[1]! };
+  if (/^\/programme\/?$/.test(pathname)) return { name: 'programme' };
   return { name: 'not-found' };
 }
 
@@ -66,6 +68,8 @@ export function routePath(route: Route): string {
       return `/film/${route.id}`;
     case 'cinema':
       return `/cinema/${encodeURIComponent(route.id)}`;
+    case 'programme':
+      return '/programme';
     case 'not-found':
       return '/';
   }

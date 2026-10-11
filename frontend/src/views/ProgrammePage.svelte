@@ -1,0 +1,439 @@
+<script lang="ts">
+  import Icon from '../components/Icon.svelte';
+  import Status from '../components/Status.svelte';
+  import { api, ApiError } from '../lib/api/client';
+  import { app, map } from '../lib/app.svelte';
+  import { dateLabel, timeOf } from '../lib/format';
+  import {
+    clock,
+    DEFAULT_RUNTIME_MIN,
+    endMinutes,
+    linkLabel,
+    MAX_STOPS,
+    parseShareParam,
+    plan,
+    shareParam,
+    toStop,
+    travelLabel,
+    type PlanStop,
+    type StopRef,
+  } from '../lib/planner';
+  import { programme, programmeDays, stopsOf } from '../lib/programme.svelte';
+  import { resource } from '../lib/resource.svelte';
+  import { router } from '../lib/router.svelte';
+  import { href } from '../lib/routes';
+
+  // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
+  // (`?date=…&s=C0159.8269…`), retrouvé via le programme de chaque cinéma.
+
+  const refs = $derived(parseShareParam(new URLSearchParams(router.search).get('s')));
+  const shared = $derived(refs.length > 0);
+
+  // Sans date dans l'URL : aujourd'hui, ou le premier jour prévu s'il n'y a rien aujourd'hui.
+  const days = $derived(programmeDays().filter((d) => d >= app.today));
+  const date = $derived(
+    router.filters.date ??
+      (shared || stopsOf(app.today).length ? app.today : (days[0] ?? app.today)),
+  );
+  const dayChoices = $derived([...new Set([app.today, ...days, date])].sort());
+
+  const sharedStops = resource(
+    () => ({ refs, date }),
+    ({ refs, date }, signal) => resolve(refs, date, signal),
+  );
+
+  /** Un appel par cinéma (2 à 4 en pratique) ; une séance disparue est simplement comptée. */
+  async function resolve(refs: StopRef[], date: string, signal: AbortSignal) {
+    if (!refs.length) return { stops: [] as PlanStop[], missing: 0 };
+    const cinemaIds = [...new Set(refs.map((r) => r.cinemaId))];
+    const pages = await Promise.all(
+      cinemaIds.map((id) =>
+        api.cinemaShowtimes(id, { date }, signal).catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) return null;
+          throw error;
+        }),
+      ),
+    );
+    const stops: PlanStop[] = [];
+    for (const page of pages) {
+      if (!page) continue;
+      for (const { movie, showtimes } of page.movies) {
+        for (const s of showtimes) {
+          if (refs.some((r) => r.showtimeId === s.id && r.cinemaId === page.cinema.id)) {
+            stops.push(toStop(page.date, s, movie, page.cinema));
+          }
+        }
+      }
+    }
+    return { stops, missing: refs.length - stops.length };
+  }
+
+  const stops = $derived(shared ? (sharedStops.data?.stops ?? []) : stopsOf(date));
+  const steps = $derived(plan(stops));
+  const problems = $derived(steps.filter((s) => s.next && s.next.status !== 'ok').length);
+
+  $effect(() => {
+    const seen = new Map(stops.map((s) => [s.cinema.id, s.cinema]));
+    map.show([...seen.values()]);
+  });
+
+  let copied = $state(false);
+  /** Ni partage natif ni presse-papiers : le lien est affiché, à copier à la main. */
+  let manualUrl = $state<string | null>(null);
+
+  async function share() {
+    const url = `${location.origin}/programme?date=${date}&s=${shareParam(stops)}`;
+    const title = `Programme ciné, ${dateLabel(date, app.today).toLowerCase()}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url });
+      } catch {
+        // Partage annulé : rien à faire.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      copied = true;
+      setTimeout(() => (copied = false), 2500);
+    } catch {
+      manualUrl = url;
+    }
+  }
+
+  function keepShared() {
+    const added = stops.filter((s) => !programme.has(s.id));
+    programme.set([...programme.items, ...($state.snapshot(added) as PlanStop[])]);
+    router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
+  }
+
+  function clearDay() {
+    programme.set(programme.items.filter((s) => s.date !== date));
+  }
+
+  function pickDate(day: string) {
+    router.setFilters({ date: day === app.today ? null : day });
+  }
+</script>
+
+<svelte:head><title>{shared ? 'Programme partagé' : 'Mon programme'} · Cinemap</title></svelte:head>
+
+<a class="back" href={href({ name: 'home' }, router.filters)}><Icon name="back" /> À l'affiche</a>
+
+<header>
+  <h1>{shared ? 'Programme partagé' : 'Mon programme'}</h1>
+  {#if shared}
+    <p class="muted">{dateLabel(date, app.today)}</p>
+  {:else}
+    <div class="scroll-row" role="group" aria-label="Jour">
+      {#each dayChoices as day (day)}
+        {@const count = stopsOf(day).length}
+        <button class="chip" aria-pressed={day === date} onclick={() => pickDate(day)}>
+          {dateLabel(day, app.today)}{#if count}<span class="count">{count}</span>{/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+</header>
+
+{#if shared}
+  <Status
+    loading={sharedStops.loading && !sharedStops.data}
+    error={sharedStops.error}
+    retry={sharedStops.retry}
+  />
+  {#if sharedStops.data?.missing}
+    <p class="notice">
+      {sharedStops.data.missing === 1
+        ? 'Une séance du lien est introuvable'
+        : `${sharedStops.data.missing} séances du lien sont introuvables`} : programme modifié par le
+      cinéma, ou jour passé.
+    </p>
+  {/if}
+{/if}
+
+{#if steps.length}
+  {#if problems}
+    <p class="notice">
+      <Icon name="alert" size={16} />
+      {problems === 1
+        ? 'Un enchaînement pose problème'
+        : `${problems} enchaînements posent problème`}
+      : voir ci-dessous.
+    </p>
+  {/if}
+
+  <ol class="steps" class:stale={shared && sharedStops.loading}>
+    {#each steps as { stop, next } (stop.id)}
+      <li class="stop card">
+        <div class="times">
+          <strong>{timeOf(stop.starts_at)}</strong>
+          <span class="muted small" title="Fin estimée, pubs comprises"
+            >→ {clock(endMinutes(stop))}</span
+          >
+        </div>
+        <div class="info">
+          <a class="title" href={href({ name: 'movie', id: stop.movie.id }, router.filters)}
+            >{stop.movie.title}</a
+          >
+          <span class="muted small">
+            <a href={href({ name: 'cinema', id: stop.cinema.id }, router.filters)}
+              >{stop.cinema.name}</a
+            >
+            · {stop.version}{stop.movie.runtime_min === null
+              ? ` · durée inconnue (${DEFAULT_RUNTIME_MIN / 60} h supposées)`
+              : ''}
+          </span>
+        </div>
+        <div class="stop-actions">
+          {#if stop.booking_url}
+            <a class="button small" href={stop.booking_url} target="_blank" rel="noopener"
+              >Réserver</a
+            >
+          {/if}
+          {#if !shared}
+            <button
+              class="icon"
+              aria-label="Retirer {stop.movie.title} du programme"
+              title="Retirer du programme"
+              onclick={() => programme.remove(stop.id)}><Icon name="close" size={16} /></button
+            >
+          {/if}
+        </div>
+      </li>
+      {#if next}
+        <li class="link {next.status}">
+          {#if next.status !== 'ok'}<Icon name="alert" size={15} />{/if}
+          <span>
+            {next.status === 'short' || next.status === 'overlap'
+              ? linkLabel(next)
+              : `${next.travel.mode === 'same' ? 'Même cinéma' : travelLabel(next.travel)} · ${linkLabel(next).toLowerCase()}`}
+          </span>
+        </li>
+      {/if}
+    {/each}
+  </ol>
+
+  <div class="actions">
+    {#if shared}
+      <button class="button primary" onclick={keepShared}>
+        <Icon name="plus" size={16} /> Ajouter à mon programme
+      </button>
+    {:else}
+      <button class="button primary" onclick={share} disabled={stops.length > MAX_STOPS}>
+        <Icon name="share" size={16} />
+        {copied ? 'Lien copié' : 'Partager'}
+      </button>
+      <button class="button" onclick={clearDay}>Vider la journée</button>
+    {/if}
+  </div>
+  {#if manualUrl}
+    <label class="manual">
+      <span class="muted small">Lien à copier :</span>
+      <input readonly value={manualUrl} onfocus={(e) => e.currentTarget.select()} />
+    </label>
+  {/if}
+  <p class="muted small">
+    Fin estimée = séance + 15 min de pubs + durée du film. Trajets à vol d'oiseau : à pied à 4 km/h,
+    sinon en transports (10 min + 3 min/km). Battement souhaité : 10 min.
+  </p>
+{:else if !shared}
+  <div class="empty">
+    <p>Rien de prévu {date === app.today ? "aujourd'hui" : 'ce jour-là'}.</p>
+    <p class="muted">
+      Appuyez sur un horaire, dans la fiche d'un film ou d'un cinéma, puis « Ajouter au programme ».
+      Cinemap signale les séances qui se chevauchent et les trajets trop courts.
+    </p>
+    <a class="button" href={href({ name: 'home' }, router.filters)}>Voir les films à l'affiche</a>
+  </div>
+{/if}
+
+<style>
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    text-decoration: none;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+  }
+
+  header {
+    display: grid;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  .count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.3em;
+    height: 1.3em;
+    padding: 0 0.3em;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 0.75rem;
+  }
+
+  .notice {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.8rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .steps {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    display: grid;
+    transition: opacity 0.15s;
+  }
+
+  .stale {
+    opacity: 0.55;
+  }
+
+  .stop {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.7rem 0.8rem;
+  }
+
+  .times {
+    display: grid;
+    min-width: 3.4rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .times strong {
+    font-size: 1.1rem;
+  }
+
+  .info {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+  }
+
+  .title {
+    font-weight: 650;
+    text-decoration: none;
+  }
+
+  .info a:hover {
+    text-decoration: underline;
+  }
+
+  .info .small a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .stop-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .button.small {
+    padding: 0.3em 0.7em;
+    font-size: 0.86rem;
+  }
+
+  /* Trait vertical entre deux séances, avec le trajet et le battement. */
+  .link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 1.9rem;
+    padding: 0.55rem 0 0.55rem 1rem;
+    border-left: 2px dashed var(--border);
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+
+  .link.tight {
+    color: #a86a00;
+    border-left-color: #e0a526;
+  }
+
+  .link.short,
+  .link.overlap {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+
+  .link :global(svg) {
+    flex: none;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .actions button:disabled {
+    opacity: 0.45;
+  }
+
+  .manual {
+    display: grid;
+    gap: 0.2rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .manual input {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .icon {
+    display: inline-flex;
+    padding: 0.35rem;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: var(--muted);
+  }
+
+  .icon:hover {
+    background: var(--surface-2);
+  }
+
+  .small {
+    font-size: 0.86rem;
+  }
+
+  .empty {
+    display: grid;
+    gap: 0.6rem;
+    justify-items: start;
+    padding: 0.5rem 0 1rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .link.tight {
+      color: #e8b04a;
+    }
+  }
+</style>

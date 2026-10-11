@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { filtersQuery, href, parseFilters, parseRoute } from './routes';
 
 describe('parseRoute', () => {
-  it('recognises the three pages', () => {
+  it('recognises the pages', () => {
     expect(parseRoute('/')).toEqual({ name: 'home' });
     expect(parseRoute('/film/1000032855')).toEqual({ name: 'movie', id: 1000032855 });
     expect(parseRoute('/cinema/C0159')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/cinema/C0159/')).toEqual({ name: 'cinema', id: 'C0159' });
+    expect(parseRoute('/programme')).toEqual({ name: 'programme' });
   });
 
   it('rejects anything else', () => {
