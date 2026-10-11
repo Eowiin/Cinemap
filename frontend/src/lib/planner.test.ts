@@ -4,6 +4,8 @@ import {
   conflicts,
   distanceKm,
   endMinutes,
+  followUps,
+  nearbyStops,
   isPlanStop,
   link,
   matchesRef,
@@ -168,5 +170,75 @@ describe('labels', () => {
     expect(linkLabel(link(first, stop('b', '2026-10-11T20:30:00', 90)))).toBe(
       '30 min de battement',
     );
+  });
+});
+
+describe('followUps', () => {
+  const from = stop('1', '2026-10-11T18:00:00', 105); // fin 20:00 au Rex
+  it('keeps reachable showtimes of other movies, by time then distance', () => {
+    const candidates = [
+      stop('2', '2026-10-11T19:50:00', 90), // chevauche
+      stop('3', '2026-10-11T20:05:00', 90, HALLES), // trajet trop court
+      stop('4', '2026-10-11T20:30:00', 90, HALLES),
+      stop('5', '2026-10-11T20:30:00', 90), // même heure, plus près
+      stop('6', '2026-10-11T20:05:00', 90), // juste
+      { ...stop('7', '2026-10-11T21:00:00', 90), movie: from.movie }, // même film
+    ];
+    const result = followUps(from, candidates);
+    expect(result.map((f) => [f.stop.id, f.link.status])).toEqual([
+      ['6', 'tight'],
+      ['5', 'ok'],
+      ['4', 'ok'],
+    ]);
+  });
+});
+
+describe('nearbyStops', () => {
+  it('joins movies and cinemas to each showtime', () => {
+    const stops = nearbyStops({
+      date: '2026-10-11',
+      showtimes: [
+        {
+          id: 's1',
+          starts_at: '2026-10-11T20:00:00',
+          version: 'VO',
+          formats: [],
+          booking_url: null,
+          cinema_id: 'C0065',
+          movie_id: 9,
+        },
+        {
+          id: 's2',
+          starts_at: '2026-10-11T21:00:00',
+          version: 'VF',
+          formats: [],
+          booking_url: null,
+          cinema_id: 'ZZZ',
+          movie_id: 9,
+        },
+      ],
+      cinemas: [{ ...REX, city: 'Paris', art_et_essai: false, cards: [], distance_km: 0 }],
+      movies: [
+        {
+          id: 9,
+          title: 'Neuf',
+          poster_url: null,
+          genres: [],
+          runtime_min: 100,
+          release_date: null,
+        },
+      ],
+    });
+    expect(stops).toEqual([
+      {
+        id: 's1',
+        date: '2026-10-11',
+        starts_at: '2026-10-11T20:00:00',
+        version: 'VO',
+        booking_url: null,
+        movie: { id: 9, title: 'Neuf', runtime_min: 100 },
+        cinema: { id: 'C0065', name: 'Le Grand Rex', lat: 48.8707, lng: 2.3477 },
+      },
+    ]);
   });
 });

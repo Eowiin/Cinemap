@@ -2,7 +2,7 @@
 // Hypothèses (docs/FRONT.md, « Programme du jour ») : fin = début + pubs + durée du film,
 // trajet estimé à vol d'oiseau, marge pour ne pas courir.
 
-import type { MovieSummary, Showtime, Version } from './api/types';
+import type { MovieSummary, NearbyShowtimes, Showtime, Version } from './api/types';
 import { isRecord } from './stored';
 
 /** Pubs et bandes-annonces avant le film. */
@@ -169,13 +169,40 @@ export function conflicts(
   return result;
 }
 
+/** Séances de `/api/showtimes`, avec film et cinéma recollés. */
+export function nearbyStops(data: NearbyShowtimes): PlanStop[] {
+  const movies = new Map(data.movies.map((m) => [m.id, m]));
+  const cinemas = new Map(data.cinemas.map((c) => [c.id, c]));
+  return data.showtimes.flatMap((s) => {
+    const movie = movies.get(s.movie_id);
+    const cinema = cinemas.get(s.cinema_id);
+    return movie && cinema ? [toStop(data.date, s, movie, cinema)] : [];
+  });
+}
+
+export type FollowUp = { stop: PlanStop; link: Link };
+
+/**
+ * « Et après ? » : les séances qu'on peut enchaîner après `from` (ni chevauchement ni
+ * trajet trop court ; « juste » compris, signalé), d'un autre film, par heure puis distance.
+ */
+export function followUps(from: PlanStop, candidates: PlanStop[]): FollowUp[] {
+  return candidates
+    .filter((c) => c.movie.id !== from.movie.id)
+    .map((stop) => ({ stop, link: link(from, stop) }))
+    .filter((f) => f.link.status === 'ok' || f.link.status === 'tight')
+    .sort(
+      (a, b) => startMinutes(a.stop) - startMinutes(b.stop) || a.link.travel.km - b.link.travel.km,
+    );
+}
+
 // Partage par lien, sans serveur : `s=C0159.1000032855.2030,C0065.316112.2415`
 // (cinéma, film, heure au format HHMM du jour ciné : 2415 = 00h15 le lendemain).
 // Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée, le lien casserait.
 
 export type StopRef = { cinemaId: string; movieId: number; minutes: number };
 
-const hhmm = (minutes: number) =>
+export const hhmm = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, '0')}${String(minutes % 60).padStart(2, '0')}`;
 
 export function shareParam(stops: PlanStop[]): string {

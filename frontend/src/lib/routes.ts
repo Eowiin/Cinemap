@@ -8,6 +8,7 @@ export type Route =
   | { name: 'movie'; id: number }
   | { name: 'cinema'; id: string }
   | { name: 'programme' }
+  | { name: 'next' }
   | { name: 'not-found' };
 
 export type UrlFilters = {
@@ -27,6 +28,7 @@ export function parseRoute(pathname: string): Route {
   const cinema = pathname.match(/^\/cinema\/([A-Za-z0-9]+)\/?$/);
   if (cinema) return { name: 'cinema', id: cinema[1]! };
   if (/^\/programme\/?$/.test(pathname)) return { name: 'programme' };
+  if (/^\/et-apres\/?$/.test(pathname)) return { name: 'next' };
   return { name: 'not-found' };
 }
 
@@ -70,6 +72,8 @@ export function routePath(route: Route): string {
       return `/cinema/${encodeURIComponent(route.id)}`;
     case 'programme':
       return '/programme';
+    case 'next':
+      return '/et-apres';
     case 'not-found':
       return '/';
   }
@@ -77,4 +81,13 @@ export function routePath(route: Route): string {
 
 export function href(route: Route, filters: UrlFilters): string {
   return routePath(route) + filtersQuery(filters);
+}
+
+/**
+ * « Et après ? » depuis une séance (`s` : `shareParam`, caractères sûrs pour une URL),
+ * avec les filtres en cours : ils s'appliquent aussi aux séances proposées.
+ */
+export function followUpHref(filters: UrlFilters, s: string): string {
+  const query = filtersQuery(filters);
+  return `/et-apres${query ? `${query}&` : '?'}s=${s}`;
 }

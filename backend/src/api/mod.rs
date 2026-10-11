@@ -21,6 +21,7 @@ mod meta;
 mod movies;
 mod params;
 mod search;
+mod showtimes;
 mod types;
 
 pub use error::{ApiResult, AppError};
@@ -53,6 +54,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/movies/{id}", get(movies::get_one))
         .route("/api/movies/{id}/showtimes", get(movies::showtimes))
         .route("/api/search", get(search::search))
+        .route("/api/showtimes", get(showtimes::list))
         .fallback(not_found)
         .with_state(state)
         // Les erreurs posent déjà `no-store` (AppError) : on ne remplit que les autres.

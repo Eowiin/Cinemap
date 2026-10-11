@@ -569,3 +569,62 @@ async fn favorites_filter_ignores_the_radius() {
         assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{uri}");
     }
 }
+
+#[tokio::test]
+async fn showtimes_nearby_by_start_time() {
+    let state = state().await;
+    let reply = get(&state, &format!("/api/showtimes?date={D1}&{PARIS}")).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json["date"], D1);
+    // Invisibles (NOGEO, OLD) et hors rayon (LYON) absents ; 00h15 en dernier.
+    assert_eq!(
+        ids(&reply.json["showtimes"]),
+        ["A1", "B2", "A5", "A2", "A3"]
+    );
+    let first = &reply.json["showtimes"][0];
+    assert_eq!(first["cinema_id"], "PARIS1");
+    assert_eq!(first["movie_id"], 1001);
+    assert_eq!(first["formats"], serde_json::json!(["IMAX"]));
+    assert_eq!(first["booking_url"], "https://x/A1");
+    assert_eq!(ids(&reply.json["cinemas"]), ["PARIS1", "PARIS2"]);
+    assert_eq!(reply.json["cinemas"][0]["distance_km"], 1.0);
+    let movies: Vec<i64> = reply.json["movies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(movies, [1002, 1001]); // par titre : Batman, L'Été dernier
+}
+
+#[tokio::test]
+async fn showtimes_nearby_filters() {
+    let state = state().await;
+    let cases = [
+        ("after=17:00&radius_km=5", vec!["A2", "A3"]),
+        ("limit=2", vec!["A1", "B2"]),
+        ("version=VO", vec!["B2", "A2"]),
+        // « Même cinéma » : un seul id, le rayon ne compte plus.
+        ("radius_km=5&cinemas=PARIS2", vec!["A5"]),
+        ("cards=pathe_cinepass", vec!["A1", "B2", "A2", "A3"]),
+    ];
+    for (query, expected) in cases {
+        let uri = format!("/api/showtimes?date={D1}&{PARIS}&{query}");
+        let reply = get(&state, &uri).await;
+        assert_eq!(ids(&reply.json["showtimes"]), expected, "{uri}");
+    }
+
+    // Rien autour : listes vides, pas d'erreur.
+    let reply = get(
+        &state,
+        &format!("/api/showtimes?date={D1}&lat=43.3&lng=5.4&radius_km=5"),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json["showtimes"], serde_json::json!([]));
+    assert_eq!(reply.json["movies"], serde_json::json!([]));
+
+    for uri in ["/api/showtimes", "/api/showtimes?lat=48.8&lng=2.3&limit=0"] {
+        assert_bad_request(&get(&state, uri).await, uri);
+    }
+}

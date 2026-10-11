@@ -1,7 +1,6 @@
 <script lang="ts">
   import Icon from '../components/Icon.svelte';
   import Status from '../components/Status.svelte';
-  import { api, ApiError } from '../lib/api/client';
   import { app, map } from '../lib/app.svelte';
   import { dateLabel, timeOf } from '../lib/format';
   import {
@@ -9,20 +8,18 @@
     DEFAULT_RUNTIME_MIN,
     endMinutes,
     linkLabel,
-    matchesRef,
     MAX_STOPS,
     parseShareParam,
     plan,
     shareParam,
-    toStop,
     travelLabel,
     type PlanStop,
-    type StopRef,
   } from '../lib/planner';
   import { programme, programmeDays, stopsOf } from '../lib/programme.svelte';
+  import { resolveStops } from '../lib/resolve';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { href } from '../lib/routes';
+  import { followUpHref, href } from '../lib/routes';
 
   // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
   // (`?date=…&s=C0159.8269…`), retrouvé via le programme de chaque cinéma.
@@ -40,35 +37,8 @@
 
   const sharedStops = resource(
     () => ({ refs, date }),
-    ({ refs, date }, signal) => resolve(refs, date, signal),
+    ({ refs, date }, signal) => resolveStops(refs, date, signal),
   );
-
-  /** Un appel par cinéma (2 à 4 en pratique) ; une séance disparue est simplement comptée. */
-  async function resolve(refs: StopRef[], date: string, signal: AbortSignal) {
-    if (!refs.length) return { stops: [] as PlanStop[], missing: 0 };
-    const cinemaIds = [...new Set(refs.map((r) => r.cinemaId))];
-    const pages = await Promise.all(
-      cinemaIds.map((id) =>
-        api.cinemaShowtimes(id, { date }, signal).catch((error: unknown) => {
-          if (error instanceof ApiError && error.status === 404) return null;
-          throw error;
-        }),
-      ),
-    );
-    const stops: PlanStop[] = [];
-    for (const page of pages) {
-      if (!page) continue;
-      for (const { movie, showtimes } of page.movies) {
-        for (const s of showtimes) {
-          const candidate = toStop(page.date, s, movie, page.cinema);
-          // Même film à la même heure en VF et en VO (deux salles) : la première suffit.
-          const ref = refs.find((r) => matchesRef(r, candidate));
-          if (ref && !stops.some((x) => matchesRef(ref, x))) stops.push(candidate);
-        }
-      }
-    }
-    return { stops, missing: refs.length - stops.length };
-  }
 
   const stops = $derived(shared ? (sharedStops.data?.stops ?? []) : stopsOf(date));
   const steps = $derived(plan(stops));
@@ -214,6 +184,18 @@
         </li>
       {/if}
     {/each}
+    {#if !shared}
+      {@const last = steps[steps.length - 1]!.stop}
+      <li class="after">
+        <a
+          class="button"
+          href={followUpHref(
+            { ...router.filters, date: date === app.today ? null : date },
+            shareParam([last]),
+          )}><Icon name="route" size={16} /> Et après « {last.movie.title} » ?</a
+        >
+      </li>
+    {/if}
   </ol>
 
   <div class="actions">
@@ -382,6 +364,19 @@
 
   .link :global(svg) {
     flex: none;
+  }
+
+  .after {
+    margin: 0.6rem 0 0 1.9rem;
+    padding-left: 1rem;
+    border-left: 2px dashed var(--border);
+  }
+
+  .after .button {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .actions {

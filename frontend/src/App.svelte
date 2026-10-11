@@ -11,6 +11,7 @@
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
   import MoviePage from './views/MoviePage.svelte';
+  import NextPage from './views/NextPage.svelte';
   import NotFound from './views/NotFound.svelte';
   import ProgrammePage from './views/ProgrammePage.svelte';
 
@@ -66,6 +67,8 @@
       {#key router.route.id}<CinemaPage id={router.route.id} />{/key}
     {:else if router.route.name === 'programme'}
       <ProgrammePage />
+    {:else if router.route.name === 'next'}
+      <NextPage />
     {:else}
       <NotFound />
     {/if}

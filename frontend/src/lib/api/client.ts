@@ -5,6 +5,7 @@ import type {
   Meta,
   Movie,
   MovieShowtimes,
+  NearbyShowtimes,
   NowShowing,
   SearchResults,
   VersionFilter,
@@ -112,6 +113,24 @@ export const api = {
         cards: cardsParam(filters.cards),
         cinemas: cardsParam(filters.cinemas),
         radius_km: filters.radius_km,
+        ...position(filters.position),
+      },
+      signal,
+    ),
+  showtimes: (
+    filters: ShowtimeFilters & { position: Position; radius_km?: number; limit?: number },
+    signal?: AbortSignal,
+  ) =>
+    get<NearbyShowtimes>(
+      '/api/showtimes',
+      {
+        date: filters.date,
+        version: filters.version,
+        after: filters.after,
+        cards: cardsParam(filters.cards),
+        cinemas: cardsParam(filters.cinemas),
+        radius_km: filters.radius_km,
+        limit: filters.limit,
         ...position(filters.position),
       },
       signal,

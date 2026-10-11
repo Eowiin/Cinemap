@@ -197,6 +197,27 @@ Query : `date?`, `lat`, `lng` (**obligatoires**, 400 sinon : le front a toujours
 
 Tri par `distance_km`.
 
+### `GET /api/showtimes`
+
+Les prochaines séances autour d'un point, tous films confondus, par heure de début. Sert à « Et après ? » (ce qu'on peut enchaîner après une séance, `docs/FRONT.md`) et servira à « Ce soir près de moi ».
+
+Query : `date?`, `lat`, `lng` (**obligatoires**), `radius_km?` (défaut 15, max 100), `after?`, `version?`, `cards?`, `cinemas?` (voir `/api/movies` : radius ignoré, la position sert encore à `distance_km` et au tri ; « même cinéma » = un seul id), `limit?` (défaut 50, max 200).
+
+```json
+{
+  "date": "2026-09-25",
+  "showtimes": [
+    { "id": "…", "starts_at": "2026-09-25T20:00:00", "version": "VF", "formats": [], "booking_url": null,
+      "cinema_id": "C0159", "movie_id": 1000032855 }
+  ],
+  "cinemas": [CinemaSummary, …],
+  "movies": [MovieSummary, …]
+}
+```
+
+- `showtimes` : `Showtime` + `cinema_id` + `movie_id`, triées par `starts_at` puis par distance du cinéma ; `limit` porte sur elles (les premières séances après `after`).
+- `cinemas` et `movies` : ceux que citent les séances, une fois chacun (pas de répétition dans chaque séance). Cinémas par distance, films par titre.
+
 ### `GET /api/search`
 
 Query : `q` (≥ 2 caractères, sinon 400).

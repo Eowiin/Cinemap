@@ -134,3 +134,20 @@ pub struct Card {
     pub name: String,
     pub updated_at: String,
 }
+
+/// Séance de `/api/showtimes` : le film et le cinéma sont donnés à part, une fois chacun.
+#[derive(Debug, Serialize)]
+pub struct NearbyShowtime {
+    #[serde(flatten)]
+    pub showtime: Showtime,
+    pub cinema_id: String,
+    pub movie_id: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShowtimesResponse {
+    pub date: String,
+    pub showtimes: Vec<NearbyShowtime>,
+    pub cinemas: Vec<CinemaSummary>,
+    pub movies: Vec<MovieSummary>,
+}

@@ -97,3 +97,10 @@ export type SearchResults = {
   movies: MovieSummary[];
   cinemas: CinemaSummary[];
 };
+
+export type NearbyShowtimes = {
+  date: string;
+  showtimes: (Showtime & { cinema_id: string; movie_id: number })[];
+  cinemas: CinemaSummary[];
+  movies: MovieSummary[];
+};

@@ -22,6 +22,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/` | À l'affiche autour de la position (Paris par défaut, bouton « Autour de moi »), rayon 5 à 100 km |
 | `/film/{id}` | Fiche film + séances par cinéma, triées par distance |
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
+| `/et-apres` | « Et après ? » : ce qu'on peut enchaîner après une séance (`?s=cinéma.film.HHMM` + filtres) |
 | `/programme` | Mon programme du jour (séances enchaînées), ou un programme partagé (`?date=…&s=…`) |
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
@@ -66,6 +67,14 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - **Partage par lien, sans serveur** : `/programme?date=2026-10-12&s=C0159.1000032855.2030,…` (cinéma, film, heure `HHMM` du jour ciné, `2415` = 00h15 ; 8 au plus). Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée (compté par le scrape). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à mon programme » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
 - Limite : mon programme garde l'id de séance ; si AlloCiné la renumérote, elle reste affichée dans le programme mais l'horaire n'est plus surligné sur les fiches.
 - Vérifié en dev piloté par Chrome sans interface (390 px, clair et sombre) : ajout, alerte de chevauchement, page, lien partagé avec une séance introuvable, aucune erreur console, pas de défilement horizontal.
+
+## « Et après ? » (2026-10-11)
+
+- Depuis le menu d'une séance (« Et après ? ») ou la dernière séance de mon programme. Lien `/et-apres?date=…&s=C0065.327174.1530` + les filtres en cours (version, cartes, favoris), qui s'appliquent aux séances proposées.
+- Deux appels : le programme du cinéma de départ (souvent déjà en cache) pour retrouver la séance, puis `GET /api/showtimes` (`API.md`) autour de ce cinéma, `after` = fin estimée, 200 séances au plus. Mesuré en local : 99 séances = 33 Ko, **3,8 Ko gzip**.
+- Distance : même cinéma (`cinemas=<id>`), 1, 3 (par défaut) ou 5 km. Le filtre favoris ignore la distance, comme ailleurs ; « même cinéma » prime.
+- `planner.followUps` : autre film, ni chevauchement ni trajet trop court (« juste » gardé, en orange), par heure puis distance. D'abord ce qui commence moins de 90 min après la fin, le reste derrière « Plus tard (n) ». Fin après minuit : rien à proposer (`after` ne dépasse pas le jour ciné).
+- Un appui sur une proposition ouvre le menu de séance (ajouter au programme, réserver, « Et après ? » de nouveau).
 
 ## Couverture (2026-10-09)
 
