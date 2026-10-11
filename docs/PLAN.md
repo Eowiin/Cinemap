@@ -142,6 +142,8 @@ Tri fait le 2026-10-08 avec le propriétaire, pendant le déploiement de la v1. 
    - IDF (362 cinémas) : J → J+6 chaque nuit (~1 500 requêtes de plus, ~25 min à 1 req/s) ;
    - hors IDF : J → J+2 chaque nuit, plus la semaine complète la nuit de mardi à mercredi (publication des programmes de la semaine ciné) ;
    - le saut des jours annoncés vides (commit `f39affa`) réduit encore le total.
+   - Décidé le 2026-10-11 : J → J+2 chaque nuit (là où les séances bougent), semaine complète une fois, quand le programme de la semaine est publié. Avant de fixer la nuit : mesurer à quel moment J+3 → J+6 change vraiment (comparer deux scrapes successifs) au lieu de supposer le mardi.
+   - Préventes lointaines (ex. séances réservables un mois avant) : AlloCiné les a déjà, mais seulement en demandant ce jour précis. Pas une priorité pour « qu'est-ce qui passe », utile plus tard pour les alertes « Prochainement ».
 5. **« Ce soir près de moi »** : prochaines séances de tous les cinémas proches, tous films confondus, triées par heure de début (nouvel endpoint + vue).
 6. **Accessibilité** : séances sous-titrées pour sourds et malentendants (`_sme`), audiodescription, salle accessible (tags déjà dans la réponse AlloCiné, à garder en base).
 
@@ -151,7 +153,21 @@ Ensuite, sans ordre :
 - Avant-premières, ciné-rencontres, ressorties de classiques : regarder d'abord ce que contiennent vraiment les tags AlloCiné et `productionYear` en prod.
 - Films qui vont bientôt quitter l'affiche (beaucoup moins de séances la semaine suivante) : dépend du point 4.
 
+Ajouté le 2026-10-11 avec le propriétaire :
+- **Prochainement** : films annoncés par les cinémas sans séance pour l'instant (ex. UGC annonce en octobre ses sorties de novembre à janvier). Par enseigne, comme `CARTES.md` : repérer dans les outils réseau le JSON des pages « prochainement » UGC puis Pathé (ugc.fr se remplit en JavaScript), un appel par nuit, rattaché à tous les cinémas de l'enseigne si la liste est commune. Repli national : TMDB `/movie/upcoming?region=FR`.
+  - Alerte par **notification** (pas d'agenda) quand un film suivi gagne des séances dans un cinéma favori ou proche : le scrape de nuit le détecte. Web Push sans compte (abonnement anonyme + films suivis côté serveur). Demande de revoir une watchlist (`StoredList`).
+  - iPhone : seulement iOS 16.4+, PWA ajoutée à l'écran d'accueil, autorisation demandée sur un tap. Sans `PushManager` : afficher pourquoi c'est indisponible ; sur iOS hors `display-mode: standalone` : expliquer « Partager → Sur l'écran d'accueil ».
+- **Programme du jour** (plusieurs films à la suite) :
+  - manuel d'abord : ajouter des séances, signaler les chevauchements et les trajets trop courts ;
+  - automatique ensuite : choisir 2 à 4 films, essayer toutes les combinaisons (fin = séance + ~15 min de pubs + `runtime_min`, trajet à vol d'oiseau avec vitesse moyenne, marge 10-15 min), calcul dans le navigateur ;
+  - respecte les filtres actifs (cartes, VO…), plus un filtre « même cinéma » ;
+  - « Et après ? » depuis une séance : ce qu'on peut enchaîner à proximité (version légère, bon premier pas) ;
+  - partage par lien (identifiants des séances dans l'URL, sans serveur) + export `.ics`.
+- **Soutenir le projet** : lien Ko-fi ou Liberapay pour participer aux frais du serveur. Gratuit pour tout le reste : un abonnement est écarté (frais Stripe sur les petites sommes, comptes obligatoires, clé TMDB non commerciale). Dons à déclarer dans la micro-entreprise (à confirmer avec l'URSSAF ou un comptable).
+- **Scraping plus intelligent** (pas de proxies ni de rotation d'IP pour contourner les limites d'AlloCiné, pas de licence Webedia) : éviter les requêtes inutiles (point 4), et à terme récupérer les séances des grandes enseignes (UGC, Pathé, MK2, CGR) sur leurs propres sites, chacune à un rythme poli, pour qu'AlloCiné ne couvre plus que les indépendants.
+- Plus tard : **watchlist ou programme commun sans compte**, via un lien secret (identifiant aléatoire non devinable, petite table côté serveur, expiration après la date) : ceux qui ont le lien ajoutent des films ou votent pour des séances.
+
 Fait ou abandonné :
 - ~~Filtre « après 20h »~~ : fait (paramètre `after`, `FilterBar.svelte`).
-- ~~Notifications PWA~~ : abandonné le 2026-10-08 (serveur Web Push, abonnements côté serveur, iPhone seulement si la PWA est installée : trop lourd pour le gain).
+- ~~Notifications PWA~~ : abandonné le 2026-10-08 (serveur Web Push, abonnements côté serveur, iPhone seulement si la PWA est installée : trop lourd pour le gain). À revoir pour « Prochainement » : un abonnement Web Push est anonyme, donc possible sans compte.
 - Stratégie de rafraîchissement hors IDF : intégrée au point 4.
