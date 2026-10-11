@@ -3,6 +3,8 @@ import {
   addDays,
   dateLabel,
   effectiveAfter,
+  searchKey,
+  titleMatches,
   floorQuarter,
   formatDistance,
   formatRuntime,
@@ -91,5 +93,16 @@ describe('formatting', () => {
     );
     expect(posterUrl('https://example.com/a.jpg', 160, 213)).toBe('https://example.com/a.jpg');
     expect(posterUrl(null, 160, 213)).toBeNull();
+  });
+});
+
+describe('titleMatches', () => {
+  it('ignores case, accents, punctuation and word order', () => {
+    expect(searchKey("L'Été dernier")).toBe('l ete dernier');
+    expect(titleMatches("L'Été dernier", 'ete')).toBe(true);
+    expect(titleMatches('Spider-Man: Brand New Day', 'spiderman')).toBe(true);
+    expect(titleMatches('Fjord', 'verity')).toBe(false);
+    expect(titleMatches('Spider-Man: Brand New Day', 'day spider')).toBe(true);
+    expect(titleMatches('Fjord', '')).toBe(true);
   });
 });

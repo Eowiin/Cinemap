@@ -114,3 +114,26 @@ export function posterUrl(url: string | null, width: number, height: number): st
 export function year(date: string | null): string | null {
   return date ? date.slice(0, 4) : null;
 }
+
+/** Texte comparable pour une recherche : minuscules, sans accents ni ponctuation (« L'Été » → « l ete »). */
+export function searchKey(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Tous les mots de la requête apparaissent dans le titre, accents et casse ignorés ;
+ * ou la requête collée (« spiderman » trouve « Spider-Man »).
+ */
+export function titleMatches(title: string, query: string): boolean {
+  const key = searchKey(title);
+  const q = searchKey(query);
+  return (
+    q.split(' ').every((word) => key.includes(word)) ||
+    key.replaceAll(' ', '').includes(q.replaceAll(' ', ''))
+  );
+}

@@ -67,9 +67,11 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - Limite : mon programme garde l'id de séance ; si AlloCiné la renumérote, elle reste affichée dans le programme mais l'horaire n'est plus surligné sur les fiches.
 - Vérifié en dev piloté par Chrome sans interface (390 px, clair et sombre) : ajout, alerte de chevauchement, page, lien partagé avec une séance introuvable, aucune erreur console, pas de défilement horizontal.
 
-## « Ensuite ? » (2026-10-11)
+## « Enchaîner un film » (2026-10-11)
 
-- Revu le soir même : une page « Et après ? » à part, avec une liste à plat (heure · film · cinéma, le même film cinq fois, sans affiche), obligeait à des allers-retours avec le programme. Tout se fait maintenant dans **Ma journée** : sous la dernière séance, « Ensuite ? » propose les films qu'on peut enchaîner, **un appui sur un horaire l'ajoute**, et la proposition repart de la nouvelle fin.
+- Revu le soir même : une page « Et après ? » à part, avec une liste à plat (heure · film · cinéma, le même film cinq fois, sans affiche), obligeait à des allers-retours avec le programme. Tout se fait maintenant dans **Ma journée** : sous la dernière séance, « Enchaîner un film » propose les films qu'on peut enchaîner, **un appui sur un horaire l'ajoute**, et la proposition repart de la nouvelle fin.
+- **Fermé par défaut** (bouton « + Enchaîner un film » sous la dernière séance) : la plupart des journées n'ont qu'un film, et rien n'est demandé à l'API tant qu'on n'ouvre pas. Refermé après un ajout.
+- **Filtre par titre** (au-delà de 5 lignes) : sur les séances déjà chargées, sans requête (`titleMatches` : accents, casse, mots dans le désordre, « spiderman » trouve « Spider-Man »). Film introuvable : « Aucune séance de « X » à attraper après 20:39 à moins de 3 km », avec « Chercher à 5 km » et « Toutes ses séances » (sa fiche). Si le film n'est pas dans les séances chargées (il passe plus tôt, ou ailleurs), un seul `/api/search` après une pause de frappe retrouve sa fiche.
 - Une ligne par film et cinéma (affiche, cinéma + trajet, durée, 4 horaires au plus), 5 lignes puis « + n autres ». Horaire « juste » (< 10 min de battement) bordé d'orange.
 - `GET /api/showtimes` (`API.md`) autour du cinéma de la dernière séance, `after` = fin estimée, 200 séances au plus, avec les filtres en cours (version, cartes, favoris). Mesuré en local : 99 séances = 33 Ko, **3,8 Ko gzip**.
 - Distance : même cinéma (`cinemas=<id>`), 1, 3 (par défaut) ou 5 km. Le filtre favoris ignore la distance, comme ailleurs ; « même cinéma » prime.

@@ -2,7 +2,7 @@
   import { api } from '../lib/api/client';
   import { app, showtimeFilters } from '../lib/app.svelte';
   import { activeFilters } from '../lib/filters';
-  import { formatRuntime, timeOf } from '../lib/format';
+  import { formatRuntime, timeOf, titleMatches } from '../lib/format';
   import {
     clock,
     endMinutes,
@@ -16,11 +16,15 @@
   import { programme } from '../lib/programme.svelte';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
+  import { href } from '../lib/routes';
+  import Icon from './Icon.svelte';
   import Poster from './Poster.svelte';
   import Status from './Status.svelte';
 
-  // « Ensuite ? » : sous la dernière séance de la journée, les films qu'on peut enchaîner
-  // à proximité, avec les filtres en cours (version, cartes, favoris). Un appui ajoute.
+  // « Enchaîner un film » : sous la dernière séance de la journée, fermé par défaut (la
+  // plupart des journées n'ont qu'un film, et rien n'est demandé à l'API tant qu'on n'ouvre
+  // pas). Ouvert : les films qu'on peut enchaîner à proximité, avec les filtres en cours
+  // (version, cartes, favoris), filtrables par titre sans nouvelle requête. Un appui ajoute.
 
   let { from }: { from: PlanStop } = $props();
 
@@ -38,6 +42,8 @@
   ] as const;
   let scope = $state<number>(3);
   let expanded = $state(false);
+  let open = $state(false);
+  let query = $state('');
 
   const end = $derived(endMinutes(from));
   // Fin après minuit : `after` ne va pas au-delà du jour ciné, et il n'y a plus rien.
@@ -45,7 +51,7 @@
 
   const nearby = resource(
     () => {
-      if (tooLate) return null;
+      if (!open || tooLate) return null;
       const filters = showtimeFilters();
       return {
         date: from.date,
@@ -65,8 +71,35 @@
   const groups = $derived(
     nearby.data ? groupFollowUps(followUps(from, nearbyStops(nearby.data))) : [],
   );
-  const shown = $derived(expanded ? groups : groups.slice(0, FIRST_ROWS));
+  const matching = $derived(
+    query.trim() ? groups.filter((g) => titleMatches(g.items[0]!.stop.movie.title, query)) : groups,
+  );
+  const shown = $derived(expanded || query.trim() ? matching : matching.slice(0, FIRST_ROWS));
+  // Le champ n'aide que pour une longue liste (on garde le champ s'il est rempli).
+  const searchable = $derived(groups.length > FIRST_ROWS || query !== '');
   const movies = $derived(nearby.data?.movies ?? []);
+  const noMatch = $derived(query.trim().length >= 2 && matching.length === 0);
+  // Le film cherché passe peut-être dans le rayon après la fin, sans qu'on puisse l'attraper.
+  const nearbyMatch = $derived(
+    noMatch ? (movies.find((m) => titleMatches(m.title, query)) ?? null) : null,
+  );
+
+  // Sinon (il passe plus tôt, ou ailleurs), une recherche pour proposer sa fiche :
+  // seulement dans ce cas, après une pause de frappe.
+  let pausedQuery = $state('');
+  $effect(() => {
+    const q = noMatch && !nearbyMatch ? query.trim() : '';
+    const timer = setTimeout(() => (pausedQuery = q), 300);
+    return () => clearTimeout(timer);
+  });
+  const searched = resource(
+    () => pausedQuery,
+    (q, signal) => (q ? api.search(q, signal) : Promise.resolve(null)),
+  );
+  const unreachable = $derived(
+    nearbyMatch ??
+      (noMatch ? (searched.data?.movies.find((m) => titleMatches(m.title, query)) ?? null) : null),
+  );
   const movieOf = (id: number) => movies.find((m) => m.id === id) ?? null;
 
   const cardNames = $derived(
@@ -78,19 +111,34 @@
 
   function add(stop: PlanStop) {
     programme.toggle($state.snapshot(stop) as PlanStop);
-    expanded = false;
+    close();
   }
+
+  function close() {
+    open = false;
+    expanded = false;
+    query = '';
+  }
+
+  const where = $derived(scope === 0 ? 'dans ce cinéma' : `à moins de ${scope} km`);
 </script>
 
-<section class="follow-ups" aria-labelledby="follow-ups-title">
-  <header>
-    <h2 id="follow-ups-title">Ensuite ?</h2>
-    <span class="muted small">après {clock(end)}</span>
-  </header>
+{#if tooLate}
+  <!-- Fin après minuit : `after` ne dépasse pas le jour ciné, rien à proposer. -->
+{:else if !open}
+  <button class="button" onclick={() => (open = true)}>
+    <Icon name="plus" size={16} /> Enchaîner un film
+  </button>
+{:else}
+  <section class="follow-ups" aria-labelledby="follow-ups-title">
+    <header>
+      <h2 id="follow-ups-title">Enchaîner un film</h2>
+      <span class="muted small">après {clock(end)}</span>
+      <button class="icon" aria-label="Fermer" onclick={close}
+        ><Icon name="close" size={16} /></button
+      >
+    </header>
 
-  {#if tooLate}
-    <p class="muted small">Fin après minuit : plus rien à enchaîner ce jour-là.</p>
-  {:else}
     <div class="scroll-row" role="group" aria-label="Distance">
       {#each SCOPES as s (s.value)}
         <button
@@ -107,11 +155,40 @@
       <p class="muted small">Filtres : {applied.join(', ')}</p>
     {/if}
 
+    {#if searchable}
+      <input
+        class="search"
+        type="search"
+        placeholder="Un film en particulier ?"
+        aria-label="Filtrer par titre"
+        bind:value={query}
+      />
+    {/if}
+
     <Status loading={nearby.loading && !nearby.data} error={nearby.error} retry={nearby.retry} />
     {#if nearby.data && groups.length === 0}
-      <p class="muted small">
-        Rien à enchaîner {scope === 0 ? 'dans ce cinéma' : `à moins de ${scope} km`} avec ces critères.
-      </p>
+      <p class="muted small">Rien à enchaîner {where} avec ces critères.</p>
+    {:else if query.trim() && matching.length === 0}
+      <div class="none">
+        <p class="muted small">
+          Aucune séance de « {unreachable?.title ?? query.trim()} » à attraper après {clock(end)}
+          {where}.
+        </p>
+        <p class="none-actions">
+          {#if scope < 5}
+            <button class="button small" onclick={() => (scope = 5)}>Chercher à 5 km</button>
+          {/if}
+          {#if unreachable}
+            <a
+              class="button small"
+              href={href(
+                { name: 'movie', id: unreachable.id },
+                { ...router.filters, date: from.date === app.today ? null : from.date },
+              )}>Toutes ses séances</a
+            >
+          {/if}
+        </p>
+      </div>
     {:else if groups.length}
       <ul class="rows" class:stale={nearby.loading}>
         {#each shown as group (group.key)}
@@ -153,17 +230,17 @@
           </li>
         {/each}
       </ul>
-      {#if shown.length < groups.length}
+      {#if shown.length < matching.length}
         <button class="link" onclick={() => (expanded = true)}>
-          + {groups.length - shown.length} autre{groups.length - shown.length > 1 ? 's' : ''}
+          + {matching.length - shown.length} autre{matching.length - shown.length > 1 ? 's' : ''}
         </button>
       {/if}
       <p class="muted small hint">
         Un appui sur un horaire l'ajoute à la journée. En orange : moins de 10 min de battement.
       </p>
     {/if}
-  {/if}
-</section>
+  </section>
+{/if}
 
 <style>
   .follow-ups {
@@ -175,6 +252,45 @@
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
+  }
+
+  header .icon {
+    margin-left: auto;
+    align-self: center;
+    display: inline-flex;
+    padding: 0.3rem;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: var(--muted);
+  }
+
+  header .icon:hover {
+    background: var(--surface-2);
+  }
+
+  .search {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+
+  .none {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .none-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .button.small {
+    padding: 0.35em 0.75em;
+    font-size: 0.88rem;
   }
 
   h2 {
