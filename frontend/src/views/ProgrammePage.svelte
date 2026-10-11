@@ -4,6 +4,7 @@
   import Icon from '../components/Icon.svelte';
   import Status from '../components/Status.svelte';
   import { app, map } from '../lib/app.svelte';
+  import { weekDays } from '../lib/filters';
   import { dateLabel, timeOf } from '../lib/format';
   import {
     clock,
@@ -26,7 +27,7 @@
   import { router } from '../lib/router.svelte';
   import { href } from '../lib/routes';
 
-  // Deux modes : ma journée (gardée dans le navigateur), ou une journée partagée
+  // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
   // (`?date=…&s=C0159.1000032855.2030…`), retrouvé via le programme de chaque cinéma.
 
   const refs = $derived(parseShareParam(new URLSearchParams(router.search).get('s')));
@@ -38,7 +39,8 @@
     router.filters.date ??
       (shared || stopsOf(app.today).length ? app.today : (days[0] ?? app.today)),
   );
-  const dayChoices = $derived([...new Set([app.today, ...days, date])].sort());
+  // Toute la semaine (on prépare n'importe quel jour), plus les jours prévus au-delà.
+  const dayChoices = $derived([...new Set([...weekDays(app.today, date), ...days])].sort());
 
   const sharedStops = resource(
     () => ({ refs, date }),
@@ -47,7 +49,7 @@
 
   const stops = $derived(shared ? (sharedStops.data?.stops ?? []) : stopsOf(date));
   const steps = $derived(plan(stops));
-  /** Changements de cinéma dans la journée (0 : pas de trajet à montrer). */
+  /** Changements de cinéma dans le jour affiché (0 : pas de trajet à montrer). */
   const moves = $derived(Math.max(dayRoute(stops).path.length - 1, 0));
   const problems = $derived(steps.filter((s) => s.next && s.next.status !== 'ok').length);
 
@@ -65,8 +67,8 @@
   let manualUrl = $state<string | null>(null);
 
   async function share() {
-    const url = `${location.origin}/journee?date=${date}&s=${shareParam(stops)}`;
-    const title = `Ma journée ciné, ${dateLabel(date, app.today).toLowerCase()}`;
+    const url = `${location.origin}/programme?date=${date}&s=${shareParam(stops)}`;
+    const title = `Programme ciné, ${dateLabel(date, app.today).toLowerCase()}`;
     if (navigator.share) {
       try {
         await navigator.share({ title, url });
@@ -87,7 +89,7 @@
   function keepShared() {
     const added = stops.filter((s) => !programme.has(s.id));
     programme.set([...programme.items, ...($state.snapshot(added) as PlanStop[])]);
-    router.goto(`/journee${date === app.today ? '' : `?date=${date}`}`);
+    router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
   }
 
   /** Fichier `.ics` : sur iPhone, Safari propose « Tout ajouter » au calendrier. */
@@ -112,12 +114,12 @@
   }
 </script>
 
-<svelte:head><title>{shared ? 'Journée partagée' : 'Ma journée'} · Cinemap</title></svelte:head>
+<svelte:head><title>{shared ? 'Programme partagé' : 'Mon programme'} · Cinemap</title></svelte:head>
 
 <a class="back" href={href({ name: 'home' }, router.filters)}><Icon name="back" /> À l'affiche</a>
 
 <header>
-  <h1>{shared ? 'Journée partagée' : 'Ma journée'}</h1>
+  <h1>{shared ? 'Programme partagé' : 'Mon programme'}</h1>
   {#if shared}
     <p class="muted">{dateLabel(date, app.today)}</p>
   {:else}
@@ -139,7 +141,7 @@
       <button class="button small" onclick={exportCalendar}>
         <Icon name="calendar" size={15} /> Agenda
       </button>
-      <button class="button small" onclick={clearDay}>Vider la journée</button>
+      <button class="button small" onclick={clearDay}>Vider ce jour</button>
     </div>
     {#if manualUrl}
       <label class="manual">
@@ -219,8 +221,8 @@
           {#if !shared}
             <button
               class="icon"
-              aria-label="Retirer {stop.movie.title} de la journée"
-              title="Retirer de la journée"
+              aria-label="Retirer {stop.movie.title} du programme"
+              title="Retirer du programme"
               onclick={() => programme.remove(stop.id)}><Icon name="close" size={16} /></button
             >
           {/if}
@@ -255,7 +257,7 @@
   {#if shared}
     <div class="actions">
       <button class="button primary" onclick={keepShared}>
-        <Icon name="plus" size={16} /> Ajouter à ma journée
+        <Icon name="plus" size={16} /> Ajouter à mon programme
       </button>
     </div>
   {/if}
@@ -267,8 +269,8 @@
   <div class="empty">
     <p>Rien de prévu {date === app.today ? "aujourd'hui" : 'ce jour-là'}.</p>
     <p class="muted">
-      Appuyez sur un horaire, dans la fiche d'un film ou d'un cinéma, puis « Ajouter à ma journée ».
-      Cinemap signale les séances qui se chevauchent et les trajets trop courts.
+      Appuyez sur un horaire, dans la fiche d'un film ou d'un cinéma, puis « Ajouter à mon programme
+      ». Cinemap signale les séances qui se chevauchent et les trajets trop courts.
     </p>
     <a class="button" href={href({ name: 'home' }, router.filters)}>Voir les films à l'affiche</a>
   </div>

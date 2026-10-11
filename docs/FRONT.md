@@ -22,7 +22,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/` | À l'affiche autour de la position (Paris par défaut, bouton « Autour de moi »), rayon 5 à 100 km |
 | `/film/{id}` | Fiche film + séances par cinéma, triées par distance |
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
-| `/journee` | Ma journée (séances enchaînées, « Ensuite ? »), ou une journée partagée (`?date=…&s=…`) |
+| `/programme` | Mon programme, jour par jour (séances enchaînées, composition, trajet), ou un programme partagé (`?date=…&s=…`) |
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
 
@@ -58,31 +58,34 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 - **Bulles** : le nom seul (les cartes acceptées sont sur la fiche du cinéma).
 - **Écran tactile** (`(hover: none)`) : un appui montre une fiche (nom, « Voir les séances ») au lieu d'ouvrir le cinéma ; à la souris, survol = nom, clic = fiche cinéma. Noms de tous les cinémas dès le zoom 14.
 
-## Ma journée : programme manuel (2026-10-11)
+## Mon programme : mode manuel (2026-10-11)
 
-- **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter à ma journée / Retirer, Voir ma journée. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
+Nommé « Mon programme » quelques heures (`/journee`), puis **« Mon programme »** (`/programme`) : on prépare n'importe quel jour de la semaine (rangée des 7 jours, avec le nombre de séances prévues), pas seulement aujourd'hui.
+
+
+- **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter à mon programme / Retirer, Voir mon programme. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
 - **Calculs** (`lib/planner.ts`, pur, testé) : fin = début + 15 min de pubs + `runtime_min` (2 h supposées si inconnue) ; trajet à vol d'oiseau, le plus court entre à pied (4 km/h, 15 min/km) et transports (10 min + 3 min/km), donc à pied sous ~800 m ; battement souhaité 10 min. Statut de chaque enchaînement : chevauchement, trajet trop court, juste (< 10 min de battement), ok. Constantes en tête du fichier, à ajuster avec l'usage.
 - **Stockage** : `StoredList` `cinemap:programme`, chaque séance garde de quoi s'afficher et calculer les trajets sans l'API (`PlanStop`). Les jours avant la veille sont effacés au chargement. Icône calendrier dans l'en-tête, avec le nombre de séances prévues.
-- **Partage par lien, sans serveur** : `/journee?date=2026-10-12&s=C0159.1000032855.2030,…` (cinéma, film, heure `HHMM` du jour ciné, `2415` = 00h15 ; 8 au plus). Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée (compté par le scrape). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à ma journée » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
+- **Partage par lien, sans serveur** : `/programme?date=2026-10-12&s=C0159.1000032855.2030,…` (cinéma, film, heure `HHMM` du jour ciné, `2415` = 00h15 ; 8 au plus). Pas l'id de séance : AlloCiné renumérote parfois une séance inchangée (compté par le scrape). À l'ouverture, un appel `/api/cinemas/{id}/showtimes` par cinéma retrouve les séances ; une séance disparue est comptée et signalée. « Ajouter à mon programme » fusionne. Partage natif (`navigator.share`), sinon copie dans le presse-papiers, sinon lien affiché.
 - **Agenda** (`lib/ics.ts`, pur, testé) : fichier `cinemap-{date}.ics`, un événement par séance, du début de la séance à la fin estimée, heures en UTC (pas de bloc VTIMEZONE, aucun agenda ne se trompe de fuseau ; testé à l'heure d'été, d'hiver et la nuit du changement), lieu = nom du cinéma + `GEO`, description avec l'heure du film après les pubs et le lien de réservation. Sur iPhone, Safari propose « Tout ajouter ».
 - Limite : mon programme garde l'id de séance ; si AlloCiné la renumérote, elle reste affichée dans le programme mais l'horaire n'est plus surligné sur les fiches.
 - Vérifié en dev piloté par Chrome sans interface (390 px, clair et sombre) : ajout, alerte de chevauchement, page, lien partagé avec une séance introuvable, aucune erreur console, pas de défilement horizontal.
 
 ## « Enchaîner un film » (2026-10-11)
 
-- Revu le soir même : une page « Et après ? » à part, avec une liste à plat (heure · film · cinéma, le même film cinq fois, sans affiche), obligeait à des allers-retours avec le programme. Tout se fait maintenant dans **Ma journée** : sous la dernière séance, « Enchaîner un film » propose les films qu'on peut enchaîner, **un appui sur un horaire l'ajoute**, et la proposition repart de la nouvelle fin.
+- Revu le soir même : une page « Et après ? » à part, avec une liste à plat (heure · film · cinéma, le même film cinq fois, sans affiche), obligeait à des allers-retours avec le programme. Tout se fait maintenant dans **Mon programme** : sous la dernière séance, « Enchaîner un film » propose les films qu'on peut enchaîner, **un appui sur un horaire l'ajoute**, et la proposition repart de la nouvelle fin.
 - **Fermé par défaut** (bouton « + Enchaîner un film » sous la dernière séance) : la plupart des journées n'ont qu'un film, et rien n'est demandé à l'API tant qu'on n'ouvre pas. Refermé après un ajout.
 - **Filtre par titre** (au-delà de 5 lignes) : sur les séances déjà chargées, sans requête (`titleMatches` : accents, casse, mots dans le désordre, « spiderman » trouve « Spider-Man »). Film introuvable : « Aucune séance de « X » à attraper après 20:39 à moins de 3 km », avec « Chercher à 5 km » et « Toutes ses séances » (sa fiche). Si le film n'est pas dans les séances chargées (il passe plus tôt, ou ailleurs), un seul `/api/search` après une pause de frappe retrouve sa fiche.
 - Une ligne par film et cinéma (affiche, cinéma + trajet, durée, 4 horaires au plus), 5 lignes puis « + n autres ». Horaire « juste » (< 10 min de battement) bordé d'orange.
 - `GET /api/showtimes` (`API.md`) autour du cinéma de la dernière séance, `after` = fin estimée, 200 séances au plus, avec les filtres en cours (version, cartes, favoris). Mesuré en local : 99 séances = 33 Ko, **3,8 Ko gzip**.
 - Distance : même cinéma (`cinemas=<id>`), 1, 3 (par défaut) ou 5 km. Le filtre favoris ignore la distance, comme ailleurs ; « même cinéma » prime.
 - `planner.followUps` / `groupFollowUps` : autre film, ni chevauchement ni trajet trop court, par heure puis distance. Fin après minuit : rien à proposer (`after` ne dépasse pas le jour ciné).
-- Menu d'une séance : **Réserver** en grand en tête, puis « Ajouter à ma journée » et « Voir ma journée → ».
+- Menu d'une séance : **Réserver** en grand en tête, puis « Ajouter à mon programme » et « Voir mon programme → ».
 
 ## Composer automatiquement (2026-10-11)
 
-- Bloc en haut de **Ma journée**, fermé par défaut. **Deux temps** (revu le soir même : la liste disparaissait dès le premier film choisi) : on **coche** 1 à 4 films dans la liste des films à l'affiche autour (8 puis « Plus de films », recherche par titre, bouton « Composer avec n films » qui reste visible en bas), puis les propositions s'affichent (« Modifier » revient à la liste).
-- **Composer, c'est recomposer la journée** (revu le même soir : l'automatique complétait autour des séances prévues, et un seul film se collait à la suite) : les films de la journée sont déjà cochés, tous les horaires sont libres, et « Remplacer ma journée » remplace les séances du jour.
+- Bloc en haut de **Mon programme**, fermé par défaut. **Deux temps** (revu le soir même : la liste disparaissait dès le premier film choisi) : on **coche** 1 à 4 films dans la liste des films à l'affiche autour (8 puis « Plus de films », recherche par titre, bouton « Composer avec n films » sous la liste), puis les propositions s'affichent (« Modifier » revient à la liste).
+- **Composer, c'est recomposer la journée** (revu le même soir : l'automatique complétait autour des séances prévues, et un seul film se collait à la suite) : les films de la journée sont déjà cochés, tous les horaires sont libres, et « Remplacer ce jour » remplace les séances du jour.
 - Réglages : « dès » maintenant / 14 h / 18 h… (14 h par défaut un autre jour), 2, 5 ou 10 km autour de la position. Filtres en cours appliqués (version, cartes, favoris). Les films cochés restent dans le navigateur (`cinemap:compose`) : on peut aller voir une fiche et revenir, le bloc se rouvre tel quel.
 - **Classement** (`lib/composer.ts`, pur, testé) : le moins d'attente entre les films (trajets compris), un enchaînement « juste » compte 15 min de plus, puis le moins de trajets, puis finir tôt. 3 journées proposées.
 - **Calcul** : tous les ordres des films (24 pour 4), et pour chaque film les 6 premières séances possibles après la précédente (une plus tardive n'ajoute que de l'attente). Heures et trajets entre cinémas calculés une fois. Mesuré : 4 films × 50 séances dans 30 cinémas, **~20 ms** (580 ms avant ces caches).
@@ -91,7 +94,7 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 
 ## Trajet de la journée (2026-10-11)
 
-- Sur la carte, les cinémas de Ma journée numérotés dans l'ordre (« 1 · 3 » si on y revient), reliés par une ligne pointillée (`planner.dayRoute`, `map.route`). Rien si tout se passe dans un seul cinéma.
+- Sur la carte, les cinémas de Mon programme numérotés dans l'ordre (« 1 · 3 » si on y revient), reliés par une ligne pointillée (`planner.dayRoute`, `map.route`). Rien si tout se passe dans un seul cinéma.
 - Mobile : bouton « Voir le trajet sur la carte » (la carte est cachée) ; ordinateur : la carte est déjà là.
 - Lien « Itinéraire » sur chaque trajet entre deux séances : Google Maps, à pied ou en transports selon l'estimation. Un lien par trajet : Google ne gère pas les étapes intermédiaires en transports.
 

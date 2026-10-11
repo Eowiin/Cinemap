@@ -7,7 +7,7 @@ describe('parseRoute', () => {
     expect(parseRoute('/film/1000032855')).toEqual({ name: 'movie', id: 1000032855 });
     expect(parseRoute('/cinema/C0159')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/cinema/C0159/')).toEqual({ name: 'cinema', id: 'C0159' });
-    expect(parseRoute('/journee')).toEqual({ name: 'programme' });
+    expect(parseRoute('/programme')).toEqual({ name: 'programme' });
   });
 
   it('rejects anything else', () => {

@@ -32,7 +32,7 @@
         class="showtime"
         class:planned
         aria-haspopup="dialog"
-        title={planned ? `${label(s)}, dans ma journée` : label(s)}
+        title={planned ? `${label(s)}, dans mon programme` : label(s)}
         onclick={() => open(s)}
       >
         <strong>
@@ -71,7 +71,7 @@
     border-color: var(--accent);
   }
 
-  /* Dans ma journée. */
+  /* Dans mon programme. */
   .planned {
     border-color: var(--accent);
     background: var(--accent-soft);

@@ -45,10 +45,12 @@
     <SearchBox />
     <a
       class="programme"
-      href="/journee"
+      href="/programme"
       aria-current={router.route.name === 'programme' ? 'page' : undefined}
-      aria-label={planned ? `Ma journée, ${planned} séance${planned > 1 ? 's' : ''}` : 'Ma journée'}
-      title="Ma journée"
+      aria-label={planned
+        ? `Mon programme, ${planned} séance${planned > 1 ? 's' : ''}`
+        : 'Mon programme'}
+      title="Mon programme"
     >
       <Icon name="calendar" />
       {#if planned}<span class="count">{planned}</span>{/if}

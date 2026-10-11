@@ -30,7 +30,7 @@
     if (!stop) return;
     const date = stop.date;
     dialog.close();
-    router.goto(`/journee${date === app.today ? '' : `?date=${date}`}`);
+    router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
   }
 
   function closeOnBackdrop(event: MouseEvent) {
@@ -98,11 +98,11 @@
           onclick={toggle}
         >
           <Icon name={planned ? 'check' : 'plus'} size={16} />
-          {planned ? 'Dans ma journée' : 'Ajouter à ma journée'}
+          {planned ? 'Dans mon programme' : 'Ajouter à mon programme'}
         </button>
         {#if planned || dayCount}
           <button class="link" onclick={openProgramme}>
-            Voir ma journée ({dayCount + (planned ? 1 : 0)}) →
+            Voir mon programme ({dayCount + (planned ? 1 : 0)}) →
           </button>
         {/if}
       </div>

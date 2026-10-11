@@ -20,7 +20,7 @@
 
   // Programme automatique, en deux temps : on coche 1 à 4 films (ceux de la journée sont
   // déjà cochés), puis Cinemap propose les meilleures journées (le moins d'attente).
-  // Tous les horaires sont libres : « Choisir » remplace la journée.
+  // Tous les horaires sont libres : « Choisir » remplace les séances du jour.
 
   let { date, day }: { date: string; day: PlanStop[] } = $props();
 
@@ -198,7 +198,7 @@
     {#if step === 'pick'}
       <p class="muted small">
         Cochez 1 à {MAX_FILMS} films{day.length
-          ? ' (ceux de votre journée le sont déjà ; tous leurs horaires seront revus)'
+          ? ' (ceux déjà prévus ce jour-là le sont ; tous leurs horaires seront revus)'
           : ''}.
       </p>
       <input
@@ -320,7 +320,7 @@
                       : ''}
                   </span>
                   <button class="button small" class:primary={i === 0} onclick={() => choose(plan)}
-                    >{day.length ? 'Remplacer ma journée' : 'Choisir'}</button
+                    >{day.length ? 'Remplacer ce jour' : 'Choisir'}</button
                   >
                 </div>
               </li>
@@ -455,24 +455,19 @@
     font-weight: 600;
   }
 
-  /* Le bouton de validation reste visible pendant qu'on fait défiler la liste. */
   .validate {
-    position: sticky;
-    bottom: calc(4.5rem + env(safe-area-inset-bottom));
     display: grid;
     padding-top: 0.3rem;
   }
 
   .validate .button {
     justify-content: center;
-    box-shadow: var(--shadow);
   }
 
   .validate .button:disabled {
     background: var(--surface-2);
     border-color: var(--border);
     color: var(--muted);
-    box-shadow: none;
   }
 
   .summary {

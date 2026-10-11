@@ -117,7 +117,7 @@ class MapState {
   all = $state<CinemaSummary[]>([]);
   /** Cinémas mis en avant (séances du film, cinéma affiché). */
   highlighted = $state<MapCinema[]>([]);
-  /** Trajet de la journée (Ma journée) : ligne entre les cinémas et numéros d'étape. */
+  /** Trajet de la journée (Mon programme) : ligne entre les cinémas et numéros d'étape. */
   route = $state<MapRoute | null>(null);
   /** Point à centrer (cinéma affiché) ; sinon la carte cadre `highlighted` et la position. */
   focus = $state<Position | null>(null);

@@ -219,7 +219,7 @@
                   <button
                     class="time"
                     class:tight={link.status === 'tight'}
-                    title="Ajouter à ma journée : {linkLabel(link).toLowerCase()}"
+                    title="Ajouter au programme : {linkLabel(link).toLowerCase()}"
                     onclick={() => add(stop)}
                   >
                     <strong>{timeOf(stop.starts_at)}</strong>
@@ -237,7 +237,7 @@
         </button>
       {/if}
       <p class="muted small hint">
-        Un appui sur un horaire l'ajoute à la journée. En orange : moins de 10 min de battement.
+        Un appui sur un horaire l'ajoute au programme. En orange : moins de 10 min de battement.
       </p>
     {/if}
   </section>

@@ -111,7 +111,7 @@ export function dayToIcs(stops: PlanStop[], now: Date = new Date()): string {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Cinemap//Ma journee//FR',
+    'PRODID:-//Cinemap//Mon programme//FR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...[...stops].sort((a, b) => startMinutes(a) - startMinutes(b)).flatMap((s) => event(s, now)),
