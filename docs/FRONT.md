@@ -60,7 +60,7 @@ Cinémas seulement (les films favoris ont été retirés le 2026-10-09, faute d'
 
 ## Mon programme : mode manuel (2026-10-11)
 
-Nommé « Mon programme » quelques heures (`/journee`), puis **« Mon programme »** (`/programme`) : on prépare n'importe quel jour de la semaine (rangée des 7 jours, avec le nombre de séances prévues), pas seulement aujourd'hui.
+Nommé « Ma journée » quelques heures (`/journee`), puis **« Mon programme »** (`/programme`) : on prépare n'importe quel jour de la semaine (rangée des 7 jours, avec le nombre de séances prévues), pas seulement aujourd'hui.
 
 
 - **Un appui sur un horaire** (fiche film ou cinéma) ouvre un menu (`ShowtimeMenu`, un seul pour l'application) : Réserver, Ajouter à mon programme / Retirer, Voir mon programme. Avant l'ajout, il signale ce qui coince avec les séances déjà prévues ce jour-là. Les horaires du programme sont surlignés. Avant, l'horaire menait directement à la réservation.
