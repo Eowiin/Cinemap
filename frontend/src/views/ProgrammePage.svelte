@@ -478,6 +478,13 @@
     font-size: 0.86rem;
   }
 
+  /* Doigt : zone d'appui d'au moins 40 px (l'icône ne change pas). */
+  @media (pointer: coarse) {
+    .icon {
+      padding: 0.6rem;
+    }
+  }
+
   .empty {
     display: grid;
     gap: 0.6rem;

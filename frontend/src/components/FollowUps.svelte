@@ -270,6 +270,13 @@
     background: var(--surface-2);
   }
 
+  /* Doigt : zone d'appui d'au moins 40 px (l'icône ne change pas). */
+  @media (pointer: coarse) {
+    header .icon {
+      padding: 0.6rem;
+    }
+  }
+
   .search {
     width: 100%;
     padding: 0.5rem 0.7rem;

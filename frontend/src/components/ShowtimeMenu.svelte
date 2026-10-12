@@ -194,6 +194,13 @@
     background: var(--surface-2);
   }
 
+  /* Doigt : zone d'appui d'au moins 40 px (l'icône ne change pas). */
+  @media (pointer: coarse) {
+    .icon {
+      padding: 0.6rem;
+    }
+  }
+
   .link {
     display: inline-flex;
     align-items: center;
