@@ -51,7 +51,6 @@ impl Head<'_> {
         let mut head = format!(
             "<title>{title}</title>\n\
              <meta name=\"description\" content=\"{description}\" />\n\
-             <link rel=\"canonical\" href=\"{url}\" />\n\
              <meta property=\"og:site_name\" content=\"{SITE_NAME}\" />\n\
              <meta property=\"og:locale\" content=\"fr_FR\" />\n\
              <meta property=\"og:type\" content=\"{}\" />\n\
@@ -67,8 +66,11 @@ impl Head<'_> {
                 escape(image)
             );
         }
+        // Une page exclue de l'index n'a pas d'URL canonique à annoncer.
         if self.noindex {
             head.push_str("<meta name=\"robots\" content=\"noindex\" />\n");
+        } else {
+            let _ = writeln!(head, "<link rel=\"canonical\" href=\"{url}\" />");
         }
         if let Some(json_ld) = &self.json_ld {
             let _ = writeln!(

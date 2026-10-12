@@ -70,7 +70,15 @@ export default defineConfig({
     proxy: { '/api': 'http://localhost:3000' },
   },
   preview: {
-    proxy: { '/api': 'http://localhost:3000' },
+    // Comme nginx en prod : les fichiers du build ici, les pages HTML (titre, JSON-LD,
+    // redirections, sitemap) par l'API, qui lit ../frontend/dist/index.html.
+    // `npm run dev`, lui, sert son propre index.html : les pages du serveur n'y passent pas.
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '^/$': 'http://localhost:3000',
+      '^/(film|cinema)/': 'http://localhost:3000',
+      '^/(programme|sitemap\\.xml)$': 'http://localhost:3000',
+    },
   },
   test: {
     include: ['src/**/*.test.ts'],
