@@ -143,6 +143,7 @@ async fn unknown_pages_are_real_404s() {
                 .contains("<meta name=\"robots\" content=\"noindex\" />"),
             "{uri}"
         );
+        assert!(!reply.body.contains("rel=\"canonical\""), "{uri}");
     }
     // Sous /api/, le contrat JSON reste le même.
     let reply = get(&state, "/api/nimporte").await;
