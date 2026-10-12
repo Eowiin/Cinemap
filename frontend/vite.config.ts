@@ -64,6 +64,18 @@ export default defineConfig({
   build: {
     // MapLibre seul dépasse la limite par défaut ; il est chargé à part, à la demande.
     chunkSizeWarningLimit: 1200,
+    rolldownOptions: {
+      output: {
+        // Le worker de MapLibre (`maplibre-gl-worker.mjs?url`) est un module worker : le
+        // navigateur exige un type JavaScript. Le nginx d'Ubuntu ne connaît pas `.mjs`
+        // (servi en application/octet-stream, donc refusé, et non compressé) : on le
+        // publie en `.js`.
+        assetFileNames: (asset) =>
+          asset.names.some((name) => name.endsWith('.mjs'))
+            ? 'assets/[name]-[hash].js'
+            : 'assets/[name]-[hash][extname]',
+      },
+    },
   },
   server: {
     // En dev, l'API Rust tourne à côté : même origine pour le navigateur, pas de CORS.
