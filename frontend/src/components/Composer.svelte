@@ -80,7 +80,13 @@
     const all = [...extra, ...listed];
     return query.trim() ? all.filter((m) => titleMatches(m.title, query)) : all;
   });
-  const shownChoices = $derived(more || query.trim() ? choices : choices.slice(0, FIRST_FILMS));
+  // Un film coché plus bas que les premiers (ex. une séance déjà prévue) remonte en tête :
+  // sinon « Composer avec 3 films » n'en montre que 2 cochés.
+  const shownChoices = $derived.by(() => {
+    if (more || query.trim()) return choices;
+    const hidden = choices.slice(FIRST_FILMS).filter((m) => wanted.has(m.id));
+    return [...hidden, ...choices.slice(0, FIRST_FILMS)];
+  });
 
   // Séances de chaque film choisi : un appel par film (4 au plus), gardé tant que les
   // réglages ne changent pas.
@@ -368,6 +374,13 @@
 
   .icon:hover {
     background: var(--surface-2);
+  }
+
+  /* Doigt : zone d'appui d'au moins 40 px (l'icône ne change pas). */
+  @media (pointer: coarse) {
+    .icon {
+      padding: 0.6rem;
+    }
   }
 
   .films {
