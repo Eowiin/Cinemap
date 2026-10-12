@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { cardBadges, cardListDate, toggledCard } from './cards';
-import { isCoveredPosition, isCoveredPostalCode } from './coverage';
 import { isFavoriteCinema } from './favorites';
 import { markedFirst, parseStored, refreshed, serializeStored, toggled } from './stored';
 
@@ -82,15 +81,5 @@ describe('cards', () => {
   it('date la liste à Paris', () => {
     // 23 h 30 UTC le 8 = 1 h 30 le 9 à Paris.
     expect(cardListDate('2026-10-08T23:30:00Z')).toBe('09/10');
-  });
-});
-
-describe('coverage', () => {
-  it("reconnaît l'Île-de-France par position et par code postal", () => {
-    expect(isCoveredPosition({ lat: 48.8566, lng: 2.3522 })).toBe(true);
-    expect(isCoveredPosition({ lat: 45.764, lng: 4.8357 })).toBe(false);
-    expect(isCoveredPostalCode('93100')).toBe(true);
-    expect(isCoveredPostalCode('69002')).toBe(false);
-    expect(isCoveredPostalCode(null)).toBe(true);
   });
 });

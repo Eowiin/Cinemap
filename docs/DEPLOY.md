@@ -13,7 +13,7 @@ navigateur ──HTTPS──► nginx (certbot)
                            (pages HTML : gabarit www/index.html de la release, vraies 404)
 
 timers systemd (heure de Paris) :
-  chaque nuit 4 h   cinemap-nightly : cinemap scrape, puis cinemap tmdb
+  chaque nuit 4 h   cinemap-nightly : cinemap scrape (France, J → J+2 ; J → J+6 le mercredi), puis cinemap tmdb
   le mardi 2 h      cinemap-weekly  : cinemap import-cinemas (+ géocodage + CNC)
 
 push ──► GitHub Actions : fmt, clippy, tests (Rust) ; test, check, lint, build (front)
@@ -142,6 +142,16 @@ curl -sI https://cinemap.ethansaux.fr/film/1 | head -1                 # 404 (id
 ```
 
 Ensuite, dans Google Search Console : **Sitemaps** → ajouter `sitemap.xml`.
+
+### 5 ter. Scrape de toute la France (2026-10-12)
+
+La CI ne copie pas les unités systemd : après un changement de `deploy/systemd/cinemap-nightly.service`, depuis la racine du dépôt sur le Mac :
+
+```bash
+scp deploy/systemd/cinemap-nightly.service root@<vps>:/etc/systemd/system/
+ssh root@<vps> 'systemctl daemon-reload && systemd-analyze verify /etc/systemd/system/cinemap-nightly.service && systemctl cat cinemap-nightly | grep ExecStart'
+ssh root@<vps> 'systemctl start --no-block cinemap-nightly'   # facultatif : remplir la France tout de suite
+```
 
 ### 6. Droits de la CI
 

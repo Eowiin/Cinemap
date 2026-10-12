@@ -1,6 +1,5 @@
 <script lang="ts">
   import CardBadges from '../components/CardBadges.svelte';
-  import CoverageNotice from '../components/CoverageNotice.svelte';
   import FavoriteButton from '../components/FavoriteButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import Icon from '../components/Icon.svelte';
@@ -9,7 +8,6 @@
   import Status from '../components/Status.svelte';
   import { api } from '../lib/api/client';
   import { app, map, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
-  import { isCoveredPosition } from '../lib/coverage';
   import { favoriteCinema } from '../lib/favorites';
   import { favorites } from '../lib/favorites.svelte';
   import { formatDistance, formatRuntime, year } from '../lib/format';
@@ -134,9 +132,6 @@
         : `Séances à moins de ${app.radiusKm} km de ${app.positionLabel}`}
     </h2>
     <FilterBar dates={showtimes.data?.dates ?? []} />
-    {#if !isCoveredPosition(app.position)}
-      <CoverageNotice what="les séances autour de vous" />
-    {/if}
     <Status
       loading={showtimes.loading && !showtimes.data}
       error={showtimes.error}

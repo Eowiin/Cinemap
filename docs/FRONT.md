@@ -100,7 +100,7 @@ Nommé « Ma journée » quelques heures (`/journee`), puis **« Mon programme �
 
 ## Couverture (2026-10-09)
 
-Séances mises à jour pour l'Île-de-France seulement (`lib/coverage.ts`). Message `CoverageNotice` : accueil et fiche film si la position est hors IDF, fiche d'un cinéma hors IDF.
+Séances mises à jour pour toute la France depuis le 2026-10-12 (avant : l'Île-de-France seulement, avec un message `CoverageNotice` ailleurs, retiré depuis).
 
 ## Carte indisponible
 
