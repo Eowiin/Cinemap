@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { filtersQuery, href, parseFilters, parseRoute } from './routes';
+import {
+  cinemaRoute,
+  filtersQuery,
+  href,
+  movieRoute,
+  parseFilters,
+  parseRoute,
+  routePath,
+} from './routes';
 
 describe('parseRoute', () => {
   it('recognises the pages', () => {
@@ -8,6 +16,29 @@ describe('parseRoute', () => {
     expect(parseRoute('/cinema/C0159')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/cinema/C0159/')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/programme')).toEqual({ name: 'programme' });
+  });
+
+  it('reads the id before the readable name', () => {
+    expect(parseRoute('/film/1001-l-ete-dernier')).toEqual({
+      name: 'movie',
+      id: 1001,
+      slug: 'l-ete-dernier',
+    });
+    expect(parseRoute('/cinema/C0013-luminor-hotel-de-ville-paris/')).toEqual({
+      name: 'cinema',
+      id: 'C0013',
+      slug: 'luminor-hotel-de-ville-paris',
+    });
+  });
+
+  it('builds the same paths as the server', () => {
+    expect(routePath(movieRoute({ id: 1001, title: "L'Été dernier" }))).toBe(
+      '/film/1001-l-ete-dernier',
+    );
+    expect(routePath(cinemaRoute({ id: 'LYON', name: 'Pathé Bellecour', city: 'Lyon' }))).toBe(
+      '/cinema/LYON-pathe-bellecour-lyon',
+    );
+    expect(routePath(movieRoute({ id: 7, title: '…' }))).toBe('/film/7');
   });
 
   it('rejects anything else', () => {

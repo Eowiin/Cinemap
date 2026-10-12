@@ -11,7 +11,8 @@
   import { formatRuntime, timeAgo, timeOf } from '../lib/format';
   import { router } from '../lib/router.svelte';
   import { resource } from '../lib/resource.svelte';
-  import { href } from '../lib/routes';
+  import { cinemaRoute, href, movieRoute } from '../lib/routes';
+  import { HOME_TITLE } from '../lib/seo';
 
   const movies = resource(
     () => ({ ...showtimeFilters(), position: app.position, radius_km: app.radiusKm }),
@@ -26,10 +27,10 @@
   const dates = $derived(app.meta?.dates_available ?? []);
 </script>
 
-<svelte:head><title>Cinemap · à l'affiche</title></svelte:head>
+<svelte:head><title>{HOME_TITLE}</title></svelte:head>
 
 <section class="intro">
-  <h1>À l'affiche</h1>
+  <h1>Séances de cinéma</h1>
   <p class="where">
     autour de
     <strong>{app.positionLabel}</strong>,
@@ -63,7 +64,7 @@
       {#each favorites.cinemas.items as cinema (cinema.id)}
         <li class="chip fav">
           <Icon name="star" size={14} filled />
-          <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
+          <a href={href(cinemaRoute(cinema), router.filters)}>{cinema.name}</a>
           <button
             aria-label="Retirer {cinema.name} des favoris"
             onclick={() => favorites.cinemas.remove(cinema.id)}
@@ -101,7 +102,7 @@
     <ol class="movies" class:stale={movies.loading}>
       {#each movies.data.movies as item (item.movie.id)}
         <li>
-          <a class="movie" href={href({ name: 'movie', id: item.movie.id }, router.filters)}>
+          <a class="movie" href={href(movieRoute(item.movie), router.filters)}>
             <Poster url={item.movie.poster_url} title={item.movie.title} width={72} height={96} />
             <div class="info">
               <h2>{item.movie.title}</h2>

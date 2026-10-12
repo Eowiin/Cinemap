@@ -52,6 +52,10 @@ pub enum SubCommands {
         /// Adresse d'écoute (en prod, nginx est devant : inutile d'exposer le port).
         #[arg(long, env = "BIND_ADDR", default_value = "127.0.0.1:3000")]
         addr: String,
+        /// Dossier du front buildé (son index.html sert de gabarit aux pages HTML).
+        /// Par défaut : www/ à côté du binaire, sinon ../frontend/dist.
+        #[arg(long, env = "WWW_DIR")]
+        www: Option<std::path::PathBuf>,
     },
 }
 

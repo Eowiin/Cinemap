@@ -137,7 +137,7 @@ pub async fn get_one(
 }
 
 /// Un cinéma visible, avec le nom de son département ; 404 sinon.
-async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema> {
+pub(super) async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema> {
     let row = sqlx::query_as!(
         CinemaDetailRow,
         r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
@@ -199,6 +199,36 @@ pub async fn showtimes(
     let date = date.format(DATE_FORMAT).to_string();
     let today = today.format(DATE_FORMAT).to_string();
 
+    let movies = programme(&state.pool, &id, &date, version, after.as_deref()).await?;
+
+    // Filtres version/after ignorés : sert à griser les jours vides du sélecteur.
+    let dates = sqlx::query_scalar!(
+        r#"SELECT DISTINCT date AS "date!: String"
+           FROM showtimes
+           WHERE cinema_id = ?1 AND date >= ?2
+           ORDER BY date"#,
+        id,
+        today,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(CinemaShowtimesResponse {
+        cinema,
+        date,
+        dates,
+        movies,
+    }))
+}
+
+/// Séances d'un cinéma pour un jour, regroupées par film (ordre alphabétique).
+pub(super) async fn programme(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    date: &str,
+    version: Option<&str>,
+    after: Option<&str>,
+) -> ApiResult<Vec<MovieShowtimes>> {
     let rows = sqlx::query_as!(
         MovieShowtimeRow,
         r#"SELECT m.id AS "movie_id!: i64", m.title AS "title!: String",
@@ -221,27 +251,9 @@ pub async fn showtimes(
         version,
         after,
     )
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
-
-    // Filtres version/after ignorés : sert à griser les jours vides du sélecteur.
-    let dates = sqlx::query_scalar!(
-        r#"SELECT DISTINCT date AS "date!: String"
-           FROM showtimes
-           WHERE cinema_id = ?1 AND date >= ?2
-           ORDER BY date"#,
-        id,
-        today,
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    Ok(Json(CinemaShowtimesResponse {
-        cinema,
-        date,
-        dates,
-        movies: group_by_movie(rows),
-    }))
+    Ok(group_by_movie(rows))
 }
 
 /// Regroupe des lignes triées par film en une entrée par film, sans changer l'ordre.

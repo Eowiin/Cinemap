@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\"\n           FROM movies m\n           WHERE EXISTS (\n               SELECT 1 FROM showtimes s\n               JOIN visible_cinemas c ON c.id = s.cinema_id\n               WHERE s.movie_id = m.id AND s.date >= ?1)\n           ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "463e2f893588b8b2d63969343fd95039ca1ca6af5562849e79968204383ed278"
+}

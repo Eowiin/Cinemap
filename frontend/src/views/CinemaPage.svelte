@@ -16,7 +16,8 @@
   import { formatRuntime } from '../lib/format';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { href } from '../lib/routes';
+  import { href, movieRoute } from '../lib/routes';
+  import { cinemaTitle } from '../lib/seo';
 
   let { id }: { id: string } = $props();
 
@@ -51,7 +52,10 @@
   );
 </script>
 
-<svelte:head><title>{cinema ? `${cinema.name} · Cinemap` : 'Cinemap'}</title></svelte:head>
+<svelte:head>
+  <!-- Rien avant le chargement : le titre servi par le serveur reste en place. -->
+  {#if cinema}<title>{cinemaTitle(cinema.name, cinema.city, cinema.postal_code)}</title>{/if}
+</svelte:head>
 
 <a class="back" href={href({ name: 'home' }, router.filters)}><Icon name="back" /> À l'affiche</a>
 
@@ -103,13 +107,11 @@
       <ul class="movies" class:stale={programme.loading}>
         {#each data.movies as { movie, showtimes } (movie.id)}
           <li class="movie">
-            <a href={href({ name: 'movie', id: movie.id }, router.filters)} tabindex="-1">
+            <a href={href(movieRoute(movie), router.filters)} tabindex="-1">
               <Poster url={movie.poster_url} title={movie.title} width={56} height={75} />
             </a>
             <div class="info">
-              <a class="title" href={href({ name: 'movie', id: movie.id }, router.filters)}
-                >{movie.title}</a
-              >
+              <a class="title" href={href(movieRoute(movie), router.filters)}>{movie.title}</a>
               <p class="muted small">
                 {[movie.genres.slice(0, 2).join(', '), formatRuntime(movie.runtime_min)]
                   .filter(Boolean)

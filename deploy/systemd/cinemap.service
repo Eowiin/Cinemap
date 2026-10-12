@@ -1,4 +1,5 @@
-# API Cinemap (axum). Le front statique est servi directement par nginx.
+# API Cinemap (axum) et pages HTML (gabarit : www/index.html de la release, trouvé à côté
+# du binaire). Les fichiers statiques du front sont servis directement par nginx.
 # Installé dans /etc/systemd/system/ (voir docs/DEPLOY.md).
 [Unit]
 Description=Cinemap API

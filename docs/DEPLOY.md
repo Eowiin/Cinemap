@@ -8,7 +8,9 @@
 navigateur ──HTTPS──► nginx (certbot)
                         ├─ /api/…   → proxy → 127.0.0.1:11174 ─ cinemap serve (systemd : cinemap.service)
                         ├─ /assets/ → fichiers hashés de Vite, cache 1 an
-                        └─ le reste → /opt/cinemap/current/www, chemin inconnu → index.html
+                        ├─ fichier du front existant (sw.js, icônes, robots.txt…) → /opt/cinemap/current/www
+                        └─ le reste (/, /film/…, /cinema/…, /sitemap.xml) → proxy → cinemap serve
+                           (pages HTML : gabarit www/index.html de la release, vraies 404)
 
 timers systemd (heure de Paris) :
   chaque nuit 4 h   cinemap-nightly : cinemap scrape, puis cinemap tmdb
@@ -124,6 +126,22 @@ curl -sI http://cinemap.ethansaux.fr | head -3        # 301 vers https
 ```
 
 `certbot --nginx` modifie le fichier **installé** : `deploy/nginx/cinemap.conf` reste la version HTTP de départ. Pour changer la config plus tard, édite le fichier du VPS (et reporte la modification dans le dépôt).
+
+### 5 bis. Pages HTML pour le référencement (2026-10-12)
+
+Depuis la branche `seo-v2`, l'API sert aussi les pages (`/`, `/film/…`, `/cinema/…`, `/programme`, `/sitemap.xml`) avec titre, description, URL canonique, JSON-LD et contenu lisible sans JS. Le binaire lit `www/index.html` **à côté de lui** (`/proc/self/exe` suit le lien `current`), donc rien à changer dans `cinemap.env` ni dans systemd.
+
+À faire **une fois** sur le VPS, après le premier déploiement de cette version (avant, nginx continue de servir `index.html` partout et rien ne change pour les visiteurs). Dans `/etc/nginx/sites-available/cinemap`, bloc `server` du 443 (celui de certbot), remplacer le `location / { … }` par les trois blocs de `deploy/nginx/cinemap.conf` (`location /`, `location = /manifest.webmanifest`, `location @pages`), puis :
+
+```bash
+nginx -t && systemctl reload nginx
+curl -sI https://cinemap.ethansaux.fr/nimporte | head -1             # 404
+curl -s https://cinemap.ethansaux.fr/sitemap.xml | head -3             # <urlset …>
+curl -s https://cinemap.ethansaux.fr/robots.txt                        # Sitemap: …
+curl -sI https://cinemap.ethansaux.fr/film/1 | head -1                 # 404 (id inconnu)
+```
+
+Ensuite, dans Google Search Console : **Sitemaps** → ajouter `sitemap.xml`.
 
 ### 6. Droits de la CI
 

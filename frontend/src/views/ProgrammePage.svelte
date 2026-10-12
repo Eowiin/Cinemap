@@ -25,7 +25,7 @@
   import { resolveStops } from '../lib/resolve';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { href } from '../lib/routes';
+  import { cinemaRoute, href, movieRoute } from '../lib/routes';
 
   // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
   // (`?date=…&s=C0159.1000032855.2030…`), retrouvé via le programme de chaque cinéma.
@@ -200,13 +200,10 @@
           >
         </div>
         <div class="info">
-          <a class="title" href={href({ name: 'movie', id: stop.movie.id }, router.filters)}
-            >{stop.movie.title}</a
+          <a class="title" href={href(movieRoute(stop.movie), router.filters)}>{stop.movie.title}</a
           >
           <span class="muted small">
-            <a href={href({ name: 'cinema', id: stop.cinema.id }, router.filters)}
-              >{stop.cinema.name}</a
-            >
+            <a href={href(cinemaRoute(stop.cinema), router.filters)}>{stop.cinema.name}</a>
             · {stop.version}{stop.movie.runtime_min === null
               ? ` · durée inconnue (${DEFAULT_RUNTIME_MIN / 60} h supposées)`
               : ''}

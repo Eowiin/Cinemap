@@ -15,7 +15,8 @@
   import { formatDistance, formatRuntime, year } from '../lib/format';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { href } from '../lib/routes';
+  import { cinemaRoute, href } from '../lib/routes';
+  import { movieTitle } from '../lib/seo';
   import { markedFirst } from '../lib/stored';
 
   let { id }: { id: number } = $props();
@@ -44,7 +45,10 @@
   );
 </script>
 
-<svelte:head><title>{m ? `${m.title} · Cinemap` : 'Cinemap'}</title></svelte:head>
+<svelte:head>
+  <!-- Rien avant le chargement : le titre servi par le serveur reste en place. -->
+  {#if m}<title>{movieTitle(m.title)}</title>{/if}
+</svelte:head>
 
 <a class="back" href={href({ name: 'home' }, router.filters)}><Icon name="back" /> À l'affiche</a>
 
@@ -166,7 +170,7 @@
                   name={cinema.name}
                   compact
                 />
-                <a href={href({ name: 'cinema', id: cinema.id }, router.filters)}>{cinema.name}</a>
+                <a href={href(cinemaRoute(cinema), router.filters)}>{cinema.name}</a>
                 <span class="muted small"
                   >{[cinema.city, formatDistance(cinema.distance_km)]
                     .filter(Boolean)

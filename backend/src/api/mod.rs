@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use axum::{
     Router,
@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 use tower_http::{
     compression::CompressionLayer, set_header::SetResponseHeaderLayer, trace::TraceLayer,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::cinemas::departments::get_departments;
 
@@ -19,12 +19,14 @@ mod error;
 mod geo;
 mod meta;
 mod movies;
+mod pages;
 mod params;
 mod search;
 mod showtimes;
 mod types;
 
 pub use error::{ApiResult, AppError};
+pub use pages::PageTemplate;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +34,8 @@ pub struct AppState {
     /// Code INSEE du département → nom ("75" → "Paris"). Dans un `Arc` pour
     /// que le clone de l'état à chaque requête ne copie jamais la table.
     pub departments: Arc<HashMap<String, String>>,
+    /// `index.html` du front, pour les pages HTML ; `None` en dev sans build du front.
+    pub pages: Option<Arc<pages::PageTemplate>>,
 }
 
 impl AppState {
@@ -40,7 +44,13 @@ impl AppState {
         AppState {
             pool,
             departments: Arc::new(departments),
+            pages: None,
         }
+    }
+
+    pub fn with_pages(mut self, template: pages::PageTemplate) -> Self {
+        self.pages = Some(Arc::new(template));
+        self
     }
 }
 
@@ -55,7 +65,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/movies/{id}/showtimes", get(movies::showtimes))
         .route("/api/search", get(search::search))
         .route("/api/showtimes", get(showtimes::list))
-        .fallback(not_found)
+        // Pages HTML : nginx sert les fichiers du front et passe le reste ici.
+        .route("/", get(pages::home))
+        .route("/film/{segment}", get(pages::movie))
+        .route("/cinema/{segment}", get(pages::cinema))
+        .route("/programme", get(pages::programme_page))
+        .route("/sitemap.xml", get(pages::sitemap))
+        .fallback(pages::fallback)
         .with_state(state)
         // Les erreurs posent déjà `no-store` (AppError) : on ne remplit que les autres.
         .layer(SetResponseHeaderLayer::if_not_present(
@@ -77,14 +93,36 @@ fn cache_control<B>(response: &Response<B>) -> Option<HeaderValue> {
     ))
 }
 
-async fn not_found() -> AppError {
-    AppError::NotFound("Route introuvable")
+/// Dossier du front : `--www`, sinon `www/` à côté du binaire (une release sur le VPS :
+/// `/proc/self/exe` suit le lien `current`), sinon le build local `../frontend/dist`.
+fn www_dir(explicit: Option<PathBuf>) -> Option<PathBuf> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    let beside_binary = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("www")));
+    beside_binary
+        .into_iter()
+        .chain([PathBuf::from("../frontend/dist")])
+        .find(|dir| dir.join("index.html").is_file())
 }
 
-pub async fn serve(pool: SqlitePool, addr: &str) -> anyhow::Result<()> {
+pub async fn serve(pool: SqlitePool, addr: &str, www: Option<PathBuf>) -> anyhow::Result<()> {
+    let mut state = AppState::new(pool);
+    match www_dir(www) {
+        Some(dir) => {
+            // Un gabarit cassé arrête le démarrage : le health check du déploiement
+            // garde alors la release précédente.
+            let template = pages::PageTemplate::load(&dir.join("index.html"))?;
+            info!(dir = %dir.display(), "Pages HTML servies depuis le front");
+            state = state.with_pages(template);
+        }
+        None => warn!("index.html du front introuvable : pages HTML désactivées"),
+    }
     let listener = TcpListener::bind(addr).await?;
     info!(%addr, "API démarrée");
-    axum::serve(listener, router(AppState::new(pool)))
+    axum::serve(listener, router(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     info!("API arrêtée");

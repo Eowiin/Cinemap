@@ -2,7 +2,7 @@
   import { api, isAbort, latest } from '../lib/api/client';
   import type { SearchResults } from '../lib/api/types';
   import { router } from '../lib/router.svelte';
-  import { href, type Route } from '../lib/routes';
+  import { cinemaRoute, href, movieRoute, type Route } from '../lib/routes';
   import Icon from './Icon.svelte';
 
   let query = $state('');
@@ -17,13 +17,13 @@
     results
       ? [
           ...results.movies.map((m) => ({
-            route: { name: 'movie' as const, id: m.id },
+            route: movieRoute(m),
             label: m.title,
             detail: m.release_date?.slice(0, 4) ?? null,
             kind: 'Film' as const,
           })),
           ...results.cinemas.map((c) => ({
-            route: { name: 'cinema' as const, id: c.id },
+            route: cinemaRoute(c),
             label: c.name,
             detail: c.city,
             kind: 'Cinéma' as const,

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name AS \"name!: String\"\n           FROM cards\n           WHERE id IN (SELECT card_id FROM cinema_cards WHERE cinema_id = ?1)\n           ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cards",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dbc61f8a96d8c9b47bb361b6b750239ecf44732b3381d9e022b4f332442b474e"
+}
