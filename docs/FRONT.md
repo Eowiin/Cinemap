@@ -24,7 +24,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
 | `/programme` | Mon programme, jour par jour (séances enchaînées, composition, trajet), ou un programme partagé (`?date=…&s=…`) |
 
-Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL.
+Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL. « Autour de moi » affiche « Ma position », puis le nom de la ville (géocodage inverse de l'IGN, `data.geopf.fr`, gratuit et sans clé, position arrondie à ~100 m ; hors de France ou en cas d'échec, « Ma position » reste).
 
 Toute page est rechargeable : nginx doit renvoyer `index.html` pour les chemins inconnus (`try_files $uri $uri/ /index.html` dans `deploy/nginx/cinemap.conf`).
 

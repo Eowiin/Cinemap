@@ -88,7 +88,9 @@ class AppState {
     navigator.geolocation.getCurrentPosition(
       (p) => {
         this.locating = false;
-        this.setPosition({ lat: p.coords.latitude, lng: p.coords.longitude }, 'Ma position');
+        const position = { lat: p.coords.latitude, lng: p.coords.longitude };
+        this.setPosition(position, 'Ma position');
+        this.nameCity(position);
       },
       (error) => {
         this.locating = false;
@@ -99,6 +101,28 @@ class AppState {
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 5 * 60_000 },
     );
+  }
+
+  /**
+   * « autour de Montreuil » plutôt que « Ma position » : on voit que la localisation a marché.
+   * Géocodage inverse de l'IGN (gratuit, sans clé, la France seulement), position arrondie à
+   * ~100 m. En cas d'échec ou hors de France, « Ma position » reste.
+   */
+  private async nameCity(position: Position) {
+    const url =
+      'https://data.geopf.fr/geocodage/reverse?limit=1' +
+      `&lat=${position.lat.toFixed(3)}&lon=${position.lng.toFixed(3)}`;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (!response.ok) return;
+      const body: { features?: { properties?: { city?: string } }[] } = await response.json();
+      const city = body.features?.[0]?.properties?.city;
+      // La position a pu changer entre-temps (« Paris », nouvel appui).
+      if (city && this.position.lat === position.lat && this.position.lng === position.lng)
+        this.setPosition(position, city);
+    } catch {
+      // Hors ligne, service indisponible : « Ma position » suffit.
+    }
   }
 }
 
