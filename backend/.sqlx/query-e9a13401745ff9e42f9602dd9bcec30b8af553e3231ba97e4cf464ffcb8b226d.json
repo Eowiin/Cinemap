@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\"\n           FROM visible_cinemas\n           ORDER BY id",
+  "query": "SELECT c.id AS \"id!: String\", c.name AS \"name!: String\", c.city AS \"city?: String\",\n                  c.department AS \"department?: String\"\n           FROM visible_cinemas c\n           WHERE EXISTS (SELECT 1 FROM showtimes s WHERE s.cinema_id = c.id AND s.date >= ?1)\n           ORDER BY c.id",
   "describe": {
     "columns": [
       {
@@ -35,16 +35,28 @@
             "name": "city"
           }
         }
+      },
+      {
+        "name": "department?: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "department"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "e64a09c0fb6a941f421bdcb1a761c0eea2f4894fe3b810ce9aad58545817c04f"
+  "hash": "e9a13401745ff9e42f9602dd9bcec30b8af553e3231ba97e4cf464ffcb8b226d"
 }

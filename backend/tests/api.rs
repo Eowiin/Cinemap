@@ -628,3 +628,40 @@ async fn showtimes_nearby_filters() {
         assert_bad_request(&get(&state, uri).await, uri);
     }
 }
+
+#[tokio::test]
+async fn city_lists_its_visible_cinemas() {
+    let state = state().await;
+    let reply = get(&state, "/api/cities/paris").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json["slug"], "paris");
+    assert_eq!(reply.json["label"], "Paris");
+    assert_eq!(reply.json["cinema_count"], 1);
+    // NOGEO (sans position) et OLD (plus listé) sont à Paris mais masqués.
+    assert_eq!(ids(&reply.json["cinemas"]), ["PARIS1"]);
+    assert_eq!(
+        get(&state, "/api/cities/atlantide").await.status,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn search_finds_cities_by_the_start_of_their_name() {
+    let state = state().await;
+    let reply = get(&state, "/api/search?q=mont").await;
+    let cities: Vec<&str> = reply.json["cities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["slug"].as_str().unwrap())
+        .collect();
+    assert_eq!(cities, ["montreuil"]);
+    assert_eq!(reply.json["cities"][0]["cinema_count"], 1);
+}
+
+#[tokio::test]
+async fn cinema_knows_its_city_page() {
+    let state = state().await;
+    let reply = get(&state, "/api/cinemas/PARIS2").await;
+    assert_eq!(reply.json["city_slug"], "montreuil");
+}

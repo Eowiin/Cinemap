@@ -65,6 +65,13 @@
   <header>
     <h1>{cinema.name}</h1>
     {#if address}<p class="muted">{address}</p>{/if}
+    {#if cinema.city_slug && cinema.city}
+      <p class="small">
+        <a href={href({ name: 'city', slug: cinema.city_slug }, router.filters)}
+          >Tous les cinémas de {cinema.city}</a
+        >
+      </p>
+    {/if}
     <p class="badges">
       <CardBadges cards={cinema.cards} />
       {#if cinema.art_et_essai}<span class="badge accent">Art et Essai</span>{/if}

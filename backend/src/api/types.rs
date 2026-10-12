@@ -25,6 +25,25 @@ pub struct Cinema {
     pub screens: Option<i64>,
     pub seats: Option<i64>,
     pub allocine_url: String,
+    pub city_slug: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CitySummary {
+    pub slug: String,
+    pub name: String,
+    pub label: String,
+    pub department: Option<String>,
+    pub cinema_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct City {
+    #[serde(flatten)]
+    pub summary: CitySummary,
+    pub lat: f64,
+    pub lng: f64,
+    pub cinemas: Vec<CinemaSummary>,
 }
 
 #[derive(Debug, Serialize)]
@@ -116,6 +135,7 @@ pub struct NowShowingResponse {
 pub struct SearchResponse {
     pub movies: Vec<MovieSummary>,
     pub cinemas: Vec<CinemaSummary>,
+    pub cities: Vec<CitySummary>,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cinemaSlug, cinemaTitle, locality, movieTitle, slugify } from './seo';
+import { cinemaSlug, cinemaTitle, cityTitle, locality, movieTitle, slugify } from './seo';
 
 // Mêmes cas que backend/src/text.rs et tests/pages.rs : les deux côtés doivent s'accorder.
 describe('slugify', () => {
@@ -36,6 +36,10 @@ describe('titles', () => {
   });
 
   it('matches the server titles', () => {
+    expect(cityTitle('Paris', 1)).toBe('Cinéma à Paris : séances et horaires | Cinemap');
+    expect(cityTitle('Lyon', 17)).toBe(
+      'Cinéma à Lyon : séances et horaires des 17 cinémas | Cinemap',
+    );
     expect(movieTitle("L'Été dernier")).toBe("L'Été dernier : séances et horaires | Cinemap");
     expect(cinemaTitle('UGC Ciné Cité Les Halles', 'Paris', '75001')).toBe(
       'UGC Ciné Cité Les Halles (Paris 1er) : programme et horaires | Cinemap',

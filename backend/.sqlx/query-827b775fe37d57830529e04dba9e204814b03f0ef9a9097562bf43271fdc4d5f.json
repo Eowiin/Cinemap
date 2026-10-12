@@ -1,0 +1,59 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT city AS \"city!: String\", department AS \"department?: String\",\n                      count(*) AS \"cinema_count!: i64\",\n                      avg(lat) AS \"lat!: f64\", avg(lng) AS \"lng!: f64\"\n               FROM visible_cinemas\n               WHERE city IS NOT NULL\n               GROUP BY city, department",
+  "describe": {
+    "columns": [
+      {
+        "name": "city!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "city"
+          }
+        }
+      },
+      {
+        "name": "department?: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "department"
+          }
+        }
+      },
+      {
+        "name": "cinema_count!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "lat!: f64",
+        "ordinal": 3,
+        "type_info": "Float",
+        "origin": "Expression"
+      },
+      {
+        "name": "lng!: f64",
+        "ordinal": 4,
+        "type_info": "Float",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "827b775fe37d57830529e04dba9e204814b03f0ef9a9097562bf43271fdc4d5f"
+}

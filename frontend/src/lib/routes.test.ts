@@ -16,6 +16,8 @@ describe('parseRoute', () => {
     expect(parseRoute('/cinema/C0159')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/cinema/C0159/')).toEqual({ name: 'cinema', id: 'C0159' });
     expect(parseRoute('/programme')).toEqual({ name: 'programme' });
+    expect(parseRoute('/ville/saint-denis-974')).toEqual({ name: 'city', slug: 'saint-denis-974' });
+    expect(routePath({ name: 'city', slug: 'lyon' })).toBe('/ville/lyon');
   });
 
   it('reads the id before the readable name', () => {

@@ -52,6 +52,12 @@ export function locality(city: string, postalCode: string | null): string {
 
 export const HOME_TITLE = 'Cinemap : séances de cinéma près de chez vous';
 
+export function cityTitle(label: string, cinemaCount: number): string {
+  return cinemaCount > 1
+    ? `Cinéma à ${label} : séances et horaires des ${cinemaCount} cinémas | Cinemap`
+    : `Cinéma à ${label} : séances et horaires | Cinemap`;
+}
+
 export function movieTitle(title: string): string {
   return `${title} : séances et horaires | Cinemap`;
 }

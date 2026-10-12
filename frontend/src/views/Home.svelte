@@ -12,7 +12,31 @@
   import { router } from '../lib/router.svelte';
   import { resource } from '../lib/resource.svelte';
   import { cinemaRoute, href, movieRoute } from '../lib/routes';
-  import { HOME_TITLE } from '../lib/seo';
+  import { cityTitle, HOME_TITLE } from '../lib/seo';
+
+  // Avec `city` (/ville/lyon), le même écran centré sur la ville, avec ses cinémas.
+  let { city = null }: { city?: string | null } = $props();
+
+  const place = resource(
+    () => city,
+    (slug, signal) => (slug ? api.city(slug, signal) : Promise.resolve(null)),
+  );
+  const cityData = $derived(place.data?.slug === city ? place.data : null);
+
+  // Ouvrir une ville, c'est chercher autour d'elle : comme le bouton « Paris », la
+  // position est gardée pour les visites suivantes.
+  let centeredOn: string | null = null;
+  $effect(() => {
+    if (cityData && centeredOn !== cityData.slug) {
+      centeredOn = cityData.slug;
+      app.setPosition({ lat: cityData.lat, lng: cityData.lng }, cityData.label);
+    }
+  });
+
+  /** Quitter la ville (autre position) : retour à l'accueil, l'URL ne dit plus vrai. */
+  function leaveCity() {
+    if (city) router.go({ name: 'home' });
+  }
 
   const movies = resource(
     () => ({ ...showtimeFilters(), position: app.position, radius_km: app.radiusKm }),
@@ -20,17 +44,24 @@
   );
 
   $effect(() => {
-    map.show([]);
+    map.show(cityData?.cinemas ?? []);
   });
 
   const isParis = $derived(app.position.lat === PARIS.lat && app.position.lng === PARIS.lng);
   const dates = $derived(app.meta?.dates_available ?? []);
 </script>
 
-<svelte:head><title>{HOME_TITLE}</title></svelte:head>
+<svelte:head>
+  {#if !city}<title>{HOME_TITLE}</title>
+  {:else if cityData}<title>{cityTitle(cityData.label, cityData.cinema_count)}</title>{/if}
+</svelte:head>
+
+{#if city && place.error}
+  <Status loading={false} error={place.error} retry={place.retry} />
+{/if}
 
 <section class="intro">
-  <h1>Séances de cinéma</h1>
+  <h1>{city ? `Cinéma à ${cityData?.label ?? '…'}` : 'Séances de cinéma'}</h1>
   <p class="where">
     autour de
     <strong>{app.positionLabel}</strong>,
@@ -42,11 +73,18 @@
     </label>
   </p>
   <div class="locate">
-    <button class="button" onclick={() => app.locate()} disabled={app.locating}>
+    <button
+      class="button"
+      onclick={() => {
+        app.locate();
+        leaveCity();
+      }}
+      disabled={app.locating}
+    >
       <Icon name="locate" />
       {app.locating ? 'Localisation…' : 'Autour de moi'}
     </button>
-    {#if !isParis}
+    {#if !isParis && !city}
       <button class="button" onclick={() => app.setPosition(PARIS, 'Paris')}>Paris</button>
     {/if}
   </div>
@@ -55,6 +93,23 @@
 
 {#if !isCoveredPosition(app.position)}
   <CoverageNotice what="les séances autour de vous" />
+{/if}
+
+{#if cityData}
+  <section class="favorites" aria-labelledby="city-cinemas-title">
+    <h2 id="city-cinemas-title" class="label">
+      {cityData.cinemas.length > 1
+        ? `Les ${cityData.cinemas.length} cinémas de ${cityData.name}`
+        : `Le cinéma de ${cityData.name}`}
+    </h2>
+    <ul class="scroll-row">
+      {#each cityData.cinemas as cinema (cinema.id)}
+        <li class="chip">
+          <a href={href(cinemaRoute(cinema), router.filters)}>{cinema.name}</a>
+        </li>
+      {/each}
+    </ul>
+  </section>
 {/if}
 
 {#if favorites.cinemas.items.length}
@@ -197,7 +252,7 @@
     vertical-align: -1px;
   }
 
-  .fav a {
+  .favorites .chip a {
     text-decoration: none;
   }
 

@@ -9,6 +9,8 @@ export type Route =
   /** `slug` : le nom lisible après l'id (`/film/42-garance`), sans effet sur la page. */
   | { name: 'movie'; id: number; slug?: string }
   | { name: 'cinema'; id: string; slug?: string }
+  /** Même écran que l'accueil, centré sur la ville. */
+  | { name: 'city'; slug: string }
   | { name: 'programme' }
   | { name: 'not-found' };
 
@@ -28,6 +30,8 @@ export function parseRoute(pathname: string): Route {
   if (movie) return { name: 'movie', id: Number(movie[1]), slug: movie[2] || undefined };
   const cinema = pathname.match(/^\/cinema\/([A-Za-z0-9]+)(?:-([^/]*))?\/?$/);
   if (cinema) return { name: 'cinema', id: cinema[1]!, slug: cinema[2] || undefined };
+  const city = pathname.match(/^\/ville\/([a-z0-9-]+)\/?$/);
+  if (city) return { name: 'city', slug: city[1]! };
   if (/^\/programme\/?$/.test(pathname)) return { name: 'programme' };
   return { name: 'not-found' };
 }
@@ -70,6 +74,8 @@ export function routePath(route: Route): string {
       return withSlug(`/film/${route.id}`, route.slug);
     case 'cinema':
       return withSlug(`/cinema/${encodeURIComponent(route.id)}`, route.slug);
+    case 'city':
+      return `/ville/${route.slug}`;
     case 'programme':
       return '/programme';
     case 'not-found':

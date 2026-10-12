@@ -7,7 +7,7 @@ use axum::{
 };
 
 use super::html::{SITE_URL, escape};
-use super::{cinema_path, movie_path};
+use super::{cinema_path, city_path, movie_path};
 use crate::api::{ApiResult, AppState};
 use crate::time::{DATE_FORMAT, paris_today};
 
@@ -15,6 +15,7 @@ struct CinemaRow {
     id: String,
     name: String,
     city: Option<String>,
+    department: Option<String>,
 }
 
 struct MovieRow {
@@ -22,15 +23,20 @@ struct MovieRow {
     title: String,
 }
 
-/// Accueil, cinémas visibles et films qui ont encore des séances (~3 700 URLs, ~350 Ko
-/// avant gzip). Construit à la demande : deux requêtes, quelques millisecondes.
+/// Pages qui ont des séances à venir : accueil, villes (au moins un de leurs cinémas),
+/// cinémas et films. Hors de la zone scrapée, les pages existent mais restent en dehors
+/// (et en `noindex`) : des milliers de pages sans séance nuiraient à tout le site.
+/// Construit à la demande : deux requêtes et l'index des villes.
 pub async fn sitemap(State(state): State<AppState>) -> ApiResult<Response> {
     let today = paris_today().format(DATE_FORMAT).to_string();
     let cinemas = sqlx::query_as!(
         CinemaRow,
-        r#"SELECT id AS "id!: String", name AS "name!: String", city AS "city?: String"
-           FROM visible_cinemas
-           ORDER BY id"#,
+        r#"SELECT c.id AS "id!: String", c.name AS "name!: String", c.city AS "city?: String",
+                  c.department AS "department?: String"
+           FROM visible_cinemas c
+           WHERE EXISTS (SELECT 1 FROM showtimes s WHERE s.cinema_id = c.id AND s.date >= ?1)
+           ORDER BY c.id"#,
+        today,
     )
     .fetch_all(&state.pool)
     .await?;
@@ -48,12 +54,27 @@ pub async fn sitemap(State(state): State<AppState>) -> ApiResult<Response> {
     .fetch_all(&state.pool)
     .await?;
 
-    let mut xml = String::with_capacity(100 * (cinemas.len() + movies.len() + 1));
+    // Les villes dont au moins un cinéma a des séances à venir, dans l'ordre de l'index.
+    let index = state.cities.get(&state.pool, &state.departments).await?;
+    let showing: std::collections::HashSet<&str> = cinemas
+        .iter()
+        .filter_map(|c| index.slug_of(c.city.as_deref()?, c.department.as_deref()))
+        .collect();
+    let cities: Vec<&str> = index
+        .cities
+        .iter()
+        .map(|c| c.slug.as_str())
+        .filter(|slug| showing.contains(slug))
+        .collect();
+
+    let capacity = cinemas.len() + movies.len() + cities.len() + 1;
+    let mut xml = String::with_capacity(100 * capacity);
     xml.push_str(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
          <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
     );
     let paths = std::iter::once("/".to_owned())
+        .chain(cities.iter().map(|slug| city_path(slug)))
         .chain(movies.iter().map(|m| movie_path(m.id, &m.title)))
         .chain(
             cinemas

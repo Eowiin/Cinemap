@@ -39,8 +39,10 @@ Servies par la même application, derrière nginx, pour les moteurs de recherche
 
 - `/` : accueil, films du jour en France.
 - `/film/{id}-{slug}` et `/cinema/{id}-{slug}` : le slug est le titre (film) ou le nom + la ville si le nom ne la contient pas (cinéma), sans accents ni ponctuation (`text::slugify`, `seo.ts` côté front). L'id fait foi : un autre slug ou pas de slug → **301** vers l'URL canonique, query conservée.
+- `/ville/{slug}` : cinémas de la ville et des environs (10 km), films du jour dans ces cinémas. Slug inconnu → 404.
 - `/programme` : `noindex` (le programme vit dans le navigateur).
-- `/sitemap.xml` : accueil, cinémas visibles, films avec au moins une séance à venir.
+- `/sitemap.xml` : accueil, puis les villes, cinémas et films qui ont **au moins une séance à venir** (pour une ville : l'un de ses cinémas).
+- **Pages sans séance à venir** (film plus à l'affiche, cinéma hors de la zone scrapée ou sans programme, ville dont aucun cinéma n'a de séance) : 200 et consultables, mais `noindex` et absentes du sitemap. Des milliers de pages vides nuiraient à tout le site ; elles entrent d'elles-mêmes quand le scrape couvre leur région.
 - Id inconnu, cinéma masqué, chemin inconnu → **404** HTML `noindex` (JSON sous `/api/`).
 - `Cache-Control: no-cache` sur les pages (elles pointent vers les fichiers de la release en cours), `public, max-age=3600` sur le sitemap.
 
@@ -71,6 +73,22 @@ type Cinema = CinemaSummary & {
   screens: number | null;
   seats: number | null;
   allocine_url: string;        // https://www.allocine.fr/seance/salle_gen_csalle=C0159.html
+  city_slug: string | null;    // page de sa ville (/ville/{city_slug}), null sans ville
+};
+
+// Une ville = les cinémas visibles qui partagent `city` et le département.
+type CitySummary = {
+  slug: string;          // "lyon" ; "saint-denis-974" si le nom existe dans plusieurs départements
+  name: string;          // "Lyon"
+  label: string;         // "Lyon", ou "Saint-Denis (La Réunion)" pour les homonymes
+  department: string | null;  // nom du département
+  cinema_count: number;
+};
+
+type City = CitySummary & {
+  lat: number;           // moyenne des positions de ses cinémas
+  lng: number;
+  cinemas: CinemaSummary[];   // ses cinémas, par nom (distance_km = null)
 };
 
 type MovieSummary = {
@@ -143,6 +161,10 @@ Réponse : `CinemaSummary[]`.
 ### `GET /api/cinemas/{id}`
 
 Réponse : `Cinema`. 404 si inconnu.
+
+### `GET /api/cities/{slug}`
+
+Réponse : `City`. 404 si aucune ville visible n'a ce slug. La liste des villes est recalculée au plus toutes les 10 minutes (elle ne change qu'avec l'import hebdomadaire des cinémas).
 
 ### `GET /api/cinemas/{id}/showtimes`
 
@@ -233,14 +255,15 @@ Query : `date?`, `lat`, `lng` (**obligatoires**), `radius_km?` (défaut 15, max 
 
 Query : `q` (≥ 2 caractères, sinon 400).
 
-Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès).
+Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès), et sur les villes (début du nom : `"lyo"` trouve Lyon, pas Villeurbanne).
 
 Limite connue : les films sont cherchés sur leur titre français seulement (`original_title` n'a pas de colonne normalisée).
 
 ```json
 {
   "movies":  [MovieSummary, …],   // 8 max, les plus diffusés d'abord
-  "cinemas": [CinemaSummary, …]   // 8 max
+  "cinemas": [CinemaSummary, …],  // 8 max
+  "cities":  [CitySummary, …]     // 5 max, celles qui ont le plus de cinémas d'abord
 }
 ```
 

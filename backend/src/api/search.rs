@@ -72,10 +72,18 @@ pub async fn search(
     .fetch_all(&state.pool)
     .await?;
 
+    let index = state.cities.get(&state.pool, &state.departments).await?;
+    let cities = index
+        .search(&q, 5)
+        .into_iter()
+        .map(|c| c.summary())
+        .collect();
+
     Ok(Json(SearchResponse {
         movies: movies.into_iter().map(Into::into).collect(),
         // Pas de position dans /api/search : distance_km = null.
         cinemas: cinemas.into_iter().map(|c| c.into_summary(None)).collect(),
+        cities,
     }))
 }
 

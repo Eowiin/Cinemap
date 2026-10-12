@@ -187,6 +187,9 @@ async fn sitemap_lists_visible_cinemas_and_current_movies() {
         locs,
         [
             "/",
+            "/ville/lyon",
+            "/ville/montreuil",
+            "/ville/paris",
             "/film/1001-l-ete-dernier",
             "/film/1002-batman",
             "/cinema/LYON-pathe-bellecour-lyon",
@@ -202,4 +205,67 @@ async fn without_front_build_pages_are_disabled() {
     let reply = get(&state, "/film/1001-l-ete-dernier").await;
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert!(reply.body.contains("\"code\":\"not_found\""));
+}
+
+#[tokio::test]
+async fn city_page_lists_its_cinemas_the_nearby_ones_and_todays_movies() {
+    let state = state().await;
+    let reply = get(&state, "/ville/paris").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let html = &reply.body;
+    assert!(html.contains("<title>Cinéma à Paris : séances et horaires | Cinemap</title>"));
+    assert!(html.contains("<h1>Cinéma à Paris</h1>"));
+    // Le cinéma de la ville, puis Montreuil (10 km) dans les environs ; jamais les masqués.
+    assert!(html.contains(
+        "<a href=\"/cinema/PARIS1-ugc-cine-cite-les-halles-paris\">UGC Ciné Cité Les Halles</a> (Art et Essai)"
+    ));
+    assert!(html.contains("<h2>Autour de Paris</h2>"));
+    assert!(
+        html.contains("<a href=\"/cinema/PARIS2-le-melies-montreuil\">Le Méliès</a> (Montreuil)")
+    );
+    assert!(!html.contains("OLD") && !html.contains("NOGEO"));
+    assert!(html.contains("\"@type\":\"ItemList\""));
+    assert!(get(&state, "/ville/atlantide").await.status == StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn cinema_page_links_to_its_city() {
+    let state = state().await;
+    let reply = get(&state, "/cinema/LYON-pathe-bellecour-lyon").await;
+    assert!(
+        reply
+            .body
+            .contains("<a href=\"/ville/lyon\">Tous les cinémas de Lyon</a>")
+    );
+}
+
+#[tokio::test]
+async fn pages_without_upcoming_showtimes_are_not_indexed() {
+    let state = state().await;
+    // Hors de la zone scrapée : un cinéma visible, sans aucune séance.
+    sqlx::query(
+        "INSERT INTO cinemas (id, name, name_search, city, city_search, postal_code, department,
+                              lat, lng, art_et_essai, updated_at)
+         VALUES ('EMPTY', 'Ciné Vide', 'cine vide', 'Rennes', 'rennes', '35000', '35',
+                 48.1173, -1.6778, 0, datetime('now'))",
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    for uri in [
+        "/cinema/EMPTY-cine-vide-rennes",
+        "/ville/rennes",
+        "/film/1003-sans-seance",
+    ] {
+        let reply = get(&state, uri).await;
+        assert_eq!(reply.status, StatusCode::OK, "{uri}");
+        assert!(reply.body.contains("content=\"noindex\""), "{uri}");
+    }
+    let lyon = get(&state, "/ville/lyon").await;
+    assert!(!lyon.body.contains("noindex"));
+
+    let sitemap = get(&state, "/sitemap.xml").await.body;
+    assert!(!sitemap.contains("EMPTY") && !sitemap.contains("/ville/rennes"));
+    assert!(sitemap.contains("/ville/lyon"));
 }

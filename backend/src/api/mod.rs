@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use crate::cinemas::departments::get_departments;
 
 mod cinemas;
+mod cities;
 mod error;
 mod geo;
 mod meta;
@@ -36,6 +37,8 @@ pub struct AppState {
     pub departments: Arc<HashMap<String, String>>,
     /// `index.html` du front, pour les pages HTML ; `None` en dev sans build du front.
     pub pages: Option<Arc<pages::PageTemplate>>,
+    /// Index des villes, recalculé toutes les 10 minutes au plus.
+    pub cities: Arc<cities::CityCache>,
 }
 
 impl AppState {
@@ -45,6 +48,7 @@ impl AppState {
             pool,
             departments: Arc::new(departments),
             pages: None,
+            cities: Arc::default(),
         }
     }
 
@@ -60,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/cinemas", get(cinemas::list))
         .route("/api/cinemas/{id}", get(cinemas::get_one))
         .route("/api/cinemas/{id}/showtimes", get(cinemas::showtimes))
+        .route("/api/cities/{slug}", get(cities::get_one))
         .route("/api/movies", get(movies::list))
         .route("/api/movies/{id}", get(movies::get_one))
         .route("/api/movies/{id}/showtimes", get(movies::showtimes))
@@ -69,6 +74,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(pages::home))
         .route("/film/{segment}", get(pages::movie))
         .route("/cinema/{segment}", get(pages::cinema))
+        .route("/ville/{slug}", get(pages::city))
         .route("/programme", get(pages::programme_page))
         .route("/sitemap.xml", get(pages::sitemap))
         .fallback(pages::fallback)

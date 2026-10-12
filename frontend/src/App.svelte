@@ -60,6 +60,8 @@
   <main class="panel">
     {#if router.route.name === 'home'}
       <Home />
+    {:else if router.route.name === 'city'}
+      {#key router.route.slug}<Home city={router.route.slug} />{/key}
     {:else if router.route.name === 'movie'}
       {#key router.route.id}<MoviePage id={router.route.id} />{/key}
     {:else if router.route.name === 'cinema'}

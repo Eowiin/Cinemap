@@ -25,6 +25,24 @@ export type Cinema = CinemaSummary & {
   screens: number | null;
   seats: number | null;
   allocine_url: string;
+  /** Page de sa ville (`/ville/{city_slug}`), null sans ville. */
+  city_slug: string | null;
+};
+
+/** Une ville : les cinémas visibles qui partagent `city` et le département. */
+export type CitySummary = {
+  slug: string;
+  name: string;
+  /** « Lyon », ou « Saint-Denis (La Réunion) » pour les homonymes. */
+  label: string;
+  department: string | null;
+  cinema_count: number;
+};
+
+export type City = CitySummary & {
+  lat: number;
+  lng: number;
+  cinemas: CinemaSummary[];
 };
 
 export type MovieSummary = {
@@ -96,6 +114,7 @@ export type MovieShowtimes = {
 export type SearchResults = {
   movies: MovieSummary[];
   cinemas: CinemaSummary[];
+  cities: CitySummary[];
 };
 
 export type NearbyShowtimes = {

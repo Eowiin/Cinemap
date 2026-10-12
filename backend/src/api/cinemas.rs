@@ -156,6 +156,15 @@ pub(super) async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema
     .await?
     .ok_or(AppError::NotFound("Cinéma introuvable"))?;
 
+    let city_slug = match &row.city {
+        Some(city) => state
+            .cities
+            .get(&state.pool, &state.departments)
+            .await?
+            .slug_of(city, row.department.as_deref())
+            .map(str::to_owned),
+        None => None,
+    };
     let department = row
         .department
         .and_then(|code| state.departments.get(&code).cloned());
@@ -181,6 +190,7 @@ pub(super) async fn fetch_cinema(state: &AppState, id: &str) -> ApiResult<Cinema
         screens: row.screens,
         seats: row.seats,
         allocine_url,
+        city_slug,
     })
 }
 

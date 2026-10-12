@@ -20,10 +20,13 @@ use super::{ApiResult, AppError, AppState};
 use crate::text::{cinema_slug, locality, slugify};
 use crate::time::{DATE_FORMAT, paris_today};
 
+mod city;
 mod html;
 mod sitemap;
 mod template;
 
+pub use city::city;
+use city::city_path;
 use html::{Head, SITE_NAME, SITE_URL, escape, french_date, french_day, runtime, truncate};
 pub use sitemap::sitemap;
 pub use template::PageTemplate;
@@ -272,7 +275,8 @@ pub async fn movie(
         path: &path,
         image: movie.summary.poster_url.as_deref(),
         og_type: "video.movie",
-        noindex: false,
+        // Sans séance à venir, la page n'aide personne : consultable, mais pas indexée.
+        noindex: cinema_count == 0,
         json_ld: Some(movie_json_ld(&movie, &path)),
     };
     Ok(page(&state, StatusCode::OK, &head, &body))
@@ -478,7 +482,8 @@ pub async fn cinema(
         path: &path,
         image: None,
         og_type: "website",
-        noindex: false,
+        // Hors de la zone scrapée (ou salle sans programme) : rien à proposer aux moteurs.
+        noindex: movie_count == 0,
         json_ld: Some(cinema_json_ld(&cinema, &path, &movies, &paris_now())),
     };
     Ok(page(&state, StatusCode::OK, &head, &body))
@@ -541,6 +546,14 @@ fn cinema_body(
     }
     if !facts.is_empty() {
         let _ = write!(body, "<p>{}</p>", escape(&facts.join(" · ")));
+    }
+    if let (Some(slug), Some(city)) = (&cinema.city_slug, &summary.city) {
+        let _ = write!(
+            body,
+            "<p><a href=\"{}\">Tous les cinémas de {}</a></p>",
+            escape(&city_path(slug)),
+            escape(city),
+        );
     }
 
     match day {

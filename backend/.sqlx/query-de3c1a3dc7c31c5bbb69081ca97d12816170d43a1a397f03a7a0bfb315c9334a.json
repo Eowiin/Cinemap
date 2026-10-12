@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (\n               SELECT 1 FROM showtimes\n               WHERE cinema_id IN (SELECT value FROM json_each(?1)) AND date >= ?2\n           ) AS \"has!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "has!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "de3c1a3dc7c31c5bbb69081ca97d12816170d43a1a397f03a7a0bfb315c9334a"
+}

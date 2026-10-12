@@ -90,7 +90,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
       '^/$': 'http://localhost:3000',
-      '^/(film|cinema)/': 'http://localhost:3000',
+      '^/(film|cinema|ville)/': 'http://localhost:3000',
       '^/(programme|sitemap\\.xml)$': 'http://localhost:3000',
     },
   },

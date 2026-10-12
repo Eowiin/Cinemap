@@ -2,6 +2,7 @@ import type {
   Cinema,
   CinemaShowtimes,
   CinemaSummary,
+  City,
   Meta,
   Movie,
   MovieShowtimes,
@@ -73,6 +74,8 @@ export const api = {
   cinemas: (signal?: AbortSignal) => get<CinemaSummary[]>('/api/cinemas', {}, signal),
   cinema: (id: string, signal?: AbortSignal) =>
     get<Cinema>(`/api/cinemas/${encodeURIComponent(id)}`, {}, signal),
+  city: (slug: string, signal?: AbortSignal) =>
+    get<City>(`/api/cities/${encodeURIComponent(slug)}`, {}, signal),
   cinemaShowtimes: (id: string, filters: ShowtimeFilters, signal?: AbortSignal) =>
     get<CinemaShowtimes>(
       `/api/cinemas/${encodeURIComponent(id)}/showtimes`,

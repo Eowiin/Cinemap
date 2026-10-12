@@ -12,10 +12,22 @@
   const run = latest();
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  type Item = { route: Route; label: string; detail: string | null; kind: 'Film' | 'Cinéma' };
+  type Item = {
+    route: Route;
+    label: string;
+    detail: string | null;
+    kind: 'Ville' | 'Film' | 'Cinéma';
+  };
   const items = $derived<Item[]>(
     results
       ? [
+          // Les villes d'abord : « lyon » cherche presque toujours la ville.
+          ...results.cities.map((c) => ({
+            route: { name: 'city' as const, slug: c.slug },
+            label: c.label,
+            detail: `${c.cinema_count} cinéma${c.cinema_count > 1 ? 's' : ''}`,
+            kind: 'Ville' as const,
+          })),
           ...results.movies.map((m) => ({
             route: movieRoute(m),
             label: m.title,
@@ -48,7 +60,7 @@
           open = true;
         },
         (error) => {
-          if (!isAbort(error)) results = { movies: [], cinemas: [] };
+          if (!isAbort(error)) results = { movies: [], cinemas: [], cities: [] };
         },
       );
     }, 200);
