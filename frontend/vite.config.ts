@@ -23,7 +23,9 @@ export default defineConfig({
         // MapLibre (~290 Ko gzip) n'est pas préchargé : sur mobile, on ne le télécharge
         // que si la carte est ouverte. Il est mis en cache au premier usage (ci-dessous).
         globIgnores: ['**/maplibre-gl-*'],
-        navigateFallbackDenylist: [/^\/api\//],
+        // Servis par le serveur, pas par l'app : sinon le service worker répond avec
+        // index.html et l'app affiche « Page introuvable » (le robot, lui, n'a pas de SW).
+        navigateFallbackDenylist: [/^\/api\//, /^\/sitemap\.xml$/, /^\/robots\.txt$/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/assets/maplibre-gl-'),
