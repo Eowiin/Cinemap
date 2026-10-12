@@ -33,6 +33,17 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
   - Paramètre de query `version` : `VF` ou `VO`. `version=VO` renvoie `VO` + `VOST` (« pas doublé en français »).
 - `formats` d'une séance : sous-ensemble de `"3D"`, `"IMAX"`, `"4DX"`, `"ScreenX"`, `"Dolby Cinema"`, `"Dolby Atmos"`. Toute autre valeur AlloCiné est ignorée (et loggée par le scraper).
 
+## Pages HTML (hors `/api`)
+
+Servies par la même application, derrière nginx, pour les moteurs de recherche et les liens partagés. Le gabarit est `index.html` du front (marqueurs `<!--seo-->…<!--/seo-->` et `<!--app-->`) ; l'app Svelte remplace le contenu au démarrage.
+
+- `/` : accueil, films du jour en France.
+- `/film/{id}-{slug}` et `/cinema/{id}-{slug}` : le slug est le titre (film) ou le nom + la ville si le nom ne la contient pas (cinéma), sans accents ni ponctuation (`text::slugify`, `seo.ts` côté front). L'id fait foi : un autre slug ou pas de slug → **301** vers l'URL canonique, query conservée.
+- `/programme` : `noindex` (le programme vit dans le navigateur).
+- `/sitemap.xml` : accueil, cinémas visibles, films avec au moins une séance à venir.
+- Id inconnu, cinéma masqué, chemin inconnu → **404** HTML `noindex` (JSON sous `/api/`).
+- `Cache-Control: no-cache` sur les pages (elles pointent vers les fichiers de la release en cours), `public, max-age=3600` sur le sitemap.
+
 ## Types partagés
 
 ```ts

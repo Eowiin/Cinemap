@@ -13,6 +13,7 @@
   import { cinemaMatches } from '../lib/filters';
   import { favorites } from '../lib/favorites.svelte';
   import { router } from '../lib/router.svelte';
+  import { cinemaRoute } from '../lib/routes';
 
   const STYLES = {
     light: 'https://tiles.openfreemap.org/styles/positron',
@@ -74,7 +75,8 @@
 
   function openCinema(id: string) {
     map.open = false;
-    router.go({ name: 'cinema', id });
+    const cinema = map.all.find((c) => c.id === id);
+    router.go(cinema ? cinemaRoute(cinema) : { name: 'cinema', id });
   }
 
   /**

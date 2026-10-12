@@ -203,3 +203,14 @@ h3 {
     border-radius: var(--radius);
   }
 }
+
+/* Contenu servi par le serveur (pages lues sans JavaScript, robots) : remplacé par l'app au démarrage. */
+.ssr {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.ssr h1 {
+  font-size: 1.5rem;
+}

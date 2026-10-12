@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  count(DISTINCT s.cinema_id) AS \"cinema_count!: i64\"\n           FROM showtimes s\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           JOIN movies m ON m.id = s.movie_id\n           WHERE s.date = ?1\n           GROUP BY m.id\n           ORDER BY count(DISTINCT s.cinema_id) DESC, m.title_search\n           LIMIT ?2",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "cinema_count!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1def671604eb90ac0bc6dc0fe402ff3f716fb911d50e85c7ed14c8d42a0b0ec1"
+}

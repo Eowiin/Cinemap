@@ -182,6 +182,11 @@ pub async fn get_one(
     Path(id): Path<String>,
 ) -> ApiResult<Json<Movie>> {
     let id = parse_movie_id(&id)?;
+    Ok(Json(fetch_movie(&state.pool, id).await?))
+}
+
+/// Fiche complète d'un film ; 404 s'il n'est pas en base.
+pub(super) async fn fetch_movie(pool: &SqlitePool, id: i64) -> ApiResult<Movie> {
     // Un film sans séance reste consultable : un lien partagé hier doit marcher.
     let row = sqlx::query_as!(
         MovieRow,
@@ -199,11 +204,11 @@ pub async fn get_one(
            WHERE id = ?1"#,
         id,
     )
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?
     .ok_or(AppError::NotFound("Film introuvable"))?;
 
-    Ok(Json(Movie {
+    Ok(Movie {
         summary: MovieSummary {
             id: row.id,
             title: row.title,
@@ -223,7 +228,7 @@ pub async fn get_one(
         trailer_url: row.trailer_url,
         rating: row.rating,
         user_rating: row.user_rating,
-    }))
+    })
 }
 
 pub async fn showtimes(

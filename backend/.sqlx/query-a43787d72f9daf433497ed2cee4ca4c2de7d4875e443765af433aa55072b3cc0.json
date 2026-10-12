@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT c.id AS \"id!: String\", c.name AS \"name!: String\",\n                  c.city AS \"city?: String\"\n           FROM showtimes s\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           WHERE s.movie_id = ?1 AND s.date >= ?2\n           ORDER BY c.city, c.name_search\n           LIMIT ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "city?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "city"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "a43787d72f9daf433497ed2cee4ca4c2de7d4875e443765af433aa55072b3cc0"
+}

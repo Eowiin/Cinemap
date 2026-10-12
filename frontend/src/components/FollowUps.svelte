@@ -16,7 +16,7 @@
   import { programme } from '../lib/programme.svelte';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
-  import { href } from '../lib/routes';
+  import { href, movieRoute } from '../lib/routes';
   import Icon from './Icon.svelte';
   import Poster from './Poster.svelte';
   import Status from './Status.svelte';
@@ -182,10 +182,10 @@
           {#if unreachable}
             <a
               class="button small"
-              href={href(
-                { name: 'movie', id: unreachable.id },
-                { ...router.filters, date: from.date === app.today ? null : from.date },
-              )}>Toutes ses séances</a
+              href={href(movieRoute(unreachable), {
+                ...router.filters,
+                date: from.date === app.today ? null : from.date,
+              })}>Toutes ses séances</a
             >
           {/if}
         </p>

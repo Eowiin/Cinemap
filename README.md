@@ -2,7 +2,7 @@
 
 Carte des cinémas de France et de leurs séances : qu'est-ce qui passe près de moi, où voir tel film, et à quelle heure.
 
-Site : https://cinemap.eowinstudio.com
+Site : https://cinemap.ethansaux.fr
 
 ## Structure
 

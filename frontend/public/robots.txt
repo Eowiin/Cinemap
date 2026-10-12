@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cinemap.ethansaux.fr/sitemap.xml

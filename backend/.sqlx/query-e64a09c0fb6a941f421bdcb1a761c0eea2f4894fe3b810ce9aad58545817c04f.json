@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: String\", name AS \"name!: String\", city AS \"city?: String\"\n           FROM visible_cinemas\n           ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "city?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cinemas",
+            "name": "city"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "e64a09c0fb6a941f421bdcb1a761c0eea2f4894fe3b810ce9aad58545817c04f"
+}
