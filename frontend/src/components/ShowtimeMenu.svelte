@@ -91,7 +91,7 @@
 
       <div class="actions">
         <button
-          class="button"
+          class="button wide"
           class:primary={!stop.booking_url && !planned}
           class:on={planned}
           aria-pressed={planned}
@@ -169,11 +169,16 @@
     font-weight: 600;
   }
 
+  /* Empilés en pleine largeur, comme « Réserver » : côte à côte, ils ne tiennent pas
+     dans le panneau (~410 px pour 390 utiles) et le lien passait à la ligne, décalé. */
   .actions {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
     gap: 0.5rem;
-    align-items: center;
+    justify-items: center;
+  }
+
+  .actions .wide {
+    justify-self: stretch;
   }
 
   .on {
