@@ -153,6 +153,8 @@ ssh root@<vps> 'systemctl daemon-reload && systemd-analyze verify /etc/systemd/s
 ssh root@<vps> 'systemctl start --no-block cinemap-nightly'   # facultatif : remplir la France tout de suite
 ```
 
+**Pas de fichier complémentaire (drop-in) dans `/etc/systemd/system/cinemap-nightly.service.d/`** : tout passe par le fichier du dépôt. Le 2026-10-12, un `idf.conf` créé à la main pour l'Île-de-France (`ExecStart=` vide, puis l'ancienne commande) écrasait silencieusement le nouveau service : `systemctl cat cinemap-nightly` montre tout ce qui s'applique, et `ls /etc/systemd/system/cinemap-nightly.service.d/` doit être vide ou absent. Sauvegarde de l'ancien : `/root/cinemap-nightly-idf.conf.bak`.
+
 ### 6. Droits de la CI
 
 Rien à faire : `SSH_USER` est `root`. Si un jour la CI passe par un utilisateur dédié (moins de pouvoir si la clé fuit), il faudra lui donner `/opt/cinemap` (`chown -R`) et, via `visudo -f /etc/sudoers.d/cinemap` :
