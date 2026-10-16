@@ -36,8 +36,6 @@ pub use template::PageTemplate;
 /// ~1 000 salles : la page resterait lourde pour rien, le sitemap couvre le reste).
 const MAX_CINEMAS_LISTED: i64 = 300;
 const HOME_MOVIES: i64 = 40;
-/// Villes listées dans le contenu lisible de l'accueil (les plus fournies).
-const HOME_CITIES: usize = 24;
 
 /// `/film/{id}-{slug}` : l'id fait foi, le slug n'est là que pour être lu.
 pub fn movie_path(id: i64, title: &str) -> String {
@@ -186,21 +184,6 @@ pub async fn home(State(state): State<AppState>) -> ApiResult<Response> {
                 escape(&movie_path(movie.id, &movie.title)),
                 escape(&movie.title),
                 cinemas_count(movie.cinema_count),
-            );
-        }
-        body.push_str("</ul>");
-    }
-    // Liens vers les grandes villes : invisibles une fois l'app démarrée, ils aident les
-    // moteurs à trouver les pages ville.
-    let index = state.cities.get(&state.pool, &state.departments).await?;
-    if !index.cities.is_empty() {
-        body.push_str("<h2>Cinémas par ville</h2><ul>");
-        for city in index.cities.iter().take(HOME_CITIES) {
-            let _ = write!(
-                body,
-                "<li><a href=\"{}\">Cinéma à {}</a></li>",
-                escape(&city_path(&city.slug)),
-                escape(&city.label),
             );
         }
         body.push_str("</ul>");
