@@ -67,6 +67,20 @@ pub async fn sitemap(State(state): State<AppState>) -> ApiResult<Response> {
         .filter(|slug| showing.contains(slug))
         .collect();
 
+    // Le contenu de toutes les pages vient des séances : il change à chaque scrape. Dire
+    // à Google quand (`lastmod`) l'aide à revenir lire les pages au bon moment.
+    let lastmod = sqlx::query_scalar!(
+        r#"SELECT date(finished_at) AS "date!: String"
+           FROM scrape_runs
+           WHERE kind = 'showtimes' AND finished_at IS NOT NULL
+           ORDER BY finished_at DESC
+           LIMIT 1"#
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .map(|date| format!("<lastmod>{date}</lastmod>"))
+    .unwrap_or_default();
+
     let capacity = cinemas.len() + movies.len() + cities.len() + 1;
     let mut xml = String::with_capacity(100 * capacity);
     xml.push_str(
@@ -84,7 +98,7 @@ pub async fn sitemap(State(state): State<AppState>) -> ApiResult<Response> {
     for path in paths {
         let _ = writeln!(
             xml,
-            "<url><loc>{}</loc></url>",
+            "<url><loc>{}</loc>{lastmod}</url>",
             escape(&format!("{SITE_URL}{path}"))
         );
     }
