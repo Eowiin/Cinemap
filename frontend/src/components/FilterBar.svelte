@@ -11,16 +11,27 @@
 
   /**
    * `dates` : jours qui ont des séances (les autres jours de la semaine sont grisés).
-   * `scope` : `cinema` sur la fiche d'un cinéma, où favoris et cartes n'ont pas de sens.
+   * `scope` : `cinema` sur la fiche d'un cinéma, où favoris et cartes n'ont pas de sens ;
+   * `programme` pour le composer et « Enchaîner », qui ont leurs jours et leur horaire.
    */
-  let { dates, scope = 'list' }: { dates: string[]; scope?: 'list' | 'cinema' } = $props();
+  let {
+    dates = [],
+    scope = 'list',
+  }: { dates?: string[]; scope?: 'list' | 'cinema' | 'programme' } = $props();
 
-  const listFilters = $derived(scope === 'list');
+  const listFilters = $derived(scope !== 'cinema');
+  const withDays = $derived(scope !== 'programme');
   const selected = $derived(router.filters.date ?? app.today);
   const days = $derived(weekDays(app.today, selected));
   const cards = $derived(app.meta?.cards ?? []);
   const cardNames = $derived(Object.fromEntries(cards.map((c) => [c.id, c.name])));
-  const active = $derived(activeFilters(router.filters, cardNames, listFilters));
+  const active = $derived(
+    activeFilters(
+      withDays ? router.filters : { ...router.filters, after: null },
+      cardNames,
+      listFilters,
+    ),
+  );
   const favoriteCount = $derived(favorites.cinemas.items.length);
 
   const versions: { value: VersionFilter | null; label: string }[] = [
@@ -53,18 +64,20 @@
 </script>
 
 <div class="filters">
-  <div class="scroll-row days" role="group" aria-label="Jour">
-    {#each days as day (day)}
-      {@const empty = day !== selected && day !== app.today && !dates.includes(day)}
-      <button
-        class="chip"
-        aria-pressed={day === selected}
-        disabled={empty}
-        title={empty ? 'Pas de séance ce jour-là (pas encore publiée ?)' : undefined}
-        onclick={() => pickDate(day)}>{dateLabel(day, app.today)}</button
-      >
-    {/each}
-  </div>
+  {#if withDays}
+    <div class="scroll-row days" role="group" aria-label="Jour">
+      {#each days as day (day)}
+        {@const empty = day !== selected && day !== app.today && !dates.includes(day)}
+        <button
+          class="chip"
+          aria-pressed={day === selected}
+          disabled={empty}
+          title={empty ? 'Pas de séance ce jour-là (pas encore publiée ?)' : undefined}
+          onclick={() => pickDate(day)}>{dateLabel(day, app.today)}</button
+        >
+      {/each}
+    </div>
+  {/if}
 
   <div class="scroll-row">
     <button class="chip open" onclick={() => dialog.showModal()} aria-haspopup="dialog">
@@ -106,24 +119,27 @@
       </div>
     </section>
 
-    <section>
-      <h3>Horaire</h3>
-      <div class="options" role="group" aria-label="Horaire">
-        <button
-          class="chip"
-          aria-pressed={router.filters.after === null}
-          onclick={() => router.setFilters({ after: null })}
-          >{selected === app.today ? 'Dès maintenant' : 'Toute la journée'}</button
-        >
-        {#each afters as after (after)}
+    {#if withDays}
+      <section>
+        <h3>Horaire</h3>
+        <div class="options" role="group" aria-label="Horaire">
           <button
             class="chip"
-            aria-pressed={router.filters.after === after}
-            onclick={() => router.setFilters({ after })}>Après {after.replace(':00', ' h')}</button
+            aria-pressed={router.filters.after === null}
+            onclick={() => router.setFilters({ after: null })}
+            >{selected === app.today ? 'Dès maintenant' : 'Toute la journée'}</button
           >
-        {/each}
-      </div>
-    </section>
+          {#each afters as after (after)}
+            <button
+              class="chip"
+              aria-pressed={router.filters.after === after}
+              onclick={() => router.setFilters({ after })}
+              >Après {after.replace(':00', ' h')}</button
+            >
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     {#if listFilters}
       <section>
@@ -165,7 +181,9 @@
 
     <footer>
       <button class="button" onclick={clearAll} disabled={active.length === 0}>Tout effacer</button>
-      <button class="button primary" onclick={() => dialog.close()}>Voir les séances</button>
+      <button class="button primary" onclick={() => dialog.close()}
+        >{withDays ? 'Voir les séances' : 'Valider'}</button
+      >
     </footer>
   </div>
 </dialog>

@@ -77,10 +77,10 @@ async fn movie_page_has_metadata_and_readable_content() {
     assert!(html.contains("<meta name=\"description\" content=\"L&#39;Été dernier : séances et horaires dans 3 cinémas"));
     assert!(html.contains("\"@type\":\"Movie\""));
     assert!(html.contains("<h1>L&#39;Été dernier</h1>"));
-    // Les cinémas visibles seulement, avec un lien vers leur fiche.
-    assert!(
-        html.contains("<a href=\"/cinema/LYON-pathe-bellecour-lyon\">Pathé Bellecour</a> (Lyon)")
-    );
+    // Les cinémas visibles seulement, ville par ville, avec un lien vers leur fiche.
+    assert!(html.contains(
+        "<h3><a href=\"/ville/lyon\">Lyon</a></h3><ul><li><a href=\"/cinema/LYON-pathe-bellecour-lyon\">Pathé Bellecour</a></li>"
+    ));
     assert!(html.contains("/cinema/PARIS1-ugc-cine-cite-les-halles-paris"));
     assert!(!html.contains("NOGEO") && !html.contains("OLD"));
     assert!(!html.contains("<!--seo-->") && !html.contains("<!--app-->"));

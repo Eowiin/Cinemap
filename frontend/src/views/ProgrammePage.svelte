@@ -1,5 +1,6 @@
 <script lang="ts">
   import Composer from '../components/Composer.svelte';
+  import FilterBar from '../components/FilterBar.svelte';
   import FollowUps from '../components/FollowUps.svelte';
   import Icon from '../components/Icon.svelte';
   import Status from '../components/Status.svelte';
@@ -131,6 +132,7 @@
         </button>
       {/each}
     </div>
+    <FilterBar scope="programme" />
   {/if}
   {#if !shared && stopsOf(date).length}
     <div class="actions">
