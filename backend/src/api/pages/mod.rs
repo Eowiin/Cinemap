@@ -14,6 +14,7 @@ use chrono_tz::Europe::Paris;
 use serde_json::{Value, json};
 
 use super::cinemas::{fetch_cinema, programme};
+use super::cities::CityIndex;
 use super::movies::fetch_movie;
 use super::types::{Cinema, Movie, MovieShowtimes};
 use super::{ApiResult, AppError, AppState};
@@ -219,6 +220,39 @@ struct ShowingCinemaRow {
     id: String,
     name: String,
     city: Option<String>,
+    department: Option<String>,
+}
+
+/// Les cinémas d'un film, ville par ville, avec la page de la ville quand elle existe.
+struct CityGroup<'a> {
+    city: Option<&'a str>,
+    slug: Option<String>,
+    cinemas: Vec<&'a ShowingCinemaRow>,
+}
+
+fn group_by_city<'a>(rows: &'a [ShowingCinemaRow], index: &CityIndex) -> Vec<CityGroup<'a>> {
+    let mut groups: Vec<CityGroup<'a>> = Vec::new();
+    for row in rows {
+        // Lignes triées par ville : un groupe = des lignes consécutives.
+        match groups.last_mut() {
+            Some(group)
+                if group.city == row.city.as_deref()
+                    && group.cinemas[0].department == row.department =>
+            {
+                group.cinemas.push(row);
+            }
+            _ => groups.push(CityGroup {
+                city: row.city.as_deref(),
+                slug: row
+                    .city
+                    .as_deref()
+                    .and_then(|city| index.slug_of(city, row.department.as_deref()))
+                    .map(str::to_owned),
+                cinemas: vec![row],
+            }),
+        }
+    }
+    groups
 }
 
 pub async fn movie(
@@ -253,11 +287,11 @@ pub async fn movie(
     let cinemas = sqlx::query_as!(
         ShowingCinemaRow,
         r#"SELECT DISTINCT c.id AS "id!: String", c.name AS "name!: String",
-                  c.city AS "city?: String"
+                  c.city AS "city?: String", c.department AS "department?: String"
            FROM showtimes s
            JOIN visible_cinemas c ON c.id = s.cinema_id
            WHERE s.movie_id = ?1 AND s.date >= ?2
-           ORDER BY c.city, c.name_search
+           ORDER BY c.city, c.department, c.name_search
            LIMIT ?3"#,
         id,
         today,
@@ -268,7 +302,8 @@ pub async fn movie(
 
     let title = movie_title(&movie.summary.title);
     let description = movie_description(&movie, cinema_count);
-    let body = movie_body(&movie, cinema_count, &cinemas);
+    let index = state.cities.get(&state.pool, &state.departments).await?;
+    let body = movie_body(&movie, cinema_count, &group_by_city(&cinemas, &index));
     let head = Head {
         title: &title,
         description: &description,
@@ -325,7 +360,7 @@ fn movie_description(movie: &Movie, cinema_count: i64) -> String {
     truncate(&text, 160)
 }
 
-fn movie_body(movie: &Movie, cinema_count: i64, cinemas: &[ShowingCinemaRow]) -> String {
+fn movie_body(movie: &Movie, cinema_count: i64, cities: &[CityGroup]) -> String {
     let title = escape(&movie.summary.title);
     let mut body = format!("<div class=\"ssr\"><h1>{title}</h1>");
     let facts = movie_facts(movie);
@@ -335,32 +370,49 @@ fn movie_body(movie: &Movie, cinema_count: i64, cinemas: &[ShowingCinemaRow]) ->
     if let Some(synopsis) = &movie.synopsis {
         let _ = write!(body, "<p>{}</p>", escape(synopsis));
     }
+    if !movie.cast.is_empty() {
+        let names: Vec<&str> = movie.cast.iter().take(6).map(|p| p.name.as_str()).collect();
+        let _ = write!(body, "<p>Avec {}.</p>", escape(&names.join(", ")));
+    }
     let _ = write!(body, "<h2>Où voir {title} ?</h2>");
-    if cinemas.is_empty() {
+    if cities.is_empty() {
         body.push_str("<p>Aucune séance programmée en ce moment.</p>");
     } else {
         let _ = write!(
             body,
-            "<p>À l'affiche dans {} cette semaine.</p><ul>",
+            "<p>À l'affiche dans {} cette semaine.</p>",
             cinemas_count(cinema_count)
         );
-        for cinema in cinemas {
-            let _ = write!(
-                body,
-                "<li><a href=\"{}\">{}</a>",
-                escape(&cinema_path(
-                    &cinema.id,
-                    &cinema.name,
-                    cinema.city.as_deref()
-                )),
-                escape(&cinema.name),
-            );
-            if let Some(city) = &cinema.city {
-                let _ = write!(body, " ({})", escape(city));
+        for group in cities {
+            match (group.city, &group.slug) {
+                (Some(city), Some(slug)) => {
+                    let _ = write!(
+                        body,
+                        "<h3><a href=\"{}\">{}</a></h3>",
+                        escape(&city_path(slug)),
+                        escape(city)
+                    );
+                }
+                (Some(city), None) => {
+                    let _ = write!(body, "<h3>{}</h3>", escape(city));
+                }
+                (None, _) => {}
             }
-            body.push_str("</li>");
+            body.push_str("<ul>");
+            for cinema in &group.cinemas {
+                let _ = write!(
+                    body,
+                    "<li><a href=\"{}\">{}</a></li>",
+                    escape(&cinema_path(
+                        &cinema.id,
+                        &cinema.name,
+                        cinema.city.as_deref()
+                    )),
+                    escape(&cinema.name),
+                );
+            }
+            body.push_str("</ul>");
         }
-        body.push_str("</ul>");
     }
     body.push_str("</div>");
     body
@@ -434,14 +486,15 @@ pub async fn cinema(
     }
 
     let today = paris_today().format(DATE_FORMAT).to_string();
-    let next_date = sqlx::query_scalar!(
-        r#"SELECT min(date) AS "date?: String"
+    let dates = sqlx::query_scalar!(
+        r#"SELECT DISTINCT date AS "date!: String"
            FROM showtimes
-           WHERE cinema_id = ?1 AND date >= ?2"#,
+           WHERE cinema_id = ?1 AND date >= ?2
+           ORDER BY date"#,
         summary.id,
         today,
     )
-    .fetch_one(&state.pool)
+    .fetch_all(&state.pool)
     .await?;
     let movie_count = sqlx::query_scalar!(
         r#"SELECT count(DISTINCT movie_id) AS "n!: i64"
@@ -452,10 +505,17 @@ pub async fn cinema(
     )
     .fetch_one(&state.pool)
     .await?;
-    let movies = match &next_date {
-        Some(date) => programme(&state.pool, &summary.id, date, None, None).await?,
-        None => Vec::new(),
-    };
+    // Toute la semaine publiée (7 jours au plus) : la page dit ce qu'on y verra, pas
+    // seulement le jour même.
+    let mut days = Vec::with_capacity(dates.len());
+    for date in &dates {
+        if let Ok(day) = NaiveDate::parse_from_str(date, DATE_FORMAT) {
+            days.push((
+                day,
+                programme(&state.pool, &summary.id, date, None, None).await?,
+            ));
+        }
+    }
     let card_names = sqlx::query_scalar!(
         r#"SELECT name AS "name!: String"
            FROM cards
@@ -465,17 +525,16 @@ pub async fn cinema(
     )
     .fetch_all(&state.pool)
     .await?;
-    let day = next_date
-        .as_deref()
-        .and_then(|d| NaiveDate::parse_from_str(d, DATE_FORMAT).ok());
-
     let title = cinema_title(
         &summary.name,
         summary.city.as_deref(),
         cinema.postal_code.as_deref(),
     );
     let description = cinema_description(&cinema, movie_count);
-    let body = cinema_body(&cinema, &card_names, day, &movies);
+    let body = cinema_body(&cinema, &card_names, &days);
+    let next_day = days
+        .first()
+        .map_or(&[][..], |(_, movies)| movies.as_slice());
     let head = Head {
         title: &title,
         description: &description,
@@ -484,7 +543,7 @@ pub async fn cinema(
         og_type: "website",
         // Hors de la zone scrapée (ou salle sans programme) : rien à proposer aux moteurs.
         noindex: movie_count == 0,
-        json_ld: Some(cinema_json_ld(&cinema, &path, &movies, &paris_now())),
+        json_ld: Some(cinema_json_ld(&cinema, &path, next_day, &paris_now())),
     };
     Ok(page(&state, StatusCode::OK, &head, &body))
 }
@@ -519,8 +578,7 @@ fn cinema_description(cinema: &Cinema, movie_count: i64) -> String {
 fn cinema_body(
     cinema: &Cinema,
     card_names: &[String],
-    day: Option<NaiveDate>,
-    movies: &[MovieShowtimes],
+    days: &[(NaiveDate, Vec<MovieShowtimes>)],
 ) -> String {
     let summary = &cinema.summary;
     let mut body = format!("<div class=\"ssr\"><h1>{}</h1>", escape(&summary.name));
@@ -556,29 +614,29 @@ fn cinema_body(
         );
     }
 
-    match day {
-        Some(day) if !movies.is_empty() => {
-            let _ = write!(body, "<h2>Séances du {}</h2><ul>", french_day(day));
-            for entry in movies {
-                let times: Vec<String> = entry
-                    .showtimes
-                    .iter()
-                    .map(|s| {
-                        let time = s.starts_at.get(11..16).unwrap_or(&s.starts_at);
-                        format!("{} ({})", time.replace(':', "h"), s.version)
-                    })
-                    .collect();
-                let _ = write!(
-                    body,
-                    "<li><a href=\"{}\">{}</a> : {}</li>",
-                    escape(&movie_path(entry.movie.id, &entry.movie.title)),
-                    escape(&entry.movie.title),
-                    escape(&times.join(", ")),
-                );
-            }
-            body.push_str("</ul>");
+    if days.is_empty() {
+        body.push_str("<p>Aucune séance annoncée pour l'instant.</p>");
+    }
+    for (day, movies) in days {
+        let _ = write!(body, "<h2>Séances du {}</h2><ul>", french_day(*day));
+        for entry in movies {
+            let times: Vec<String> = entry
+                .showtimes
+                .iter()
+                .map(|s| {
+                    let time = s.starts_at.get(11..16).unwrap_or(&s.starts_at);
+                    format!("{} ({})", time.replace(':', "h"), s.version)
+                })
+                .collect();
+            let _ = write!(
+                body,
+                "<li><a href=\"{}\">{}</a> : {}</li>",
+                escape(&movie_path(entry.movie.id, &entry.movie.title)),
+                escape(&entry.movie.title),
+                escape(&times.join(", ")),
+            );
         }
-        _ => body.push_str("<p>Aucune séance annoncée pour l'instant.</p>"),
+        body.push_str("</ul>");
     }
     body.push_str("</div>");
     body

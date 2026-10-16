@@ -77,10 +77,10 @@ async fn movie_page_has_metadata_and_readable_content() {
     assert!(html.contains("<meta name=\"description\" content=\"L&#39;Été dernier : séances et horaires dans 3 cinémas"));
     assert!(html.contains("\"@type\":\"Movie\""));
     assert!(html.contains("<h1>L&#39;Été dernier</h1>"));
-    // Les cinémas visibles seulement, avec un lien vers leur fiche.
-    assert!(
-        html.contains("<a href=\"/cinema/LYON-pathe-bellecour-lyon\">Pathé Bellecour</a> (Lyon)")
-    );
+    // Les cinémas visibles seulement, ville par ville, avec un lien vers leur fiche.
+    assert!(html.contains(
+        "<h3><a href=\"/ville/lyon\">Lyon</a></h3><ul><li><a href=\"/cinema/LYON-pathe-bellecour-lyon\">Pathé Bellecour</a></li>"
+    ));
     assert!(html.contains("/cinema/PARIS1-ugc-cine-cite-les-halles-paris"));
     assert!(!html.contains("NOGEO") && !html.contains("OLD"));
     assert!(!html.contains("<!--seo-->") && !html.contains("<!--app-->"));
@@ -268,4 +268,22 @@ async fn pages_without_upcoming_showtimes_are_not_indexed() {
     let sitemap = get(&state, "/sitemap.xml").await.body;
     assert!(!sitemap.contains("EMPTY") && !sitemap.contains("/ville/rennes"));
     assert!(sitemap.contains("/ville/lyon"));
+}
+
+#[tokio::test]
+async fn sitemap_dates_every_page_with_the_last_full_scrape() {
+    let state = state().await;
+    sqlx::raw_sql(
+        "INSERT INTO scrape_runs (kind, started_at, finished_at) VALUES
+           ('showtimes', '2026-10-16 03:00:00', '2026-10-16 05:04:00'),
+           ('showtimes_partial', '2026-10-17 10:00:00', '2026-10-17 10:05:00');",
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    let sitemap = get(&state, "/sitemap.xml").await.body;
+    assert!(sitemap.contains(
+        "<url><loc>https://cinemap.ethansaux.fr/</loc><lastmod>2026-10-16</lastmod></url>"
+    ));
+    assert!(!sitemap.contains("2026-10-17"));
 }
