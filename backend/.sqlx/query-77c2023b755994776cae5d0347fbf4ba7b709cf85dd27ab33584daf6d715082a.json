@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT event AS \"event!: String\", sum(count) AS \"n!: i64\"\n           FROM daily_events WHERE day >= ?1 GROUP BY event",
+  "describe": {
+    "columns": [
+      {
+        "name": "event!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "daily_events",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "name": "n!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "77c2023b755994776cae5d0347fbf4ba7b709cf85dd27ab33584daf6d715082a"
+}

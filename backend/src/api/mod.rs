@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use axum::{
     Router,
     http::{HeaderValue, Response, header},
-    routing::get,
+    routing::{get, post},
 };
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
@@ -17,6 +17,7 @@ use crate::cinemas::departments::get_departments;
 mod cinemas;
 mod cities;
 mod error;
+mod events;
 mod geo;
 mod meta;
 mod movies;
@@ -65,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/cinemas/{id}", get(cinemas::get_one))
         .route("/api/cinemas/{id}/showtimes", get(cinemas::showtimes))
         .route("/api/cities/{slug}", get(cities::get_one))
+        .route("/api/events", post(events::record))
         .route("/api/movies", get(movies::list))
         .route("/api/movies/{id}", get(movies::get_one))
         .route("/api/movies/{id}/showtimes", get(movies::showtimes))

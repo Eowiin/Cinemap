@@ -14,6 +14,7 @@
   } from '../lib/planner';
   import { programme, wanted, type WantedMovie } from '../lib/programme.svelte';
   import { resource } from '../lib/resource.svelte';
+  import { track } from '../lib/track';
   import Icon from './Icon.svelte';
   import Poster from './Poster.svelte';
   import Status from './Status.svelte';
@@ -155,6 +156,7 @@
   }
 
   function choose(plan: ComposedPlan) {
+    track('compose');
     programme.set([
       ...programme.items.filter((s) => s.date !== date),
       ...($state.snapshot(plan.stops) as PlanStop[]),

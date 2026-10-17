@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT coalesce(c.name, m.title, d.target) AS \"label!: String\",\n                      sum(d.count) AS \"n!: i64\"\n               FROM daily_events d\n               LEFT JOIN cinemas c ON ?2 <> 'view_movie' AND c.id = d.target\n               LEFT JOIN movies m ON ?2 = 'view_movie' AND m.id = CAST(d.target AS INTEGER)\n               WHERE d.day >= ?1 AND d.event = ?2\n               GROUP BY d.target\n               ORDER BY 2 DESC, 1\n               LIMIT ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "label!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "n!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "de1d84e3da53596ccfbc74a11f2000366965a8e566f8ac7d3443d771c98eede9"
+}

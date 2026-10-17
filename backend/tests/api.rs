@@ -665,3 +665,80 @@ async fn cinema_knows_its_city_page() {
     let reply = get(&state, "/api/cinemas/PARIS2").await;
     assert_eq!(reply.json["city_slug"], "montreuil");
 }
+
+const BROWSER: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15";
+
+async fn post_event(state: &AppState, query: &str, agent: &str) -> StatusCode {
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("/api/events?{query}"))
+        .header(header::USER_AGENT, agent)
+        .body(Body::empty())
+        .unwrap();
+    router(state.clone())
+        .oneshot(request)
+        .await
+        .unwrap()
+        .status()
+}
+
+async fn counts(state: &AppState) -> Vec<(String, String, i64)> {
+    sqlx::query_as("SELECT event, target, count FROM daily_events ORDER BY event, target")
+        .fetch_all(&state.pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn events_are_counted_per_day_and_target() {
+    let state = state().await;
+    for query in [
+        "e=book&t=PARIS1",
+        "e=book&t=PARIS1",
+        "e=view_movie&t=1002",
+        "e=view_city&t=montreuil",
+        "e=share",
+    ] {
+        assert_eq!(
+            post_event(&state, query, BROWSER).await,
+            StatusCode::NO_CONTENT,
+            "{query}"
+        );
+    }
+    let expected = [
+        ("book", "PARIS1", 2),
+        ("share", "", 1),
+        ("view_city", "montreuil", 1),
+        ("view_movie", "1002", 1),
+    ]
+    .map(|(e, t, n)| (e.to_owned(), t.to_owned(), n));
+    assert_eq!(counts(&state).await, expected);
+}
+
+#[tokio::test]
+async fn events_reject_unknown_names_and_targets() {
+    let state = state().await;
+    for (query, status) in [
+        ("e=drop", StatusCode::BAD_REQUEST),
+        ("", StatusCode::BAD_REQUEST),
+        ("e=share&t=PARIS1", StatusCode::BAD_REQUEST),
+        ("e=book", StatusCode::NOT_FOUND),
+        ("e=book&t=NOPE", StatusCode::NOT_FOUND),
+        ("e=view_movie&t=abc", StatusCode::NOT_FOUND),
+        ("e=view_city&t=atlantide", StatusCode::NOT_FOUND),
+    ] {
+        assert_eq!(post_event(&state, query, BROWSER).await, status, "{query}");
+    }
+    assert!(counts(&state).await.is_empty());
+}
+
+#[tokio::test]
+async fn events_from_bots_are_ignored() {
+    let state = state().await;
+    let googlebot = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+    assert_eq!(
+        post_event(&state, "e=book&t=PARIS1", googlebot).await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(counts(&state).await.is_empty());
+}

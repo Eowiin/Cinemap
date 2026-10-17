@@ -6,6 +6,7 @@ pub mod client;
 pub mod db;
 pub mod matching;
 pub mod showtimes;
+pub mod stats;
 pub mod text;
 pub mod time;
 pub mod tmdb;

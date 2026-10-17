@@ -4,7 +4,7 @@ Contrat entre le backend (Rust) et le frontend (Svelte). **Toute modification se
 
 ## Conventions
 
-- Préfixe `/api`, `GET` uniquement, JSON en UTF-8.
+- Préfixe `/api`, `GET` uniquement (sauf `POST /api/events`, la mesure d'audience), JSON en UTF-8.
 - **Dates** : `YYYY-MM-DD`, **jour ciné** à Paris. Par défaut = aujourd'hui à Paris (pas en UTC).
   - Le jour ciné est le jour demandé à AlloCiné (`d-{date}`) : une séance à 00h15 renvoyée pour le 25 appartient au 25 (son `starts_at` est le 26 à 00:15). Elle apparaît en fin de programme du 25, jamais dans celui du 26.
   - Une `date` hors de `dates_available` n'est pas une erreur : réponse 200 avec des listes vides.
@@ -266,6 +266,25 @@ Limite connue : les films sont cherchés sur leur titre français seulement (`or
   "cities":  [CitySummary, …]     // 5 max, celles qui ont le plus de cinémas d'abord
 }
 ```
+
+### `POST /api/events`
+
+Mesure d'audience, envoyée par `navigator.sendBeacon` (`frontend/src/lib/track.ts`). Query : `e` (événement), `t` (cible), sans corps. Réponse **204** sans contenu.
+
+| `e` | `t` | Quand |
+|---|---|---|
+| `view_home`, `view_programme` | — | page affichée (un changement de date ou de filtre ne compte pas) |
+| `view_city` | slug de la ville | idem |
+| `view_movie` | ID du film | idem |
+| `view_cinema` | ID du cinéma | idem |
+| `book` | ID du cinéma | clic « Réserver » |
+| `add` | ID du cinéma | séance ajoutée à Mon programme |
+| `compose`, `share`, `calendar`, `keep_shared` | — | journée composée, programme partagé, exporté en `.ics`, programme reçu gardé |
+
+- Événement inconnu, ou `t` donné à un événement sans cible → 400. Cible absente de la base (ou des villes) → 404 : la table ne peut pas se remplir de lignes inventées.
+- User-Agent vide ou de robot (`bot`, `crawl`, `spider`, `headless`, `lighthouse`, `preview`) → 204 sans rien compter.
+- Le front n'envoie rien si `navigator.globalPrivacyControl` ou `navigator.webdriver` est vrai.
+- Stocké dans `daily_events (day, event, target, count)` : un compteur par jour à Paris, sans IP, cookie ni identifiant. Lecture : `cinemap stats [--days 30]` (`DEPLOY.md`).
 
 ## Schéma SQLite (proposition)
 

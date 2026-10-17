@@ -26,6 +26,7 @@
   import { resolveStops } from '../lib/resolve';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
+  import { track } from '../lib/track';
   import { cinemaRoute, href, movieRoute } from '../lib/routes';
 
   // Deux modes : mon programme (gardé dans le navigateur), ou un programme partagé
@@ -73,6 +74,7 @@
     if (navigator.share) {
       try {
         await navigator.share({ title, url });
+        track('share');
       } catch {
         // Partage annulé : rien à faire.
       }
@@ -80,6 +82,7 @@
     }
     try {
       await navigator.clipboard.writeText(url);
+      track('share');
       copied = true;
       setTimeout(() => (copied = false), 2500);
     } catch {
@@ -89,12 +92,14 @@
 
   function keepShared() {
     const added = stops.filter((s) => !programme.has(s.id));
+    track('keep_shared');
     programme.set([...programme.items, ...($state.snapshot(added) as PlanStop[])]);
     router.goto(`/programme${date === app.today ? '' : `?date=${date}`}`);
   }
 
   /** Fichier `.ics` : sur iPhone, Safari propose « Tout ajouter » au calendrier. */
   function exportCalendar() {
+    track('calendar');
     const blob = new Blob([dayToIcs($state.snapshot(stops) as PlanStop[])], {
       type: 'text/calendar;charset=utf-8',
     });
@@ -213,8 +218,12 @@
         </div>
         <div class="stop-actions">
           {#if stop.booking_url}
-            <a class="button small" href={stop.booking_url} target="_blank" rel="noopener"
-              >Réserver</a
+            <a
+              class="button small"
+              href={stop.booking_url}
+              target="_blank"
+              rel="noopener"
+              onclick={() => track('book', stop.cinema.id)}>Réserver</a
             >
           {/if}
           {#if !shared}

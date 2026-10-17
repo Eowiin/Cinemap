@@ -141,9 +141,22 @@ Tags relevés : `Showtime.Accessibility.Accessible` et `Theater.Service.Disabled
 
 ## 5. TMDB — enrichissement des films (optionnel)
 
-AlloCiné fournit déjà synopsis, casting, genres, affiche. TMDB apporte en plus : bande-annonce, image de fond, durée fiable, note.
+AlloCiné fournit déjà titre, synopsis, casting, genres, durée, affiche et note des spectateurs. TMDB n'apporte que trois champs, tous sur la fiche film (`MoviePage.svelte`) : **l'image de fond** (`backdrop_url`), **le lien de bande-annonce** (`trailer_url`, YouTube) et **la note TMDB sur 10** (`rating`). Sans TMDB, la fiche s'affiche sans image de fond ni bouton bande-annonce ; rien d'autre ne change (carte, séances, programme, pages HTML).
 
 - Gratuit pour usage non commercial, clé via un compte TMDB. Attribution obligatoire (logo + « This product uses the TMDB API but is not endorsed or certified by TMDB »).
+- **Licence et argent** ([conditions](https://www.themoviedb.org/api-terms-of-use), relues le 2026-10-17) : la clé gratuite exclut tout usage commercial, dont faire payer l'application ou utiliser TMDB pour « générer des revenus » (pub, affiliation). La FAQ juge un projet commercial si son « objectif principal » est d'en tirer un revenu : des dons qui couvrent le serveur restent défendables, mais TMDB tranche seul. Licence commerciale sur devis (formulaire [API for Business](https://www.themoviedb.org/api-for-business), ou sales@themoviedb.org, objet « Commercial API Use ») ; des sources tierces citent 149 $/mois sous 1 M$ de chiffre d'affaires, non vérifié.
+- **En attente, pas urgent** : écrire à TMDB pour confirmer qu'un bouton de dons est compatible avec la clé gratuite, avant de l'ajouter. Si la réponse est non, ou en cas de monétisation, la sortie la plus simple est de retirer TMDB (trois champs, voir plus haut).
+- Cache limité à 6 mois par les conditions : le resync hebdomadaire des films à l'affiche le respecte, mais les films sortis de l'affiche gardent leurs champs TMDB indéfiniment (à purger si la licence l'exige un jour).
 - Limite ~50 req/s, pas de quota journalier.
 - `GET https://api.themoviedb.org/3/search/movie?query=…&year=…&language=fr-FR`, puis `GET /3/movie/{id}?append_to_response=videos,credits&language=fr-FR`.
 - Croisement AlloCiné → TMDB par `originalTitle` + `productionYear` (fallback `title`).
+
+## 6. SCARE — séances des cinémas indépendants (écarté pour l'instant)
+
+[Programmation des cinémas indépendants](https://www.data.gouv.fr/datasets/programmation-des-cinemas-independants/informations), publié par le Syndicat des Cinémas d'Art, de Répertoire et d'Essai à partir des caisses des cinémas.
+
+- **Licence Ouverte 2.0** : réutilisation libre, **commerciale comprise**, en citant la source. C'est la seule source de séances légalement réutilisable trouvée (AlloCiné interdit l'extraction et l'usage commercial, CGU art. 7.5 et 8.1 ; International Showtimes coûte 149 €/mois et plus).
+- Mesuré le 2026-10-17 : **177 cinémas**, environ 21 600 séances, mise à jour quotidienne. Peu en Île-de-France : 8 à Paris, 9 en Seine-Saint-Denis, 9 dans le Val-de-Marne, 6 dans les Hauts-de-Seine. Ni UGC, ni Pathé, ni MK2.
+- API Data Fair, sans clé : `https://datacinesindes.fr/data-fair/api/v1/datasets/lyxgxtgaz5zfv0zu0fa11xq8/lines?size=…` (pagination par `next`). Champs par séance : `showstart`, `showend`, `filmversion` (`VERSION_ORIGINAL`…), `filmaudio`, `auditoriumnumber`, `showurl` (**lien de réservation direct**), film (`filmtitle`, `filmdirector`, `filmcast`, `filmgenre`, `filmduration` en secondes, `filmstoryline`, `filmposter`, `filmtrailer`) et cinéma (`cineid`, `cinenom`, `cineadresse`, `cinecp`, `cineville`, `_geopoint`).
+- **Pourquoi écarté** : trop petit pour remplacer AlloCiné (environ 6 % des 3 000 cinémas). À reprendre seulement si Cinemap doit se passer d'AlloCiné ou devenir payant : il couvrirait alors ces salles sans AlloCiné ni TMDB (affiche, synopsis et bande-annonce compris), au prix d'un rapprochement de ses cinémas et films avec ceux de la base.
+
