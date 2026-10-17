@@ -284,7 +284,7 @@ Mesure d'audience, envoyée par `navigator.sendBeacon` (`frontend/src/lib/track.
 - Événement inconnu, ou `t` donné à un événement sans cible → 400. Cible absente de la base (ou des villes) → 404 : la table ne peut pas se remplir de lignes inventées.
 - User-Agent vide ou de robot (`bot`, `crawl`, `spider`, `headless`, `lighthouse`, `preview`) → 204 sans rien compter.
 - Le front n'envoie rien si `navigator.globalPrivacyControl` ou `navigator.webdriver` est vrai.
-- Stocké dans `daily_events (day, event, target, count)` : un compteur par jour à Paris, sans IP, cookie ni identifiant. Lecture : `cinemap stats [--days 30]` (`DEPLOY.md`).
+- Stocké dans `daily_events (day, event, target, count)` : un compteur par jour à Paris, sans IP, cookie ni identifiant. Lecture : `cinemap stats [--days 30]` (`DEPLOY.md`). Fausses données pour essayer en local : `sqlite3 database.db < scripts/fake-stats.sql` (depuis `backend/`, remplace les compteurs).
 
 ## Schéma SQLite (proposition)
 
