@@ -21,11 +21,13 @@ use super::{ApiResult, AppError, AppState};
 use crate::text::{cinema_slug, locality, slugify};
 use crate::time::{DATE_FORMAT, paris_today};
 
+mod about;
 mod city;
 mod html;
 mod sitemap;
 mod template;
 
+pub use about::about;
 pub use city::city;
 use city::city_path;
 use html::{Head, SITE_NAME, SITE_URL, escape, french_date, french_day, runtime, truncate};
@@ -91,10 +93,17 @@ fn html_response(status: StatusCode, html: String) -> Response {
     response
 }
 
+/// Lien vers les mentions légales sous chaque page lue sans JavaScript (l'app a le sien).
+const FOOTER: &str = "<p class=\"ssr\"><a href=\"/a-propos\">À propos et mentions légales</a></p>";
+
 /// Page complète, ou 404 JSON si le front n'a pas été trouvé au démarrage (dev sans build).
 fn page(state: &AppState, status: StatusCode, head: &Head, body: &str) -> Response {
+    let footer = if head.path == "/a-propos" { "" } else { FOOTER };
     match &state.pages {
-        Some(template) => html_response(status, template.render(&head.render(), body)),
+        Some(template) => html_response(
+            status,
+            template.render(&head.render(), &[body, footer].concat()),
+        ),
         None => AppError::NotFound("Front absent : pages HTML indisponibles").into_response(),
     }
 }

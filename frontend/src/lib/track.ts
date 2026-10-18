@@ -37,6 +37,7 @@ export function viewEvent(route: Route): [TrackedEvent, (string | number)?] | nu
       return ['view_cinema', route.id];
     case 'programme':
       return ['view_programme'];
+    case 'about':
     case 'not-found':
       return null;
   }

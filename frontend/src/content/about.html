@@ -1,0 +1,71 @@
+<!-- Page « À propos » : affichée par l'app (AboutPage.svelte) et servie telle quelle par axum
+     (backend/src/api/pages/about.rs, include_str!). Styles dans app.css (.about). -->
+<article class="about">
+  <h1>À propos</h1>
+  <p class="muted">
+    Cinemap, la carte des cinémas de France et de leurs séances. Projet personnel, gratuit, sans
+    publicité.
+  </p>
+
+  <h2>Mentions légales</h2>
+  <dl>
+    <dt>Éditeur et directeur de la publication</dt>
+    <dd>
+      Cinemap est édité à titre non professionnel par un particulier. Conformément à la loi n°
+      2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique, ses coordonnées ont été
+      communiquées à l'hébergeur.
+    </dd>
+    <dt>Hébergeur</dt>
+    <dd>
+      Hetzner Online GmbH<br />
+      Industriestr. 25, 91710 Gunzenhausen, Allemagne<br />
+      +49 9831 505-0
+    </dd>
+  </dl>
+
+  <h2>Vie privée</h2>
+  <p>Cinemap ne dépose <strong>aucun cookie</strong> et ne demande aucun compte.</p>
+  <ul>
+    <li>
+      <strong>Mesure d'audience anonyme</strong> : le site compte, par jour, les pages vues et
+      quelques actions (réserver, ajouter une séance). Aucune adresse IP ni aucun identifiant n'est
+      enregistré avec ces compteurs. Si votre navigateur active <em>Global Privacy Control</em>,
+      rien n'est compté.
+    </li>
+    <li>
+      <strong>Favoris et programme</strong> : gardés seulement dans votre navigateur. Le serveur ne
+      reçoit que ce qu'il faut pour répondre à une recherche (par exemple vos cinémas favoris pour
+      filtrer les séances), sans le conserver.
+    </li>
+    <li>
+      <strong>Position</strong> : envoyée avec la recherche pour trouver les cinémas proches, jamais
+      conservée ; arrondie à ~100 m pour afficher le nom de votre ville (service de l'IGN).
+    </li>
+    <li>
+      <strong>Journaux du serveur</strong> : comme tout site, le serveur web note l'adresse IP et la
+      page demandée, pour le fonctionnement et la sécurité. Ils sont effacés au bout de 15 jours au
+      plus.
+    </li>
+  </ul>
+
+  <h2>Sources et crédits</h2>
+  <ul>
+    <li>
+      Séances : <a href="https://www.allocine.fr">AlloCiné</a>, mises à jour chaque nuit. Vérifiez
+      l'horaire sur le site du cinéma avant de partir.
+    </li>
+    <li>
+      Données des films (images, bandes-annonces, notes) :
+      <a href="https://www.themoviedb.org">TMDB</a>. This product uses the TMDB API but is not
+      endorsed or certified by TMDB.
+    </li>
+    <li>
+      Carte : <a href="https://openfreemap.org">OpenFreeMap</a>, ©
+      <a href="https://www.openstreetmap.org/copyright">contributeurs OpenStreetMap</a> (ODbL).
+    </li>
+    <li>
+      Salles de cinéma : données du <a href="https://www.cnc.fr">CNC</a> ; positions :
+      <a href="https://adresse.data.gouv.fr">API Adresse</a> (Base Adresse Nationale).
+    </li>
+  </ul>
+</article>

@@ -6,9 +6,11 @@
   import ShowtimeMenu from './components/ShowtimeMenu.svelte';
   import { app, map } from './lib/app.svelte';
   import { restoreCardFilter } from './lib/cards.svelte';
+  import { timeAgo } from './lib/format';
   import { programme } from './lib/programme.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
   import { track, viewEvent } from './lib/track';
+  import AboutPage from './views/AboutPage.svelte';
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
   import MoviePage from './views/MoviePage.svelte';
@@ -79,9 +81,22 @@
       {#key router.route.id}<CinemaPage id={router.route.id} />{/key}
     {:else if router.route.name === 'programme'}
       <ProgrammePage />
+    {:else if router.route.name === 'about'}
+      <AboutPage />
     {:else}
       <NotFound />
     {/if}
+
+    <!-- Pied du panneau : fraîcheur des séances (accueil) et lien vers les mentions légales. -->
+    <footer class="foot muted">
+      {#if (router.route.name === 'home' || router.route.name === 'city') && app.meta?.last_scrape_at}
+        <span>Séances mises à jour {timeAgo(app.meta.last_scrape_at)}</span>
+        <span aria-hidden="true">·</span>
+      {/if}
+      {#if router.route.name !== 'about'}
+        <a href="/a-propos">À propos et mentions légales</a>
+      {/if}
+    </footer>
   </main>
 
   <ShowtimeMenu />
@@ -159,6 +174,22 @@
     padding: 1rem 1rem 6rem;
     max-width: 720px;
     margin: 0 auto;
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    margin-top: 1.5rem;
+    font-size: 0.88rem;
+  }
+
+  .foot a {
+    text-decoration: none;
+  }
+
+  .foot a:hover {
+    text-decoration: underline;
   }
 
   /* Mobile : carte plein écran par-dessus la liste quand on l'ouvre. */

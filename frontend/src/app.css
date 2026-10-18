@@ -214,3 +214,38 @@ h3 {
 .ssr h1 {
   font-size: 1.5rem;
 }
+
+/* Page « À propos » (src/content/about.html), dans l'app comme servie par le serveur. */
+.about h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.about h2 {
+  font-size: 1.1rem;
+  margin: 1.6rem 0 0.5rem;
+}
+
+.about p,
+.about li {
+  margin: 0 0 0.5rem;
+}
+
+.about ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.about dl {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+}
+
+.about dt {
+  color: var(--muted);
+}
+
+.about dd {
+  margin: 0 0 0.6rem;
+}
