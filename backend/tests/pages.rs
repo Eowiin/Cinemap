@@ -161,9 +161,29 @@ async fn home_and_programme() {
             .contains("<h1>Séances de cinéma près de chez vous</h1>")
     );
     assert!(home.body.contains("\"@type\":\"WebSite\""));
+    assert!(home.body.contains("<a href=\"/a-propos\">"));
     let programme = get(&state, "/programme").await;
     assert_eq!(programme.status, StatusCode::OK);
     assert!(programme.body.contains("noindex"));
+}
+
+#[tokio::test]
+async fn about_page_is_readable_without_javascript() {
+    let state = state().await;
+    let reply = get(&state, "/a-propos").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let html = &reply.body;
+    assert!(html.contains("<title>À propos et mentions légales · Cinemap</title>"));
+    assert!(
+        html.contains("<link rel=\"canonical\" href=\"https://cinemap.ethansaux.fr/a-propos\" />")
+    );
+    assert!(!html.contains("noindex"));
+    assert!(html.contains("<h1>À propos</h1>"));
+    assert!(html.contains("Hetzner Online GmbH"));
+    assert!(
+        !html.contains("<a href=\"/a-propos\">"),
+        "pas de lien vers elle-même"
+    );
 }
 
 #[tokio::test]

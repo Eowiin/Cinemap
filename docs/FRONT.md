@@ -23,6 +23,7 @@ npm run build           # dist/ (statique, servi par nginx en prod)
 | `/film/{id}` | Fiche film + séances par cinéma, triées par distance |
 | `/cinema/{id}` | Fiche cinéma + programme du jour |
 | `/programme` | Mon programme, jour par jour (séances enchaînées, composition, trajet), ou un programme partagé (`?date=…&s=…`) |
+| `/a-propos` | À propos : mentions légales, vie privée, sources et crédits |
 
 Filtres dans l'URL (liens partageables) : `date` (absente = aujourd'hui, pour qu'un lien reste valable demain), `version` (`VF` / `VO`), `after` (`HH:MM`). La position et le rayon restent dans le navigateur (`localStorage`), pas dans l'URL. « Autour de moi » affiche « Ma position », puis le nom de la ville (géocodage inverse de l'IGN, `data.geopf.fr`, gratuit et sans clé, position arrondie à ~100 m ; hors de France ou en cas d'échec, « Ma position » reste).
 
@@ -97,6 +98,13 @@ Nommé « Ma journée » quelques heures (`/journee`), puis **« Mon programme �
 - Sur la carte, les cinémas de Mon programme numérotés dans l'ordre (« 1 · 3 » si on y revient), reliés par une ligne pointillée (`planner.dayRoute`, `map.route`). Rien si tout se passe dans un seul cinéma.
 - Mobile : bouton « Voir le trajet sur la carte » (la carte est cachée) ; ordinateur : la carte est déjà là.
 - Lien « Itinéraire » sur chaque trajet entre deux séances : Google Maps, à pied ou en transports selon l'estimation. Un lien par trajet : Google ne gère pas les étapes intermédiaires en transports.
+
+## À propos et mentions légales (2026-10-18)
+
+- Texte dans **un seul fichier**, `src/content/about.html` : l'app l'affiche (`AboutPage.svelte`, import `?raw`) et axum l'inclut à la compilation (`backend/src/api/pages/about.rs`, `include_str!`) pour la page lue sans JavaScript. Styles `.about` dans `app.css`.
+- Projet personnel : éditeur non professionnel, coordonnées confiées à l'hébergeur (LCEN), hébergeur Hetzner Online GmbH.
+- Lien discret en pied du panneau, sur toutes les pages (« Séances mises à jour il y a … · À propos et mentions légales » à l'accueil) ; côté serveur, même lien sous chaque page HTML. Ni bandeau ni pop-up : aucun cookie.
+- Page indexable (canonique) mais **hors du sitemap**. Pas d'événement d'audience (`viewEvent` renvoie `null`).
 
 ## Couverture (2026-10-09)
 

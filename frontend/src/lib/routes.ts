@@ -12,6 +12,7 @@ export type Route =
   /** Même écran que l'accueil, centré sur la ville. */
   | { name: 'city'; slug: string }
   | { name: 'programme' }
+  | { name: 'about' }
   | { name: 'not-found' };
 
 export type UrlFilters = {
@@ -33,6 +34,7 @@ export function parseRoute(pathname: string): Route {
   const city = pathname.match(/^\/ville\/([a-z0-9-]+)\/?$/);
   if (city) return { name: 'city', slug: city[1]! };
   if (/^\/programme\/?$/.test(pathname)) return { name: 'programme' };
+  if (/^\/a-propos\/?$/.test(pathname)) return { name: 'about' };
   return { name: 'not-found' };
 }
 
@@ -78,6 +80,8 @@ export function routePath(route: Route): string {
       return `/ville/${route.slug}`;
     case 'programme':
       return '/programme';
+    case 'about':
+      return '/a-propos';
     case 'not-found':
       return '/';
   }

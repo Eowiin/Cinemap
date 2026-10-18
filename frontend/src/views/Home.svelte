@@ -6,7 +6,7 @@
   import { api } from '../lib/api/client';
   import { app, map, PARIS, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
   import { favorites } from '../lib/favorites.svelte';
-  import { formatRuntime, timeAgo, timeOf } from '../lib/format';
+  import { formatRuntime, timeOf } from '../lib/format';
   import { router } from '../lib/router.svelte';
   import { resource } from '../lib/resource.svelte';
   import { cinemaRoute, href, movieRoute } from '../lib/routes';
@@ -173,10 +173,6 @@
   {/if}
 {/if}
 
-{#if app.meta?.last_scrape_at}
-  <p class="updated muted small">Séances mises à jour {timeAgo(app.meta.last_scrape_at)}</p>
-{/if}
-
 <style>
   .intro {
     display: grid;
@@ -320,9 +316,5 @@
     display: grid;
     gap: 0.6rem;
     justify-items: start;
-  }
-
-  .updated {
-    margin-top: 1.5rem;
   }
 </style>

@@ -78,6 +78,7 @@ pub fn router(state: AppState) -> Router {
         .route("/cinema/{segment}", get(pages::cinema))
         .route("/ville/{slug}", get(pages::city))
         .route("/programme", get(pages::programme_page))
+        .route("/a-propos", get(pages::about))
         .route("/sitemap.xml", get(pages::sitemap))
         .fallback(pages::fallback)
         .with_state(state)
