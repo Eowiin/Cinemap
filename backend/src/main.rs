@@ -59,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
             backend::cards::import_cards(&pool, &client, force).await
         }
         SubCommands::Tmdb { all } => backend::tmdb::sync(&pool, all).await,
+        SubCommands::Stats { days } => backend::stats::report(&pool, days).await,
         SubCommands::Serve { addr, www } => backend::api::serve(pool, &addr, www).await,
     }
 }

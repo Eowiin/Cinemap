@@ -4,6 +4,7 @@
   import { clock, conflicts, DEFAULT_RUNTIME_MIN, endMinutes, linkLabel } from '../lib/planner';
   import { programme, showtimeMenu } from '../lib/programme.svelte';
   import { router } from '../lib/router.svelte';
+  import { track } from '../lib/track';
   import Icon from './Icon.svelte';
 
   // Un seul menu pour toute l'application (App.svelte), ouvert par un appui sur un horaire.
@@ -23,7 +24,9 @@
   });
 
   function toggle() {
-    if (stop) programme.toggle($state.snapshot(stop));
+    if (!stop) return;
+    if (!planned) track('add', stop.cinema.id);
+    programme.toggle($state.snapshot(stop));
   }
 
   function openProgramme() {
@@ -70,7 +73,13 @@
       </p>
 
       {#if stop.booking_url}
-        <a class="button primary wide" href={stop.booking_url} target="_blank" rel="noopener">
+        <a
+          class="button primary wide"
+          href={stop.booking_url}
+          target="_blank"
+          rel="noopener"
+          onclick={() => track('book', stop.cinema.id)}
+        >
           <Icon name="external" size={16} /> Réserver
         </a>
       {/if}

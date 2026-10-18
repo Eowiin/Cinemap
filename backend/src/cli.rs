@@ -47,6 +47,12 @@ pub enum SubCommands {
         #[arg(long)]
         force: bool,
     },
+    /// Affiche la mesure d'audience (pages vues, réservations…) des derniers jours.
+    Stats {
+        /// Nombre de jours, aujourd'hui compris.
+        #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u32).range(1..))]
+        days: u32,
+    },
     /// Lance l'API HTTP.
     Serve {
         /// Adresse d'écoute (en prod, nginx est devant : inutile d'exposer le port).

@@ -225,6 +225,14 @@ systemd-run --pty --wait --collect --uid=cinemap --gid=cinemap \
   /opt/cinemap/current/cinemap scrape --department 75
 ```
 
+**Mesure d'audience** (pages vues, clics « Réserver », séances ajoutées… sur les 30 derniers jours ; `--days 7` pour la semaine) :
+
+```bash
+systemd-run --pty --wait --collect --uid=cinemap --gid=cinemap \
+  -p EnvironmentFile=/etc/cinemap/cinemap.env -p WorkingDirectory=/var/lib/cinemap \
+  /opt/cinemap/current/cinemap stats
+```
+
 **Redéployer sans commit** : onglet Actions → CI → *Run workflow* sur `main`.
 
 **Revenir à une release précédente** :

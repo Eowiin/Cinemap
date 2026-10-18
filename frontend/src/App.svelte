@@ -8,6 +8,7 @@
   import { restoreCardFilter } from './lib/cards.svelte';
   import { programme } from './lib/programme.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
+  import { track, viewEvent } from './lib/track';
   import CinemaPage from './views/CinemaPage.svelte';
   import Home from './views/Home.svelte';
   import MoviePage from './views/MoviePage.svelte';
@@ -31,6 +32,16 @@
 
   $effect(() => {
     if (showMap && map.all.length === 0) map.loadAll();
+  });
+
+  // Une page vue par changement de page : changer de date ou de filtre ne compte pas.
+  let lastView = '';
+  $effect(() => {
+    const view = viewEvent(router.route);
+    const key = JSON.stringify(view);
+    if (!view || key === lastView) return;
+    lastView = key;
+    track(...view);
   });
 </script>
 

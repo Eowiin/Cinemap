@@ -16,6 +16,7 @@
   import { programme } from '../lib/programme.svelte';
   import { resource } from '../lib/resource.svelte';
   import { router } from '../lib/router.svelte';
+  import { track } from '../lib/track';
   import { href, movieRoute } from '../lib/routes';
   import Icon from './Icon.svelte';
   import Poster from './Poster.svelte';
@@ -110,6 +111,7 @@
   );
 
   function add(stop: PlanStop) {
+    if (!programme.has(stop.id)) track('add', stop.cinema.id);
     programme.toggle($state.snapshot(stop) as PlanStop);
     close();
   }

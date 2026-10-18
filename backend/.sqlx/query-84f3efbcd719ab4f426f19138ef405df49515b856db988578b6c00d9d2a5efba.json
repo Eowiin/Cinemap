@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO daily_events (day, event, target, count) VALUES (?1, ?2, ?3, 1)\n           ON CONFLICT (day, event, target) DO UPDATE SET count = count + 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "84f3efbcd719ab4f426f19138ef405df49515b856db988578b6c00d9d2a5efba"
+}

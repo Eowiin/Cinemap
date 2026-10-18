@@ -17,6 +17,8 @@ Site : https://cinemap.ethansaux.fr
 
 Un backend Rust récupère chaque nuit les séances d'AlloCiné : 3 jours, et la semaine entière le mercredi. Il les complète avec TMDB (affiches, synopsis, acteurs), puis les sert au front par une API JSON. Le même binaire sert aussi les pages HTML des films, cinémas et villes, avec leurs métadonnées, ainsi que le sitemap. Les données tiennent dans une base SQLite, sur un petit VPS.
 
+La mesure d'audience se passe de cookie et d'identifiant : le site compte seulement, par jour, les pages vues et les actions (réserver, ajouter une séance…), sans rien garder du visiteur (`cinemap stats` pour la lire).
+
 ## Structure
 
 ```
