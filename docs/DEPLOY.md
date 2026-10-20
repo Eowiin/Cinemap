@@ -13,7 +13,8 @@ navigateur ──HTTPS──► nginx (certbot)
                            (pages HTML : gabarit www/index.html de la release, vraies 404)
 
 timers systemd (heure de Paris) :
-  chaque nuit 4 h   cinemap-nightly : cinemap scrape (France, J → J+2 ; J → J+6 le mercredi), puis cinemap tmdb
+  chaque nuit 4 h   cinemap-nightly : cinemap scrape (France, J → J+2), puis cinemap tmdb
+  le mardi 13 h     cinemap-nightly : idem sur J → J+6 (semaine ciné suivante publiée)
   le mardi 2 h      cinemap-weekly  : cinemap import-cinemas (+ géocodage + CNC)
 
 push ──► GitHub Actions : fmt, clippy, tests (Rust) ; test, check, lint, build (front)
