@@ -1,9 +1,11 @@
 [Unit]
-Description=Cinemap : séances chaque nuit à 4 h (heure de Paris)
+Description=Cinemap : séances chaque nuit à 4 h, et le mardi à 13 h (heure de Paris)
 
 [Timer]
 OnCalendar=*-*-* 04:00:00 Europe/Paris
-# Rattrape le run manqué si le VPS était éteint à 4 h.
+# Semaine complète (le service passe à --days 7 le mardi après midi).
+OnCalendar=Tue *-*-* 13:00:00 Europe/Paris
+# Rattrape le run manqué si le VPS était éteint à l'heure prévue.
 Persistent=true
 
 [Install]
