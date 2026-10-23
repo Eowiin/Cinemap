@@ -3,8 +3,10 @@
 //! Les films qui ont une séance à venir sont traités au plus une fois par semaine
 //! (`tmdb_synced_at`), sauf `--all`. Un film déjà croisé (`tmdb_id` connu) n'est plus
 //! recherché : sa fiche est seulement relue (note, bande-annonce et offres de streaming
-//! bougent). Un film qui n'est plus à l'affiche n'est relu que s'il est croisé, une fois
-//! par mois, pour garder à jour où le voir ; les catalogues bougent moins vite que ça.
+//! bougent). Un film qui n'est plus à l'affiche est relu une fois par mois s'il est
+//! croisé, pour garder à jour où le voir ; les catalogues bougent moins vite que ça.
+//! Jamais essayé (sorti des salles avant la synchro TMDB), il est cherché une seule
+//! fois ; introuvable, il n'est plus recherché.
 
 pub mod api;
 mod matching;
@@ -96,8 +98,9 @@ async fn movies_to_sync(
          WHERE CASE
              WHEN EXISTS (SELECT 1 FROM showtimes s WHERE s.movie_id = m.id AND s.date >= ?1)
                THEN ?2 OR m.tmdb_synced_at IS NULL OR m.tmdb_synced_at < datetime('now', ?3)
-             ELSE m.tmdb_id IS NOT NULL
-               AND (?2 OR m.watch_providers IS NULL OR m.tmdb_synced_at < datetime('now', ?4))
+             ELSE (m.tmdb_id IS NULL AND m.tmdb_synced_at IS NULL)
+               OR (m.tmdb_id IS NOT NULL
+                 AND (?2 OR m.watch_providers IS NULL OR m.tmdb_synced_at < datetime('now', ?4)))
            END
          ORDER BY m.id",
     )
@@ -221,12 +224,14 @@ mod tests {
                  (4, 'Plus à l''affiche, pas sur TMDB', 'x', NULL, NULL, datetime('now', '-60 days'), datetime('now')),
                  (5, 'Plus à l''affiche, offres jamais lues', 'x', 50, NULL, datetime('now', '-1 day'), datetime('now')),
                  (6, 'Plus à l''affiche, lu ce mois-ci', 'x', 60, '{}', datetime('now', '-20 days'), datetime('now')),
-                 (7, 'Plus à l''affiche, lu il y a 2 mois', 'x', 70, '{}', datetime('now', '-60 days'), datetime('now'));
+                 (7, 'Plus à l''affiche, lu il y a 2 mois', 'x', 70, '{}', datetime('now', '-60 days'), datetime('now')),
+                 (8, 'Plus à l''affiche, jamais essayé', 'x', NULL, NULL, NULL, datetime('now'));
              INSERT INTO showtimes (id, cinema_id, movie_id, date, starts_at, version) VALUES
                  ('s1', 'C1', 1, '2099-01-01', '2099-01-01T20:00:00', 'VF'),
                  ('s2', 'C1', 2, '2099-01-01', '2099-01-01T20:00:00', 'VF'),
                  ('s3', 'C1', 3, '2099-01-01', '2099-01-01T20:00:00', 'VF'),
-                 ('s4', 'C1', 4, '2000-01-01', '2000-01-01T20:00:00', 'VF');",
+                 ('s4', 'C1', 4, '2000-01-01', '2000-01-01T20:00:00', 'VF'),
+                 ('s8', 'C1', 8, '2000-01-01', '2000-01-01T20:00:00', 'VF');",
         )
         .execute(&pool)
         .await
@@ -246,8 +251,9 @@ mod tests {
     #[tokio::test]
     async fn selects_upcoming_weekly_and_matched_off_screen_monthly() {
         let pool = pool().await;
-        assert_eq!(ids(&pool, false).await, [1, 3, 5, 7]);
-        assert_eq!(ids(&pool, true).await, [1, 2, 3, 5, 6, 7]);
+        // 4 : hors salle et déjà marqué introuvable, jamais recherché à nouveau.
+        assert_eq!(ids(&pool, false).await, [1, 3, 5, 7, 8]);
+        assert_eq!(ids(&pool, true).await, [1, 2, 3, 5, 6, 7, 8]);
     }
 
     #[tokio::test]
@@ -281,6 +287,7 @@ mod tests {
         .await
         .unwrap();
         mark_synced(&pool, 7).await.unwrap();
+        mark_synced(&pool, 8).await.unwrap();
         assert!(ids(&pool, false).await.is_empty());
         let (tmdb_id, rating): (Option<i64>, Option<f64>) =
             sqlx::query_as("SELECT tmdb_id, rating FROM movies WHERE id = 1")
