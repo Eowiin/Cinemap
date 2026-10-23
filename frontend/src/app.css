@@ -65,6 +65,24 @@ select {
   color: inherit;
 }
 
+/* Sous 16px, Safari iOS zoome sur le champ touché (et ne dézoome pas). */
+input:not([type='checkbox'], [type='radio']),
+select,
+textarea {
+  font-size: max(16px, 1em);
+}
+
+/* Le champ de recherche natif d'iOS dessine son fond et ses traits par-dessus le nôtre. */
+input[type='search'] {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
 button {
   cursor: pointer;
 }

@@ -1,8 +1,10 @@
 //! Enrichissement des films par TMDB : image de fond, bande-annonce, note.
 //!
-//! Seuls les films qui ont une séance à venir sont traités, et chacun au plus une fois
-//! par semaine (`tmdb_synced_at`), sauf `--all`. Un film déjà croisé (`tmdb_id` connu)
-//! n'est plus recherché : sa fiche est seulement relue (note et bande-annonce bougent).
+//! Les films qui ont une séance à venir sont traités au plus une fois par semaine
+//! (`tmdb_synced_at`), sauf `--all`. Un film déjà croisé (`tmdb_id` connu) n'est plus
+//! recherché : sa fiche est seulement relue (note, bande-annonce et offres de streaming
+//! bougent). Un film qui n'est plus à l'affiche n'est relu que s'il est croisé, une fois
+//! par mois, pour garder à jour où le voir ; les catalogues bougent moins vite que ça.
 
 pub mod api;
 mod matching;
@@ -19,6 +21,7 @@ use api::Tmdb;
 use matching::{Enrichment, best_match, enrichment};
 
 const RESYNC_AFTER: &str = "-7 days";
+const RESYNC_OFF_SCREEN_AFTER: &str = "-30 days";
 
 #[derive(Debug, sqlx::FromRow)]
 struct MovieToSync {
@@ -90,13 +93,18 @@ async fn movies_to_sync(
     Ok(sqlx::query_as(
         "SELECT m.id, m.title, m.original_title, m.production_year, m.tmdb_id
          FROM movies m
-         WHERE EXISTS (SELECT 1 FROM showtimes s WHERE s.movie_id = m.id AND s.date >= ?1)
-           AND (?2 OR m.tmdb_synced_at IS NULL OR m.tmdb_synced_at < datetime('now', ?3))
+         WHERE CASE
+             WHEN EXISTS (SELECT 1 FROM showtimes s WHERE s.movie_id = m.id AND s.date >= ?1)
+               THEN ?2 OR m.tmdb_synced_at IS NULL OR m.tmdb_synced_at < datetime('now', ?3)
+             ELSE m.tmdb_id IS NOT NULL
+               AND (?2 OR m.watch_providers IS NULL OR m.tmdb_synced_at < datetime('now', ?4))
+           END
          ORDER BY m.id",
     )
     .bind(today)
     .bind(all)
     .bind(RESYNC_AFTER)
+    .bind(RESYNC_OFF_SCREEN_AFTER)
     .fetch_all(pool)
     .await?)
 }
@@ -140,13 +148,15 @@ async fn find_tmdb_id(tmdb: &mut Tmdb, movie: &MovieToSync) -> anyhow::Result<Op
 async fn save_enrichment(pool: &SqlitePool, movie_id: i64, e: &Enrichment) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE movies
-         SET tmdb_id = ?, backdrop_url = ?, trailer_url = ?, rating = ?, tmdb_synced_at = datetime('now')
+         SET tmdb_id = ?, backdrop_url = ?, trailer_url = ?, rating = ?, watch_providers = ?,
+             tmdb_synced_at = datetime('now')
          WHERE id = ?",
     )
     .bind(e.tmdb_id)
     .bind(&e.backdrop_url)
     .bind(&e.trailer_url)
     .bind(e.rating)
+    .bind(sqlx::types::Json(&e.watch_providers))
     .bind(movie_id)
     .execute(pool)
     .await?;
@@ -204,11 +214,14 @@ mod tests {
         sqlx::migrate!().run(&pool).await.unwrap();
         sqlx::raw_sql(
             "INSERT INTO cinemas (id, name, name_search, updated_at) VALUES ('C1', 'C', 'c', datetime('now'));
-             INSERT INTO movies (id, title, title_search, tmdb_synced_at, updated_at) VALUES
-                 (1, 'Jamais vu', 'jamais vu', NULL, datetime('now')),
-                 (2, 'Vu hier', 'vu hier', datetime('now', '-1 day'), datetime('now')),
-                 (3, 'Vu il y a longtemps', 'vu il y a longtemps', datetime('now', '-30 days'), datetime('now')),
-                 (4, 'Plus à l''affiche', 'plus a l''affiche', NULL, datetime('now'));
+             INSERT INTO movies (id, title, title_search, tmdb_id, watch_providers, tmdb_synced_at, updated_at) VALUES
+                 (1, 'Jamais vu', 'jamais vu', NULL, NULL, NULL, datetime('now')),
+                 (2, 'Vu hier', 'vu hier', 20, '{}', datetime('now', '-1 day'), datetime('now')),
+                 (3, 'Vu il y a longtemps', 'vu il y a longtemps', 30, '{}', datetime('now', '-30 days'), datetime('now')),
+                 (4, 'Plus à l''affiche, pas sur TMDB', 'x', NULL, NULL, datetime('now', '-60 days'), datetime('now')),
+                 (5, 'Plus à l''affiche, offres jamais lues', 'x', 50, NULL, datetime('now', '-1 day'), datetime('now')),
+                 (6, 'Plus à l''affiche, lu ce mois-ci', 'x', 60, '{}', datetime('now', '-20 days'), datetime('now')),
+                 (7, 'Plus à l''affiche, lu il y a 2 mois', 'x', 70, '{}', datetime('now', '-60 days'), datetime('now'));
              INSERT INTO showtimes (id, cinema_id, movie_id, date, starts_at, version) VALUES
                  ('s1', 'C1', 1, '2099-01-01', '2099-01-01T20:00:00', 'VF'),
                  ('s2', 'C1', 2, '2099-01-01', '2099-01-01T20:00:00', 'VF'),
@@ -231,10 +244,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn selects_upcoming_movies_not_synced_this_week() {
+    async fn selects_upcoming_weekly_and_matched_off_screen_monthly() {
         let pool = pool().await;
-        assert_eq!(ids(&pool, false).await, [1, 3]);
-        assert_eq!(ids(&pool, true).await, [1, 2, 3]);
+        assert_eq!(ids(&pool, false).await, [1, 3, 5, 7]);
+        assert_eq!(ids(&pool, true).await, [1, 2, 3, 5, 6, 7]);
     }
 
     #[tokio::test]
@@ -248,11 +261,26 @@ mod tests {
                 backdrop_url: Some("https://b".into()),
                 trailer_url: None,
                 rating: Some(7.5),
+                watch_providers: Default::default(),
             },
         )
         .await
         .unwrap();
         mark_synced(&pool, 3).await.unwrap();
+        save_enrichment(
+            &pool,
+            5,
+            &Enrichment {
+                tmdb_id: 50,
+                backdrop_url: None,
+                trailer_url: None,
+                rating: None,
+                watch_providers: Default::default(),
+            },
+        )
+        .await
+        .unwrap();
+        mark_synced(&pool, 7).await.unwrap();
         assert!(ids(&pool, false).await.is_empty());
         let (tmdb_id, rating): (Option<i64>, Option<f64>) =
             sqlx::query_as("SELECT tmdb_id, rating FROM movies WHERE id = 1")

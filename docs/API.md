@@ -116,7 +116,23 @@ type Movie = MovieSummary & {
   rating: number | null;       // /10
   // AlloCiné
   user_rating: number | null;  // note spectateurs AlloCiné, /5 (stats.userRating)
+  showing: boolean;            // au moins une séance aujourd'hui ou plus tard, dans un cinéma visible
+  last_showtime_date: string | null; // dernier jour ciné passé avec une séance (noté à la purge)
+  watch: Watch | null;         // null tant que TMDB n'a pas été lu, ou film absent de TMDB
 };
+
+// Où voir le film en France (TMDB, données JustWatch, à créditer). Chaque liste suit l'ordre
+// JustWatch, sans les chaînes revendues (« … Amazon Channel ») ni les formules d'une
+// plateforme déjà listée (« Netflix Standard with Ads »).
+type Watch = {
+  link: string | null;         // page TMDB des offres (TMDB ne donne pas de lien par plateforme)
+  free: WatchProvider[];       // gratuit, avec ou sans pub
+  flatrate: WatchProvider[];   // abonnement
+  rent: WatchProvider[];
+  buy: WatchProvider[];
+  checked_at: string;          // UTC "YYYY-MM-DD HH:MM:SS", dernière lecture TMDB
+};
+type WatchProvider = { name: string; logo_url: string | null };
 
 type Showtime = {
   id: string;
@@ -255,13 +271,13 @@ Query : `date?`, `lat`, `lng` (**obligatoires**), `radius_km?` (défaut 15, max 
 
 Query : `q` (≥ 2 caractères, sinon 400).
 
-Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur les films ayant au moins une séance dans les jours disponibles, et sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès), et sur les villes (début du nom : `"lyo"` trouve Lyon, pas Villeurbanne).
+Recherche insensible à la casse **et aux accents** (`"cine cite"` trouve `"Ciné Cité"`), sur tous les films connus (ceux qui ne sont plus à l'affiche passent après, les plus récemment partis d'abord), sur les cinémas (nom **et** ville : `"montreuil"` trouve le Méliès), et sur les villes (début du nom : `"lyo"` trouve Lyon, pas Villeurbanne).
 
 Limite connue : les films sont cherchés sur leur titre français seulement (`original_title` n'a pas de colonne normalisée).
 
 ```json
 {
-  "movies":  [MovieSummary, …],   // 8 max, les plus diffusés d'abord
+  "movies":  [MovieSummary & { showing: boolean }, …], // 8 max, les plus diffusés d'abord
   "cinemas": [CinemaSummary, …],  // 8 max
   "cities":  [CitySummary, …]     // 5 max, celles qui ont le plus de cinémas d'abord
 }
@@ -331,6 +347,8 @@ CREATE TABLE movies (
     rating          REAL,                 -- TMDB, /10
     user_rating     REAL,                 -- AlloCiné spectateurs, /5
     tmdb_synced_at  TEXT,
+    watch_providers TEXT,                 -- JSON Watch sans checked_at ; NULL = jamais lu
+    last_showtime_date TEXT,
     updated_at      TEXT NOT NULL
 );
 

@@ -285,9 +285,17 @@ async fn movie_detail() {
         serde_json::json!([{ "name": "Léa Drucker", "role": "Anne" }])
     );
     assert!(reply.json.get("trailer_url").is_some());
+    assert_eq!(reply.json["showing"], true);
+    assert!(reply.json["watch"].is_null());
 
-    // Sans séance, la fiche reste consultable.
-    assert_eq!(get(&state, "/api/movies/1003").await.status, StatusCode::OK);
+    // Sans séance, la fiche reste consultable et dit où voir le film.
+    let reply = get(&state, "/api/movies/1003").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json["showing"], false);
+    assert_eq!(reply.json["last_showtime_date"], "2026-10-14");
+    assert_eq!(reply.json["watch"]["flatrate"][0]["name"], "Netflix");
+    assert_eq!(reply.json["watch"]["link"], "https://tmdb/watch");
+    assert_eq!(reply.json["watch"]["checked_at"], "2026-10-20 03:00:00");
     let reply = get(&state, "/api/movies/999").await;
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_eq!(reply.json["error"]["code"], "not_found");
@@ -349,7 +357,7 @@ async fn search_ignores_case_and_accents() {
 }
 
 #[tokio::test]
-async fn search_movies_are_upcoming_and_visible_only() {
+async fn search_lists_off_screen_movies_too() {
     let state = state().await;
     let reply = get(&state, "/api/search?q=%C3%89T%C3%89").await; // "ÉTÉ"
     let movie_ids: Vec<i64> = reply.json["movies"]
@@ -359,11 +367,23 @@ async fn search_movies_are_upcoming_and_visible_only() {
         .map(|m| m["id"].as_i64().unwrap())
         .collect();
     assert_eq!(movie_ids, [1001]);
+    assert_eq!(reply.json["movies"][0]["showing"], true);
 
-    // Film C sans séance, et "sans gps" n'est qu'un cinéma invisible.
+    // Film C sans séance : trouvé, mais signalé ; "sans gps" n'est qu'un cinéma invisible.
     let reply = get(&state, "/api/search?q=sans").await;
-    assert_eq!(reply.json["movies"], serde_json::json!([]));
+    assert_eq!(reply.json["movies"][0]["id"], 1003);
+    assert_eq!(reply.json["movies"][0]["showing"], false);
     assert_eq!(reply.json["cinemas"], serde_json::json!([]));
+
+    // Les films à l'affiche passent devant (Batman, puis Sans séance).
+    let reply = get(&state, "/api/search?q=an").await;
+    let found: Vec<(i64, bool)> = reply.json["movies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["id"].as_i64().unwrap(), m["showing"].as_bool().unwrap()))
+        .collect();
+    assert_eq!(found, [(1002, true), (1003, false)]);
 
     // "_" n'est pas un joker.
     let reply = get(&state, "/api/search?q=e_").await;

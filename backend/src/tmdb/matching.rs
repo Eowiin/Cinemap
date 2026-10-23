@@ -1,9 +1,11 @@
 //! Choix du film TMDB qui correspond à un film AlloCiné (fonctions pures).
 
-use super::api::{MovieDetails, SearchResult, Video};
+use super::api::{MovieDetails, Provider, RegionProviders, SearchResult, Video};
+use crate::api::types::{WatchProvider, WatchProviders};
 use crate::text;
 
 const BACKDROP_BASE_URL: &str = "https://image.tmdb.org/t/p/w1280";
+const LOGO_BASE_URL: &str = "https://image.tmdb.org/t/p/w92";
 /// En dessous, la moyenne TMDB ne veut pas dire grand-chose.
 const MIN_VOTES_FOR_RATING: i64 = 10;
 /// L'année de production AlloCiné et l'année de sortie TMDB diffèrent souvent d'un an
@@ -48,6 +50,7 @@ pub struct Enrichment {
     pub backdrop_url: Option<String>,
     pub trailer_url: Option<String>,
     pub rating: Option<f64>,
+    pub watch_providers: WatchProviders,
 }
 
 pub fn enrichment(details: &MovieDetails) -> Enrichment {
@@ -62,7 +65,57 @@ pub fn enrichment(details: &MovieDetails) -> Enrichment {
             .map(|video| format!("https://www.youtube.com/watch?v={}", video.key)),
         rating: (details.vote_count >= MIN_VOTES_FOR_RATING)
             .then(|| (details.vote_average * 10.0).round() / 10.0),
+        watch_providers: details
+            .watch_providers
+            .results
+            .fr
+            .as_ref()
+            .map(watch_providers)
+            .unwrap_or_default(),
     }
+}
+
+/// Offres françaises, sans les doublons de JustWatch : les chaînes revendues par une
+/// autre plateforme (« HBO Max Amazon Channel ») et les formules d'une plateforme déjà
+/// listée (« Netflix Standard with Ads », « Paramount Plus Premium »).
+fn watch_providers(region: &RegionProviders) -> WatchProviders {
+    WatchProviders {
+        link: region.link.clone(),
+        free: providers([&region.free, &region.ads]),
+        flatrate: providers([&region.flatrate]),
+        rent: providers([&region.rent]),
+        buy: providers([&region.buy]),
+    }
+}
+
+fn providers<const N: usize>(lists: [&Vec<Provider>; N]) -> Vec<WatchProvider> {
+    let mut kept: Vec<&Provider> = lists
+        .into_iter()
+        .flatten()
+        .filter(|p| !p.provider_name.ends_with(" Channel"))
+        .collect();
+    kept.sort_by_key(|p| p.display_priority);
+    // Une dizaine d'offres au plus : la double boucle ne coûte rien.
+    let is_plan_of_another = |p: &Provider| {
+        kept.iter().any(|base| {
+            p.provider_name
+                .strip_prefix(base.provider_name.as_str())
+                .is_some_and(|rest| rest.starts_with(' '))
+        })
+    };
+    let mut out: Vec<WatchProvider> = Vec::with_capacity(kept.len());
+    for &p in &kept {
+        if !is_plan_of_another(p) && out.iter().all(|seen| seen.name != p.provider_name) {
+            out.push(WatchProvider {
+                name: p.provider_name.clone(),
+                logo_url: p
+                    .logo_path
+                    .as_ref()
+                    .map(|path| format!("{LOGO_BASE_URL}{path}")),
+            });
+        }
+    }
+    out
 }
 
 /// Une vidéo YouTube de type bande-annonce (à défaut, teaser), en préférant le français
@@ -84,6 +137,14 @@ fn best_trailer(videos: &[Video]) -> Option<&Video> {
 mod tests {
     use super::*;
     use crate::tmdb::api::Videos;
+
+    fn provider(name: &str, priority: i64) -> Provider {
+        Provider {
+            provider_name: name.into(),
+            logo_path: Some(format!("/{priority}.png")),
+            display_priority: priority,
+        }
+    }
 
     fn candidate(id: i64, title: &str, original_title: &str, date: &str) -> SearchResult {
         SearchResult {
@@ -175,6 +236,7 @@ mod tests {
                     video("clip", "Clip", "fr", true),
                 ],
             },
+            watch_providers: Default::default(),
         };
         assert_eq!(
             enrichment(&details),
@@ -183,6 +245,7 @@ mod tests {
                 backdrop_url: Some("https://image.tmdb.org/t/p/w1280/b.jpg".into()),
                 trailer_url: Some("https://www.youtube.com/watch?v=fr".into()),
                 rating: Some(7.3),
+                watch_providers: WatchProviders::default(),
             }
         );
     }
@@ -195,11 +258,42 @@ mod tests {
             vote_average: 9.0,
             vote_count: 3,
             videos: Videos::default(),
+            watch_providers: Default::default(),
         };
         let e = enrichment(&details);
         assert_eq!(
             (e.backdrop_url, e.trailer_url, e.rating),
             (None, None, None)
+        );
+    }
+
+    #[test]
+    fn watch_providers_drop_duplicates_and_merge_free_offers() {
+        let region = RegionProviders {
+            link: Some("https://www.themoviedb.org/movie/1/watch?locale=FR".into()),
+            flatrate: vec![
+                provider("HBO Max Amazon Channel", 3),
+                provider("Netflix Standard with Ads", 2),
+                provider("HBO Max", 4),
+                provider("Paramount Plus Premium", 5),
+                provider("Paramount Plus", 6),
+                provider("Netflix", 1),
+            ],
+            free: vec![provider("arte.tv", 9)],
+            ads: vec![provider("Pluto TV", 7), provider("arte.tv", 9)],
+            rent: vec![provider("Apple TV Store", 5)],
+            buy: Vec::new(),
+        };
+        let w = watch_providers(&region);
+        let names =
+            |list: &[WatchProvider]| list.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&w.flatrate), ["Netflix", "HBO Max", "Paramount Plus"]);
+        assert_eq!(names(&w.free), ["Pluto TV", "arte.tv"]);
+        assert_eq!(names(&w.rent), ["Apple TV Store"]);
+        assert!(w.buy.is_empty());
+        assert_eq!(
+            w.rent[0].logo_url.as_deref(),
+            Some("https://image.tmdb.org/t/p/w92/5.png")
         );
     }
 }
