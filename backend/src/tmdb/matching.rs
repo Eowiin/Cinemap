@@ -92,22 +92,22 @@ fn providers<const N: usize>(lists: [&Vec<Provider>; N]) -> Vec<WatchProvider> {
     let mut kept: Vec<&Provider> = lists
         .into_iter()
         .flatten()
-        .filter(|p| !p.provider_name.ends_with(" Channel"))
+        .filter(|p| !name(p).ends_with(" Channel"))
         .collect();
     kept.sort_by_key(|p| p.display_priority);
     // Une dizaine d'offres au plus : la double boucle ne coûte rien.
     let is_plan_of_another = |p: &Provider| {
         kept.iter().any(|base| {
-            p.provider_name
-                .strip_prefix(base.provider_name.as_str())
+            name(p)
+                .strip_prefix(name(base))
                 .is_some_and(|rest| rest.starts_with(' '))
         })
     };
     let mut out: Vec<WatchProvider> = Vec::with_capacity(kept.len());
     for &p in &kept {
-        if !is_plan_of_another(p) && out.iter().all(|seen| seen.name != p.provider_name) {
+        if !is_plan_of_another(p) && out.iter().all(|seen| seen.name != name(p)) {
             out.push(WatchProvider {
-                name: p.provider_name.clone(),
+                name: name(p).to_owned(),
                 logo_url: p
                     .logo_path
                     .as_ref()
@@ -116,6 +116,11 @@ fn providers<const N: usize>(lists: [&Vec<Provider>; N]) -> Vec<WatchProvider> {
         }
     }
     out
+}
+
+/// TMDB laisse parfois des espaces autour du nom (« Cine+ OCS Amazon Channel »).
+fn name(p: &Provider) -> &str {
+    p.provider_name.trim()
 }
 
 /// Une vidéo YouTube de type bande-annonce (à défaut, teaser), en préférant le français
@@ -273,6 +278,8 @@ mod tests {
             link: Some("https://www.themoviedb.org/movie/1/watch?locale=FR".into()),
             flatrate: vec![
                 provider("HBO Max Amazon Channel", 3),
+                provider("Cine+ OCS Amazon Channel ", 3),
+                provider(" Netflix ", 1),
                 provider("Netflix Standard with Ads", 2),
                 provider("HBO Max", 4),
                 provider("Paramount Plus Premium", 5),
