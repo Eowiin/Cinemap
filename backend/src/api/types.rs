@@ -78,6 +78,40 @@ pub struct Movie {
     pub trailer_url: Option<String>,
     pub rating: Option<f64>,
     pub user_rating: Option<f64>,
+    /// Au moins une séance aujourd'hui ou plus tard, dans n'importe quel cinéma.
+    pub showing: bool,
+    pub last_showtime_date: Option<String>,
+    /// `null` tant que TMDB n'a pas été lu (ou film non trouvé sur TMDB).
+    pub watch: Option<Watch>,
+}
+
+/// Où voir un film en France, par type d'offre (colonne JSON `watch_providers`,
+/// écrite par la synchro TMDB). Chaque liste est triée par l'ordre JustWatch.
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WatchProviders {
+    /// Page TMDB qui détaille les offres.
+    pub link: Option<String>,
+    /// Gratuit, avec ou sans publicité (arte.tv, france.tv…).
+    pub free: Vec<WatchProvider>,
+    /// Inclus dans un abonnement.
+    pub flatrate: Vec<WatchProvider>,
+    pub rent: Vec<WatchProvider>,
+    pub buy: Vec<WatchProvider>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct WatchProvider {
+    pub name: String,
+    pub logo_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Watch {
+    #[serde(flatten)]
+    pub providers: WatchProviders,
+    /// Date et heure (UTC, `YYYY-MM-DD HH:MM:SS`) de la dernière lecture TMDB.
+    pub checked_at: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,8 +166,15 @@ pub struct NowShowingResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct SearchMovie {
+    #[serde(flatten)]
+    pub movie: MovieSummary,
+    pub showing: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SearchResponse {
-    pub movies: Vec<MovieSummary>,
+    pub movies: Vec<SearchMovie>,
     pub cinemas: Vec<CinemaSummary>,
     pub cities: Vec<CitySummary>,
 }

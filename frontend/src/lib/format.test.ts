@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addDays,
   dateLabel,
+  longDate,
   effectiveAfter,
   searchKey,
   titleMatches,
@@ -40,6 +41,11 @@ describe('dates', () => {
     expect(dateLabel('2026-10-08', '2026-10-08')).toBe("Aujourd'hui");
     expect(dateLabel('2026-10-09', '2026-10-08')).toBe('Demain');
     expect(dateLabel('2026-10-14', '2026-10-08')).toBe('mer. 14 oct.');
+  });
+
+  it('writes long dates, with or without a time', () => {
+    expect(longDate('2026-10-14')).toBe('14 octobre 2026');
+    expect(longDate('2026-10-01 03:00:00')).toBe('1er octobre 2026');
   });
 });
 

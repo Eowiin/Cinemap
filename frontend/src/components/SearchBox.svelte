@@ -31,7 +31,10 @@
           ...results.movies.map((m) => ({
             route: movieRoute(m),
             label: m.title,
-            detail: m.release_date?.slice(0, 4) ?? null,
+            detail:
+              [m.release_date?.slice(0, 4), m.showing ? null : "plus à l'affiche"]
+                .filter(Boolean)
+                .join(' · ') || null,
             kind: 'Film' as const,
           })),
           ...results.cinemas.map((c) => ({
@@ -155,6 +158,8 @@
   input {
     flex: 1;
     min-width: 0;
+    height: 100%;
+    padding: 0;
     border: none;
     background: none;
     outline: none;

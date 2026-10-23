@@ -47,6 +47,8 @@ pub struct MovieDetails {
     pub vote_count: i64,
     #[serde(default)]
     pub videos: Videos,
+    #[serde(default, rename = "watch/providers")]
+    pub watch_providers: WatchProvidersResponse,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -64,6 +66,45 @@ pub struct Video {
     #[serde(default)]
     pub official: bool,
     pub iso_639_1: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct WatchProvidersResponse {
+    #[serde(default)]
+    pub results: WatchRegions,
+}
+
+/// TMDB renvoie ~150 pays (la moitié de la réponse) : seule la France est gardée,
+/// serde parcourt les autres sans rien allouer.
+#[derive(Debug, Default, Deserialize)]
+pub struct WatchRegions {
+    #[serde(rename = "FR")]
+    pub fr: Option<RegionProviders>,
+}
+
+/// Offres d'un pays, par type. Données JustWatch, à créditer.
+#[derive(Debug, Default, Deserialize)]
+pub struct RegionProviders {
+    /// Page TMDB des offres : TMDB ne donne pas de lien vers les plateformes.
+    pub link: Option<String>,
+    #[serde(default)]
+    pub flatrate: Vec<Provider>,
+    #[serde(default)]
+    pub free: Vec<Provider>,
+    #[serde(default)]
+    pub ads: Vec<Provider>,
+    #[serde(default)]
+    pub rent: Vec<Provider>,
+    #[serde(default)]
+    pub buy: Vec<Provider>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Provider {
+    pub provider_name: String,
+    pub logo_path: Option<String>,
+    #[serde(default)]
+    pub display_priority: i64,
 }
 
 /// Client TMDB : clé, limite de débit. La clé peut être la « clé d'API » (v3, envoyée
@@ -124,7 +165,7 @@ impl Tmdb {
                 &format!("/movie/{tmdb_id}"),
                 &[
                     ("language", LANGUAGE),
-                    ("append_to_response", "videos"),
+                    ("append_to_response", "videos,watch/providers"),
                     // Sans ce paramètre, `videos` ne contient que la langue demandée.
                     ("include_video_language", "fr,en,null"),
                 ],
@@ -175,5 +216,22 @@ mod tests {
         .unwrap();
         assert!(details.videos.results.is_empty());
         assert!(details.backdrop_path.is_none());
+        assert!(details.watch_providers.results.fr.is_none());
+    }
+
+    #[test]
+    fn details_keeps_only_french_watch_providers() {
+        let details: MovieDetails = serde_json::from_str(
+            r#"{"id":1,"backdrop_path":null,"vote_average":0.0,"vote_count":0,
+                "watch/providers":{"results":{
+                    "DE":{"link":"https://de","flatrate":[{"logo_path":"/n.png","provider_id":8,"provider_name":"Netflix","display_priority":1}]},
+                    "FR":{"link":"https://fr","rent":[{"logo_path":"/a.png","provider_id":2,"provider_name":"Apple TV Store","display_priority":5}]}
+                }}}"#,
+        )
+        .unwrap();
+        let fr = details.watch_providers.results.fr.unwrap();
+        assert_eq!(fr.link.as_deref(), Some("https://fr"));
+        assert!(fr.flatrate.is_empty());
+        assert_eq!(fr.rent[0].provider_name, "Apple TV Store");
     }
 }

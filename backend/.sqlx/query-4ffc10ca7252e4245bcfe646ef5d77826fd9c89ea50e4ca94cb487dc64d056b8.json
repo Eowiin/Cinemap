@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!: i64\", title AS \"title!: String\", poster_url AS \"poster_url?: String\",\n                  genres AS \"genres!: SqlJson<Vec<String>>\",\n                  runtime_min AS \"runtime_min?: i64\", release_date AS \"release_date?: String\",\n                  original_title AS \"original_title?: String\", synopsis AS \"synopsis?: String\",\n                  directors AS \"directors!: SqlJson<Vec<String>>\",\n                  cast_members AS \"cast_members!: SqlJson<Vec<Person>>\",\n                  countries AS \"countries!: SqlJson<Vec<String>>\",\n                  production_year AS \"production_year?: i64\", certificate AS \"certificate?: String\",\n                  backdrop_url AS \"backdrop_url?: String\", trailer_url AS \"trailer_url?: String\",\n                  rating AS \"rating?: f64\", user_rating AS \"user_rating?: f64\"\n           FROM movies\n           WHERE id = ?1",
+  "query": "SELECT id AS \"id!: i64\", title AS \"title!: String\", poster_url AS \"poster_url?: String\",\n                  genres AS \"genres!: SqlJson<Vec<String>>\",\n                  runtime_min AS \"runtime_min?: i64\", release_date AS \"release_date?: String\",\n                  original_title AS \"original_title?: String\", synopsis AS \"synopsis?: String\",\n                  directors AS \"directors!: SqlJson<Vec<String>>\",\n                  cast_members AS \"cast_members!: SqlJson<Vec<Person>>\",\n                  countries AS \"countries!: SqlJson<Vec<String>>\",\n                  production_year AS \"production_year?: i64\", certificate AS \"certificate?: String\",\n                  backdrop_url AS \"backdrop_url?: String\", trailer_url AS \"trailer_url?: String\",\n                  rating AS \"rating?: f64\", user_rating AS \"user_rating?: f64\",\n                  EXISTS (SELECT 1 FROM showtimes s JOIN visible_cinemas c ON c.id = s.cinema_id\n                          WHERE s.movie_id = movies.id AND s.date >= ?2) AS \"showing!: bool\",\n                  last_showtime_date AS \"last_showtime_date?: String\",\n                  watch_providers AS \"watch_providers?: SqlJson<WatchProviders>\",\n                  tmdb_synced_at AS \"tmdb_synced_at?: String\"\n           FROM movies\n           WHERE id = ?1",
   "describe": {
     "columns": [
       {
@@ -189,10 +189,49 @@
             "name": "user_rating"
           }
         }
+      },
+      {
+        "name": "showing!: bool",
+        "ordinal": 17,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "last_showtime_date?: String",
+        "ordinal": 18,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "last_showtime_date"
+          }
+        }
+      },
+      {
+        "name": "watch_providers?: SqlJson<WatchProviders>",
+        "ordinal": 19,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "watch_providers"
+          }
+        }
+      },
+      {
+        "name": "tmdb_synced_at?: String",
+        "ordinal": 20,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "movies",
+            "name": "tmdb_synced_at"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
@@ -211,8 +250,12 @@
       true,
       true,
       true,
+      true,
+      false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "3366d7a67555d8454cfec969f36f4dd761fb45a44e0b2c74b5cfc9ef1c5107ac"
+  "hash": "4ffc10ca7252e4245bcfe646ef5d77826fd9c89ea50e4ca94cb487dc64d056b8"
 }

@@ -7,9 +7,8 @@ use sqlx::types::Json as SqlJson;
 use super::AppState;
 use super::cinemas::CinemaRow;
 use super::error::ApiResult;
-use super::movies::MovieSummaryRow;
 use super::params::{RawQuery, parse_search_query};
-use super::types::SearchResponse;
+use super::types::{MovieSummary, SearchMovie, SearchResponse};
 use crate::time::{DATE_FORMAT, paris_today};
 
 /// Motif `LIKE … ESCAPE '\'` qui cherche `q` tel quel : `%` et `_` tapés par
@@ -27,6 +26,16 @@ fn like_pattern(q: &str) -> String {
     pattern
 }
 
+struct SearchMovieRow {
+    id: i64,
+    title: String,
+    poster_url: Option<String>,
+    genres: SqlJson<Vec<String>>,
+    runtime_min: Option<i64>,
+    release_date: Option<String>,
+    showtime_count: i64,
+}
+
 pub async fn search(
     State(state): State<AppState>,
     Query(raw): Query<RawQuery>,
@@ -36,19 +45,21 @@ pub async fn search(
     let today = paris_today().format(DATE_FORMAT).to_string();
 
     // Films ayant au moins une séance à venir dans un cinéma visible, les plus diffusés d'abord.
+    // Les films qui ne sont plus à l'affiche restent trouvables (leur fiche dit où les
+    // voir), après ceux qui le sont, les plus récemment partis d'abord.
     let movies = sqlx::query_as!(
-        MovieSummaryRow,
+        SearchMovieRow,
         r#"SELECT m.id AS "id!: i64", m.title AS "title!: String",
                   m.poster_url AS "poster_url?: String",
                   m.genres AS "genres!: SqlJson<Vec<String>>",
-                  m.runtime_min AS "runtime_min?: i64", m.release_date AS "release_date?: String"
+                  m.runtime_min AS "runtime_min?: i64", m.release_date AS "release_date?: String",
+                  count(c.id) AS "showtime_count!: i64"
            FROM movies m
-           JOIN showtimes s ON s.movie_id = m.id
-           JOIN visible_cinemas c ON c.id = s.cinema_id
-           WHERE s.date >= ?1
-             AND m.title_search LIKE ?2 ESCAPE '\'
+           LEFT JOIN showtimes s ON s.movie_id = m.id AND s.date >= ?1
+           LEFT JOIN visible_cinemas c ON c.id = s.cinema_id
+           WHERE m.title_search LIKE ?2 ESCAPE '\'
            GROUP BY m.id
-           ORDER BY count(*) DESC, m.title_search
+           ORDER BY count(c.id) DESC, m.last_showtime_date DESC, m.title_search
            LIMIT 8"#,
         today,
         pattern,
@@ -80,7 +91,20 @@ pub async fn search(
         .collect();
 
     Ok(Json(SearchResponse {
-        movies: movies.into_iter().map(Into::into).collect(),
+        movies: movies
+            .into_iter()
+            .map(|row| SearchMovie {
+                showing: row.showtime_count > 0,
+                movie: MovieSummary {
+                    id: row.id,
+                    title: row.title,
+                    poster_url: row.poster_url,
+                    genres: row.genres.0,
+                    runtime_min: row.runtime_min,
+                    release_date: row.release_date,
+                },
+            })
+            .collect(),
         // Pas de position dans /api/search : distance_km = null.
         cinemas: cinemas.into_iter().map(|c| c.into_summary(None)).collect(),
         cities,

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  m.poster_url AS \"poster_url?: String\",\n                  m.genres AS \"genres!: SqlJson<Vec<String>>\",\n                  m.runtime_min AS \"runtime_min?: i64\", m.release_date AS \"release_date?: String\"\n           FROM movies m\n           JOIN showtimes s ON s.movie_id = m.id\n           JOIN visible_cinemas c ON c.id = s.cinema_id\n           WHERE s.date >= ?1\n             AND m.title_search LIKE ?2 ESCAPE '\\'\n           GROUP BY m.id\n           ORDER BY count(*) DESC, m.title_search\n           LIMIT 8",
+  "query": "SELECT m.id AS \"id!: i64\", m.title AS \"title!: String\",\n                  m.poster_url AS \"poster_url?: String\",\n                  m.genres AS \"genres!: SqlJson<Vec<String>>\",\n                  m.runtime_min AS \"runtime_min?: i64\", m.release_date AS \"release_date?: String\",\n                  count(c.id) AS \"showtime_count!: i64\"\n           FROM movies m\n           LEFT JOIN showtimes s ON s.movie_id = m.id AND s.date >= ?1\n           LEFT JOIN visible_cinemas c ON c.id = s.cinema_id\n           WHERE m.title_search LIKE ?2 ESCAPE '\\'\n           GROUP BY m.id\n           ORDER BY count(c.id) DESC, m.last_showtime_date DESC, m.title_search\n           LIMIT 8",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,12 @@
             "name": "release_date"
           }
         }
+      },
+      {
+        "name": "showtime_count!: i64",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -79,8 +85,9 @@
       true,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "6f57dc1d76fec8061b129230666a16fa6c2ecca6f4afe34f9463dddb3e88396f"
+  "hash": "81d25b48b125199b803694f671b12944e7c8e76c2c32c61ba7f80c5ce4b05566"
 }

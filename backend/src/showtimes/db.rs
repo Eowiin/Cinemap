@@ -157,12 +157,23 @@ pub(super) async fn finish_run(
 }
 
 /// Supprime les séances des jours ciné passés (`date < today`, `today` = aujourd'hui à
-/// Paris) et renvoie leur nombre. Les films sans séance restent : TMDB a pu les enrichir.
+/// Paris) et renvoie leur nombre. Les films sans séance restent : TMDB a pu les enrichir,
+/// et leur fiche dit depuis quand ils ne sont plus à l'affiche (`last_showtime_date`).
 pub(super) async fn purge_past_showtimes(pool: &SqlitePool, today: &str) -> Result<u64> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "UPDATE movies
+         SET last_showtime_date = (SELECT max(date) FROM showtimes WHERE movie_id = movies.id AND date < ?1)
+         WHERE id IN (SELECT movie_id FROM showtimes WHERE date < ?1)",
+    )
+    .bind(today)
+    .execute(&mut *tx)
+    .await?;
     let result = sqlx::query("DELETE FROM showtimes WHERE date < ?")
         .bind(today)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(result.rows_affected())
 }
 
@@ -500,6 +511,11 @@ mod tests {
             .unwrap();
         assert_eq!(purged, 1);
         assert_eq!(remaining, ["today", "tomorrow"]);
+        let last: Option<String> = sqlx::query_scalar("SELECT last_showtime_date FROM movies")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(last.as_deref(), Some("2026-10-07"));
     }
 
     #[tokio::test]

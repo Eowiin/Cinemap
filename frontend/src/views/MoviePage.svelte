@@ -6,6 +6,7 @@
   import Poster from '../components/Poster.svelte';
   import ShowtimeChips from '../components/ShowtimeChips.svelte';
   import Status from '../components/Status.svelte';
+  import WatchOptions from '../components/WatchOptions.svelte';
   import { api } from '../lib/api/client';
   import { app, map, RADIUS_CHOICES, showtimeFilters } from '../lib/app.svelte';
   import { favoriteCinema } from '../lib/favorites';
@@ -34,7 +35,9 @@
 
   let synopsisOpen = $state(false);
   const m = $derived(movie.data?.id === id ? movie.data : null);
-  const usesTmdb = $derived(!!m && (!!m.backdrop_url || !!m.trailer_url || m.rating !== null));
+  const usesTmdb = $derived(
+    !!m && (!!m.backdrop_url || !!m.trailer_url || m.rating !== null || !!m.watch),
+  );
   const nextRadius = $derived(RADIUS_CHOICES.find((km) => km > app.radiusKm));
 
   // Mes cinémas d'abord, puis les autres, chaque groupe par distance.
@@ -125,71 +128,75 @@
     {/if}
   </article>
 
-  <section class="sessions">
-    <h2>
-      {router.filters.favorites
-        ? 'Séances dans mes cinémas favoris'
-        : `Séances à moins de ${app.radiusKm} km de ${app.positionLabel}`}
-    </h2>
-    <FilterBar dates={showtimes.data?.dates ?? []} />
-    <Status
-      loading={showtimes.loading && !showtimes.data}
-      error={showtimes.error}
-      retry={showtimes.retry}
-    />
-    {#if showtimes.data}
-      {#if showtimes.data.cinemas.length === 0}
-        <div class="empty">
-          {#if router.filters.favorites}
-            <p>Aucune séance de ce film dans vos cinémas favoris avec ces critères.</p>
-            <button class="button" onclick={() => router.setFilters({ favorites: false })}>
-              Voir tous les cinémas
-            </button>
-          {:else}
-            <p>Aucune séance dans ce rayon avec ces critères.</p>
-          {/if}
-          {#if !router.filters.favorites && nextRadius}
-            <button class="button" onclick={() => app.setRadius(nextRadius)}>
-              Chercher à {nextRadius} km
-            </button>
-          {/if}
-        </div>
-      {:else}
-        <ul class="cinemas" class:stale={showtimes.loading}>
-          {#each cinemas as { cinema, showtimes: list } (cinema.id)}
-            <li class="cinema">
-              <div class="cinema-head">
-                <FavoriteButton
-                  list={favorites.cinemas}
-                  item={favoriteCinema(cinema)}
-                  name={cinema.name}
-                  compact
+  {#if !m.showing}
+    <WatchOptions watch={m.watch} lastShowtime={m.last_showtime_date} />
+  {:else}
+    <section class="sessions">
+      <h2>
+        {router.filters.favorites
+          ? 'Séances dans mes cinémas favoris'
+          : `Séances à moins de ${app.radiusKm} km de ${app.positionLabel}`}
+      </h2>
+      <FilterBar dates={showtimes.data?.dates ?? []} />
+      <Status
+        loading={showtimes.loading && !showtimes.data}
+        error={showtimes.error}
+        retry={showtimes.retry}
+      />
+      {#if showtimes.data}
+        {#if showtimes.data.cinemas.length === 0}
+          <div class="empty">
+            {#if router.filters.favorites}
+              <p>Aucune séance de ce film dans vos cinémas favoris avec ces critères.</p>
+              <button class="button" onclick={() => router.setFilters({ favorites: false })}>
+                Voir tous les cinémas
+              </button>
+            {:else}
+              <p>Aucune séance dans ce rayon avec ces critères.</p>
+            {/if}
+            {#if !router.filters.favorites && nextRadius}
+              <button class="button" onclick={() => app.setRadius(nextRadius)}>
+                Chercher à {nextRadius} km
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <ul class="cinemas" class:stale={showtimes.loading}>
+            {#each cinemas as { cinema, showtimes: list } (cinema.id)}
+              <li class="cinema">
+                <div class="cinema-head">
+                  <FavoriteButton
+                    list={favorites.cinemas}
+                    item={favoriteCinema(cinema)}
+                    name={cinema.name}
+                    compact
+                  />
+                  <a href={href(cinemaRoute(cinema), router.filters)}>{cinema.name}</a>
+                  <span class="muted small"
+                    >{[cinema.city, formatDistance(cinema.distance_km)]
+                      .filter(Boolean)
+                      .join(' · ')}</span
+                  >
+                  <CardBadges cards={cinema.cards} />
+                </div>
+                <ShowtimeChips
+                  showtimes={list}
+                  date={showtimes.data.date}
+                  movie={showtimes.data.movie}
+                  {cinema}
                 />
-                <a href={href(cinemaRoute(cinema), router.filters)}>{cinema.name}</a>
-                <span class="muted small"
-                  >{[cinema.city, formatDistance(cinema.distance_km)]
-                    .filter(Boolean)
-                    .join(' · ')}</span
-                >
-                <CardBadges cards={cinema.cards} />
-              </div>
-              <ShowtimeChips
-                showtimes={list}
-                date={showtimes.data.date}
-                movie={showtimes.data.movie}
-                {cinema}
-              />
-            </li>
-          {/each}
-        </ul>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
-    {/if}
-  </section>
+    </section>
+  {/if}
 
   {#if usesTmdb}
     <p class="tmdb muted small">
-      Image, bande-annonce et note TMDB : this product uses the TMDB API but is not endorsed or
-      certified by TMDB.
+      Image, bande-annonce, note et offres TMDB : this product uses the TMDB API but is not endorsed
+      or certified by TMDB.
     </p>
   {/if}
 {/if}

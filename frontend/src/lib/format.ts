@@ -42,6 +42,18 @@ export function dateLabel(date: string, today: string): string {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+/** `2026-10-14` → « 14 octobre 2026 », `2026-10-01` → « 1er octobre 2026 ». */
+export function longDate(date: string): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+    .format(new Date(`${date.slice(0, 10)}T00:00:00Z`))
+    .replace(/^1 /, '1er ');
+}
+
 /** `2026-10-08T20:30:00` → `20:30`. `starts_at` est déjà en heure de Paris. */
 export function timeOf(startsAt: string): string {
   return startsAt.slice(11, 16);

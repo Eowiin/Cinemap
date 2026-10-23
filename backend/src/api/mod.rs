@@ -25,7 +25,7 @@ mod pages;
 mod params;
 mod search;
 mod showtimes;
-mod types;
+pub mod types;
 
 pub use error::{ApiResult, AppError};
 pub use pages::PageTemplate;

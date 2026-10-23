@@ -68,6 +68,23 @@ export type Movie = MovieSummary & {
   trailer_url: string | null;
   rating: number | null;
   user_rating: number | null;
+  /** Au moins une séance aujourd'hui ou plus tard, n'importe où. */
+  showing: boolean;
+  last_showtime_date: string | null;
+  watch: Watch | null;
+};
+
+export type WatchProvider = { name: string; logo_url: string | null };
+
+/** Où voir le film en France (TMDB, données JustWatch). */
+export type Watch = {
+  link: string | null;
+  free: WatchProvider[];
+  flatrate: WatchProvider[];
+  rent: WatchProvider[];
+  buy: WatchProvider[];
+  /** UTC, `YYYY-MM-DD HH:MM:SS`. */
+  checked_at: string;
 };
 
 export type Showtime = {
@@ -112,7 +129,7 @@ export type MovieShowtimes = {
 };
 
 export type SearchResults = {
-  movies: MovieSummary[];
+  movies: (MovieSummary & { showing: boolean })[];
   cinemas: CinemaSummary[];
   cities: CitySummary[];
 };

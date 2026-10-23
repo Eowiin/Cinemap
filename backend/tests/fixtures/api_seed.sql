@@ -40,3 +40,9 @@ INSERT INTO cinema_cards (cinema_id, card_id, manual) VALUES
     ('LYON', 'pathe_cinepass', 0),
     -- Cinéma masqué : son lien ne doit apparaître nulle part.
     ('OLD', 'ugc_illimite', 0);
+
+-- Film C plus à l'affiche : dernière séance notée à la purge, offres lues sur TMDB.
+UPDATE movies
+SET tmdb_id = 3003, last_showtime_date = '2026-10-14', tmdb_synced_at = '2026-10-20 03:00:00',
+    watch_providers = '{"link":"https://tmdb/watch","free":[],"flatrate":[{"name":"Netflix","logo_url":"https://logo/n.png"}],"rent":[],"buy":[]}'
+WHERE id = 1003;

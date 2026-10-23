@@ -16,7 +16,7 @@ use super::params::{
 };
 use super::types::{
     CinemaSummary, CinemaWithShowtimes, Movie, MovieShowtimesResponse, MovieSummary, NowShowing,
-    NowShowingResponse, Person, Showtime,
+    NowShowingResponse, Person, Showtime, Watch, WatchProviders,
 };
 use crate::time::{DATE_FORMAT, paris_today};
 
@@ -61,6 +61,10 @@ struct MovieRow {
     trailer_url: Option<String>,
     rating: Option<f64>,
     user_rating: Option<f64>,
+    showing: bool,
+    last_showtime_date: Option<String>,
+    watch_providers: Option<SqlJson<WatchProviders>>,
+    tmdb_synced_at: Option<String>,
 }
 
 struct CinemaShowtimeRow {
@@ -187,7 +191,9 @@ pub async fn get_one(
 
 /// Fiche complète d'un film ; 404 s'il n'est pas en base.
 pub(super) async fn fetch_movie(pool: &SqlitePool, id: i64) -> ApiResult<Movie> {
-    // Un film sans séance reste consultable : un lien partagé hier doit marcher.
+    // Un film sans séance reste consultable : un lien partagé hier doit marcher, et la
+    // fiche dit alors où le voir.
+    let today = paris_today().format(DATE_FORMAT).to_string();
     let row = sqlx::query_as!(
         MovieRow,
         r#"SELECT id AS "id!: i64", title AS "title!: String", poster_url AS "poster_url?: String",
@@ -199,10 +205,16 @@ pub(super) async fn fetch_movie(pool: &SqlitePool, id: i64) -> ApiResult<Movie> 
                   countries AS "countries!: SqlJson<Vec<String>>",
                   production_year AS "production_year?: i64", certificate AS "certificate?: String",
                   backdrop_url AS "backdrop_url?: String", trailer_url AS "trailer_url?: String",
-                  rating AS "rating?: f64", user_rating AS "user_rating?: f64"
+                  rating AS "rating?: f64", user_rating AS "user_rating?: f64",
+                  EXISTS (SELECT 1 FROM showtimes s JOIN visible_cinemas c ON c.id = s.cinema_id
+                          WHERE s.movie_id = movies.id AND s.date >= ?2) AS "showing!: bool",
+                  last_showtime_date AS "last_showtime_date?: String",
+                  watch_providers AS "watch_providers?: SqlJson<WatchProviders>",
+                  tmdb_synced_at AS "tmdb_synced_at?: String"
            FROM movies
            WHERE id = ?1"#,
         id,
+        today,
     )
     .fetch_optional(pool)
     .await?
@@ -228,6 +240,15 @@ pub(super) async fn fetch_movie(pool: &SqlitePool, id: i64) -> ApiResult<Movie> 
         trailer_url: row.trailer_url,
         rating: row.rating,
         user_rating: row.user_rating,
+        showing: row.showing,
+        last_showtime_date: row.last_showtime_date,
+        watch: row
+            .watch_providers
+            .zip(row.tmdb_synced_at)
+            .map(|(providers, checked_at)| Watch {
+                providers: providers.0,
+                checked_at,
+            }),
     })
 }
 
