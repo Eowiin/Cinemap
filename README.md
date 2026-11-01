@@ -53,3 +53,7 @@ Chaque push sur `main` passe la CI (fmt, clippy, tests, build) puis se déploie 
 ## Plan de la réécriture
 
 Voir [`docs/PLAN.md`](docs/PLAN.md) : objectifs, décisions, étapes et avancement.
+
+## Licence
+
+Le code est sous licence [MIT](LICENSE). Elle ne couvre pas les données et contenus de tiers (AlloCiné, Pathé, UGC, CNC, TMDB…), y compris les copies conservées dans `backend/tests/fixtures/` : ils restent soumis aux droits et conditions de leurs auteurs.
